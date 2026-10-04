@@ -264,11 +264,13 @@ a {
 .project-card {
   display: flex;
   flex-direction: column;
+  justify-self: start;
+  width: 50%;
   gap: 0;
   min-height: 0;
   padding: 0;
-  background: #000;
-  color: var(--paper);
+  background: #fff;
+  color: var(--ink);
   text-decoration: none;
   border-radius: 2px;
   overflow: hidden;
@@ -278,15 +280,15 @@ a {
   display: block;
   width: 100%;
   height: auto;
-  background: #000;
+  background: #fff;
 }
 
 .project-card:hover {
-  background: #000;
+  background: #fff;
 }
 
 .project-card:focus-visible {
-  outline-color: var(--paper);
+  outline-color: var(--ink);
   outline-offset: 4px;
 }
 
@@ -445,15 +447,6 @@ a {
 .footer-inner {
   display: grid;
   gap: 0.45rem;
-}
-
-.footer-brand {
-  display: grid;
-  gap: 0.2rem;
-}
-
-.footer-name {
-  font-weight: 600;
 }
 
 .footer-site a {
