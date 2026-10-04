@@ -131,6 +131,7 @@ if (/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(`${visible}\n${JSON.stringify(
 if (/\b\d{3}[-.)\s]\d{3}[-.\s]\d{4}\b/.test(visible)) fail("Unexpected phone number");
 
 if (!/"name": "whatshappening"/.test(wrangler)) fail("Worker name must be whatshappening");
+if (!/"previews"\s*:\s*\{\s*\}/.test(wrangler)) fail("wrangler.jsonc must include an empty previews object");
 if (/"pattern"\s*:/.test(wrangler) || /custom_domain/i.test(wrangler) || /routes/i.test(wrangler)) {
   fail("Do not configure a custom domain in wrangler.jsonc");
 }
