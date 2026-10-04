@@ -10,6 +10,7 @@ const copyFiles = [
   "wrangler.jsonc",
   "team.js",
   "contact.js",
+  "hero-video.js",
   "worker.js",
   "data/team.json",
   "sitemap.xml",
@@ -84,6 +85,13 @@ for (const src of [
   if (!homeImages.some((tag) => tag.includes(src))) fail(`Missing image ${src}`);
 }
 if (homeImages.length !== 4) fail("Home page images should be the logo, the look-back collage, and the two project logos");
+const videoTag = html.match(/<video\b[^>]*>/i);
+if (!videoTag) fail("Missing hero video");
+if (!/controls/i.test(videoTag[0])) fail("Hero video needs play controls");
+if (/autoplay/i.test(videoTag[0])) fail("Hero video must not autoplay");
+if (!html.includes('poster="/images/whatshappening-hero-poster.jpg"')) fail("Missing hero poster");
+if (!html.includes('src="/videos/whatshappening-hero.mp4"')) fail("Missing hero video file");
+if (!html.includes(">Stop</button>")) fail("Hero video needs a stop control");
 if (!html.includes("A Look Back at What We Built")) fail("Missing look-back heading");
 if (!html.includes("Collage of magazines, maps, and branded promotional products")) {
   fail("Look-back image needs alt text");

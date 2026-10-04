@@ -151,8 +151,35 @@ a {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.hero-copy {
+.hero-copy,
+.hero-video {
   min-width: 0;
+}
+
+.hero-video {
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+}
+
+.hero-video video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  background: #1c1b19;
+}
+
+.hero-video button {
+  justify-self: start;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
 }
 
 .hero h1 {
@@ -537,6 +564,10 @@ section[id] {
   .background-grid {
     grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
     column-gap: 2.75rem;
+  }
+
+  .hero-grid {
+    align-items: start;
   }
 
   .background-grid {
