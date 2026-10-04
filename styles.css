@@ -257,7 +257,7 @@ a {
 
 .project-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -266,7 +266,9 @@ a {
   flex-direction: column;
   justify-self: start;
   width: 50%;
+  max-width: 100%;
   gap: 0;
+  min-width: 0;
   min-height: 0;
   padding: 0;
   background: #fff;
@@ -324,10 +326,9 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.85rem 1rem 1rem;
+  padding: 0.7rem 0.75rem 0.85rem;
   font-size: 0.92rem;
   font-weight: 500;
-  white-space: nowrap;
 }
 
 .open svg {
@@ -496,7 +497,7 @@ section[id] {
 
   .project-grid,
   .footer-inner {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 1.25rem 2rem;
   }
 
