@@ -152,6 +152,28 @@ a {
   max-width: 100%;
 }
 
+.look-back {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.look-back h2 {
+  font-size: clamp(1.85rem, 3vw, 2.45rem);
+  line-height: 1.08;
+}
+
+.look-back p {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.look-back img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
 .lede {
   max-width: 36rem;
   margin-top: 1.35rem;
@@ -225,6 +247,18 @@ a {
 
 .block {
   padding-bottom: 4.5rem;
+}
+
+.background-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.background-grid .copy-block,
+.look-back {
+  min-width: 0;
 }
 
 .copy-block {
@@ -480,6 +514,13 @@ a {
 
 section[id] {
   scroll-margin-top: 7rem;
+}
+
+@media (min-width: 880px) {
+  .background-grid {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 2rem 2.75rem;
+  }
 }
 
 @media (min-width: 720px) {
