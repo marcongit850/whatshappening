@@ -77,12 +77,17 @@ for (const person of people) {
 const homeImages = [...html.matchAll(/<img\b[^>]*>/gi)].map((match) => match[0]);
 for (const src of [
   'src="/images/logo.png"',
+  'src="/images/look-back.png"',
   'src="/images/eating-on-30a.png"',
   'src="/images/eating-in-destin.png"',
 ]) {
   if (!homeImages.some((tag) => tag.includes(src))) fail(`Missing image ${src}`);
 }
-if (homeImages.length !== 3) fail("Home page images should be the logo and the two project logos");
+if (homeImages.length !== 4) fail("Home page images should be the logo, the look-back collage, and the two project logos");
+if (!html.includes("A Look Back at What We Built")) fail("Missing look-back heading");
+if (!html.includes("Collage of magazines, maps, and branded promotional products")) {
+  fail("Look-back image needs alt text");
+}
 if (!html.includes("<h2 id=\"team-title\">Meet the Team</h2>")) fail("Team heading must be Meet the Team");
 if (!html.includes(">Contact Us</a>")) fail("Footer must link Contact Us");
 if (!html.includes('href="/#contact"')) fail("Contact Us must link to the contact section");
