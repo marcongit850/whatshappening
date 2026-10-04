@@ -8,6 +8,8 @@ scripts
 package.json
 package-lock.json
 wrangler.jsonc
+worker.js
+test
 node_modules
 dist
 **/.DS_Store
