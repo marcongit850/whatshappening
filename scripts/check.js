@@ -10,7 +10,6 @@ const copyFiles = [
   "wrangler.jsonc",
   "team.js",
   "contact.js",
-  "hero-video.js",
   "worker.js",
   "data/team.json",
   "sitemap.xml",
@@ -91,7 +90,7 @@ if (!/controls/i.test(videoTag[0])) fail("Hero video needs play controls");
 if (/autoplay/i.test(videoTag[0])) fail("Hero video must not autoplay");
 if (!html.includes('poster="/images/whatshappening-hero-poster.jpg"')) fail("Missing hero poster");
 if (!html.includes('src="/videos/whatshappening-hero.mp4"')) fail("Missing hero video file");
-if (!html.includes(">Stop</button>")) fail("Hero video needs a stop control");
+if (html.includes(">Stop</button>") || html.includes("hero-video-stop")) fail("Hero video should not have a stop button");
 if (!html.includes("A Look Back at What We Built")) fail("Missing look-back heading");
 if (!html.includes("Collage of magazines, maps, and branded promotional products")) {
   fail("Look-back image needs alt text");
