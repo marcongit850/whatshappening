@@ -86,6 +86,18 @@ if (homeImages.length !== 3) fail("Home page images should be the logo and the t
 if (!html.includes("<h2 id=\"team-title\">Meet the Team</h2>")) fail("Team heading must be Meet the Team");
 if (!html.includes(">Contact Us</a>")) fail("Footer must link Contact Us");
 if (!html.includes('href="/#contact"')) fail("Contact Us must link to the contact section");
+for (const [name, source] of [["index.html", html], ["404.html", missing]]) {
+  const start = source.indexOf("<footer");
+  const footer = start === -1 ? "" : source.slice(start);
+  if (!footer.includes("whatshappeningnetwork.com")) fail(`${name} footer must keep the domain`);
+  if (!footer.includes(">Contact Us</a>")) fail(`${name} footer must keep Contact Us`);
+  if (footer.includes("What's Happening")) fail(`${name} footer must not include the company name`);
+}
+if (!css.includes(".project-card") || !/\.project-card\s*\{[^}]*background:\s*#fff/s.test(css)) {
+  fail("Project logos must sit on a white background");
+}
+if (!/\.project-logo\s*\{[^}]*background:\s*#fff/s.test(css)) fail("Project logo images must use a white background");
+if (!/\.project-card\s*\{[^}]*width:\s*50%/s.test(css)) fail("Project logos must be about half the previous size");
 if (html.includes("across the country") || missing.includes("across the country")) {
   fail("Remove the old footer sentence");
 }
