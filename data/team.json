@@ -1,0 +1,62 @@
+[
+  {
+    "name": "Caroline Brooks",
+    "title": "Chief of Staff",
+    "bio": "Oversees day-to-day operations, sets priorities, assigns projects, coordinates the team, and makes sure work stays organized and on schedule.",
+    "photo": "photos/caroline-brooks.jpg"
+  },
+  {
+    "name": "Robert Hayes",
+    "title": "Web Development Manager",
+    "bio": "Builds, maintains, and updates websites, including new pages, features, integrations, design changes, and technical troubleshooting.",
+    "photo": "photos/robert-hayes.jpg"
+  },
+  {
+    "name": "Olivia Bennett",
+    "title": "Partnerships Manager",
+    "bio": "Develops relationships with businesses and organizations, manages outreach, handles follow-up, and helps identify new partnership opportunities.",
+    "photo": "photos/olivia-bennett.jpg"
+  },
+  {
+    "name": "William Carter",
+    "title": "Content Manager",
+    "bio": "Plans, writes, edits, and manages content across websites and social platforms, with a focus on timely and relevant information.",
+    "photo": "photos/william-carter.jpg"
+  },
+  {
+    "name": "Taylor Morgan",
+    "title": "Marketing Manager",
+    "bio": "Develops and manages marketing campaigns, promotional content, brand messaging, and audience growth across digital channels.",
+    "photo": "photos/taylor-morgan.jpg"
+  },
+  {
+    "name": "Sophia Reynolds",
+    "title": "Social Media Manager",
+    "bio": "Creates and schedules social media content, manages engagement, and helps grow visibility across platforms such as Facebook, Instagram, and Nextdoor.",
+    "photo": "photos/sophia-reynolds.jpg"
+  },
+  {
+    "name": "Jake Sullivan",
+    "title": "Video Content Producer",
+    "bio": "Produces short-form video content, including concepts, scripts, captions, editing direction, and promotional clips for social media.",
+    "photo": "photos/jake-sullivan.jpg"
+  },
+  {
+    "name": "Rachel Kim",
+    "title": "SEO & Analytics Manager",
+    "bio": "Manages search engine optimization, keyword strategy, search performance, website analytics, and organic traffic growth.",
+    "photo": "photos/rachel-kim.jpg"
+  },
+  {
+    "name": "Daniel Foster",
+    "title": "Web Security Administrator",
+    "bio": "Monitors website security, reviews vulnerabilities, manages security settings, and helps resolve technical or access-related issues.",
+    "photo": "photos/daniel-foster.jpg"
+  },
+  {
+    "name": "Emily Parker",
+    "title": "Research Analyst",
+    "bio": "Conducts research, verifies information, compares options, gathers background material, and prepares concise findings to support decisions.",
+    "photo": "photos/emily-parker.jpg"
+  }
+]

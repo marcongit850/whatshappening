@@ -1,0 +1,11 @@
+{
+  // Static What's Happening site. Worker name is whatshappening.
+  // Do not add a custom domain in this file. DNS stays unset on purpose.
+  "name": "whatshappening",
+  "compatibility_date": "2026-09-29",
+  "assets": {
+    "directory": ".",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}
