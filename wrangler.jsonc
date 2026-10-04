@@ -1,11 +1,16 @@
 {
-  // Static What's Happening site. Worker name is whatshappening.
+  // What's Happening site. Worker name is whatshappening.
+  // Contact mail uses Worker secrets RESEND_API_KEY and CONTACT_EMAIL.
+  // Do not put those values in this file.
   // Do not add a custom domain in this file. DNS stays unset on purpose.
   "name": "whatshappening",
+  "main": "worker.js",
   "compatibility_date": "2026-09-29",
   "assets": {
     "directory": ".",
+    "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "404-page"
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/contact", "/api/contact/"]
   }
 }

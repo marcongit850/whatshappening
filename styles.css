@@ -170,8 +170,17 @@ a {
 }
 
 .section-intro h2,
+.block h2,
+.contact h2,
 .team h2 {
   font-size: clamp(2.1rem, 4vw, 3.15rem);
+}
+
+.intro {
+  display: grid;
+  gap: 1rem;
+  max-width: 40rem;
+  margin-top: 1.5rem;
 }
 
 .work-list {
@@ -187,9 +196,8 @@ a {
 .work-list li {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 2.5rem;
-  min-height: 11.5rem;
+  justify-content: flex-start;
+  gap: 0.75rem;
   padding: 1.2rem 1.15rem 1.15rem;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -204,7 +212,37 @@ a {
 }
 
 .work-list h3 {
-  font-size: clamp(1.85rem, 3vw, 2.45rem);
+  font-size: clamp(1.45rem, 2vw, 1.85rem);
+  line-height: 1.15;
+}
+
+.work-list p,
+.copy-block p,
+.build-list {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.block {
+  padding-bottom: 4.5rem;
+}
+
+.copy-block {
+  display: grid;
+  gap: 1rem;
+  max-width: 42rem;
+}
+
+.copy-block h3 {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  line-height: 1.15;
+}
+
+.build-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
 }
 
 .band {
@@ -226,17 +264,25 @@ a {
 .project-card {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  min-height: 16.5rem;
-  padding: 1.35rem 1.3rem 1.2rem;
-  background: var(--paper);
-  color: var(--ink);
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  background: #000;
+  color: var(--paper);
   text-decoration: none;
   border-radius: 2px;
+  overflow: hidden;
+}
+
+.project-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #000;
 }
 
 .project-card:hover {
-  background: var(--paper-2);
+  background: #000;
 }
 
 .project-card:focus-visible {
@@ -276,6 +322,7 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  padding: 0.85rem 1rem 1rem;
   font-size: 0.92rem;
   font-weight: 500;
   white-space: nowrap;
@@ -291,8 +338,51 @@ a {
   transform: translate(2px, -2px);
 }
 
-.team {
+.team,
+.contact {
   padding-block: 4.75rem 5.25rem;
+}
+
+.contact form {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 36rem;
+}
+
+.contact label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 500;
+}
+
+.contact input,
+.contact textarea {
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 0.7rem 0.75rem;
+}
+
+.contact button {
+  justify-self: start;
+  font: inherit;
+  font-weight: 600;
+  color: var(--paper);
+  background: var(--deep);
+  border: 0;
+  border-radius: 2px;
+  padding: 0.75rem 1.2rem;
+  cursor: pointer;
+}
+
+.hp {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .team-list {
@@ -372,9 +462,9 @@ a {
   text-underline-offset: 0.2em;
 }
 
-.footer-note {
-  max-width: 36rem;
-  color: var(--muted);
+.footer-contact a {
+  font-weight: 600;
+  text-underline-offset: 0.2em;
 }
 
 .missing {
@@ -426,15 +516,8 @@ section[id] {
     align-items: end;
   }
 
-  .footer-note {
+  .footer-contact {
     justify-self: end;
-    text-align: right;
-  }
-}
-
-@media (min-width: 980px) {
-  .work-list {
-    grid-template-columns: repeat(4, 1fr);
   }
 }
 

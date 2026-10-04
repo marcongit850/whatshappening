@@ -9,6 +9,8 @@ const copyFiles = [
   "_headers",
   "wrangler.jsonc",
   "team.js",
+  "contact.js",
+  "worker.js",
   "data/team.json",
   "sitemap.xml",
   "robots.txt",
@@ -33,7 +35,8 @@ const wrangler = readFileSync("wrangler.jsonc", "utf8");
 const css = readFileSync("styles.css", "utf8");
 const renderer = readFileSync("team.js", "utf8");
 
-if (/<form\b/i.test(html) || /<form\b/i.test(missing)) fail("Pages must not include a form");
+if (!/<form\b[^>]*action="\/api\/contact"/i.test(html)) fail("Home page needs the contact form");
+if (/<form\b/i.test(missing)) fail("404 page must not include a form");
 if (/avatar|portrait|headshot|placeholder|unsplash|pravatar|thispersondoesnotexist|randomuser|gravatar/i.test(html)) {
   fail("Home page must not use portrait placeholders");
 }
@@ -72,7 +75,35 @@ for (const person of people) {
 }
 
 const homeImages = [...html.matchAll(/<img\b[^>]*>/gi)].map((match) => match[0]);
-if (homeImages.length !== 1) fail("The page HTML should only include the logo image");
+for (const src of [
+  'src="/images/logo.png"',
+  'src="/images/eating-on-30a.png"',
+  'src="/images/eating-in-destin.png"',
+]) {
+  if (!homeImages.some((tag) => tag.includes(src))) fail(`Missing image ${src}`);
+}
+if (homeImages.length !== 3) fail("Home page images should be the logo and the two project logos");
+if (!html.includes("<h2 id=\"team-title\">Meet the Team</h2>")) fail("Team heading must be Meet the Team");
+if (!html.includes(">Contact Us</a>")) fail("Footer must link Contact Us");
+if (!html.includes('href="/#contact"')) fail("Contact Us must link to the contact section");
+if (html.includes("across the country") || missing.includes("across the country")) {
+  fail("Remove the old footer sentence");
+}
+if (!html.includes("Marketing, media, and brand development")) fail("Missing hero line");
+if (!html.includes("What We Do")) fail("Missing What We Do");
+if (!html.includes("Built on decades of experience")) fail("Missing background heading");
+if (!html.includes("Our work includes:")) fail("Missing What We Build intro");
+const worker = readFileSync("worker.js", "utf8");
+if (!worker.includes("env.RESEND_API_KEY")) fail("Worker must read RESEND_API_KEY");
+if (!worker.includes("env.CONTACT_EMAIL")) fail("Worker must read CONTACT_EMAIL");
+if (!worker.includes("Your message could not be sent.")) fail("Missing not-sent message");
+const emails = worker.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+if (emails.some((address) => address.toLowerCase() !== "onboarding@resend.dev")) {
+  fail(`Worker has an unexpected email address: ${emails.join(", ")}`);
+}
+const favicon = readFileSync("favicon.png");
+const touch = readFileSync("apple-touch-icon.png");
+if (!favicon.equals(touch)) fail("Favicon and apple touch icon must be the same image");
 const banned = [
   "marc",
   "douglass",
@@ -127,7 +158,13 @@ if (!readFileSync("robots.txt", "utf8").includes("Sitemap: https://whatshappenin
 }
 if (!missing.includes('href="/"')) fail("404 page needs a link home");
 if (!missing.includes('src="/images/logo.png"')) fail("404 header must use the logo file");
-for (const icon of ["favicon.png", "apple-touch-icon.png", "images/logo.png"]) {
+for (const icon of [
+  "favicon.png",
+  "apple-touch-icon.png",
+  "images/logo.png",
+  "images/eating-on-30a.png",
+  "images/eating-in-destin.png",
+]) {
   if (!existsSync(icon)) fail(`Missing ${icon}`);
 }
 

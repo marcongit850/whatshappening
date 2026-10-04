@@ -2,7 +2,7 @@
 
 Static company site for What's Happening. One page covers the work, two current projects, and the team.
 
-The company works in marketing, promo products, publishing, and advertising products across the country.
+What's Happening is a marketing and media company. The homepage uses that description, the current projects, and the team list.
 
 Current projects, linked exactly and set to open in a new tab:
 
@@ -56,4 +56,13 @@ npx wrangler deploy
 
 Cloudflare assigns the workers.dev hostname. That hostname is the preview. Leave the custom domain empty.
 
-`npm run build` checks the page before you deploy: both project links, the team file, and the copy rules.
+`npm run build` checks the page before you deploy: both project links, the team file, the contact route, and the copy rules.
+
+## Contact
+
+The footer link Contact Us opens the contact form. `POST /api/contact` sends the message through Resend. The Worker reads these secret names and no others:
+
+- `RESEND_API_KEY`
+- `CONTACT_EMAIL`
+
+Set them in Cloudflare. Do not commit the values. If `CONTACT_EMAIL` is missing, the form says the message could not be sent.
