@@ -42,13 +42,29 @@ if (/avatar|portrait|headshot|placeholder|unsplash|pravatar|thispersondoesnotexi
 }
 if (/url\s*\(/i.test(css)) fail("Styles must not load image placeholders");
 
-const anchors = [...html.matchAll(/<a\b[^>]*>/gi)].map((match) => match[0]);
-for (const href of ["https://eatingon30a.com/", "https://eatingindestin.com/"]) {
-  const tags = anchors.filter((tag) => tag.includes(`href="${href}"`));
-  if (tags.length !== 1) fail(`${href} should appear once as a link`);
-  if (!/target="_blank"/i.test(tags[0])) fail(`${href} must open in a new tab`);
-  if (!/rel="noopener noreferrer"/i.test(tags[0])) fail(`${href} must set rel="noopener noreferrer"`);
-}
+const projectsStart = html.indexOf('id="projects"');
+const projectsEnd = html.indexOf('id="team"');
+if (projectsStart === -1 || projectsEnd === -1 || projectsEnd < projectsStart) fail("Missing projects section");
+const projectsHtml = html.slice(projectsStart, projectsEnd);
+const projects = [
+  ["Eating on 30A", "https://eatingon30a.com/", "/images/eating-on-30a.png"],
+  ["Eating in Destin", "https://eatingindestin.com/", "/images/eating-in-destin.png"],
+  ["Walton Dune Lakes", "https://waltondunelakes.com/", "/images/walton-dune-lakes.png"],
+  ["Where is Your Beach", "https://whereisyourbeach.com/", "/images/where-is-your-beach.png"],
+  ["Friends of Scenic 30A", "https://friendsofscenic30a.org/", "/images/friends-of-scenic-30a.png"],
+  ["South Walton Connect", "https://southwaltonconnect.com/", "/images/south-walton-connect.png"],
+];
+const projectLinks = [...projectsHtml.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)].map((match) => match[0]);
+if (projectLinks.length !== projects.length) fail("Current Projects should list the six project rows");
+projects.forEach(([name, href, src], index) => {
+  const link = projectLinks[index];
+  if (!link.includes(`href="${href}"`)) fail(`${href} should be project row ${index + 1}`);
+  if (!/target="_blank"/i.test(link)) fail(`${href} must open in a new tab`);
+  if (!/rel="noopener noreferrer"/i.test(link)) fail(`${href} must set rel="noopener noreferrer"`);
+  if (!link.includes(`>${name}<`)) fail(`Project row ${index + 1} should spell ${name}`);
+  if (!link.includes(`src="${src}"`)) fail(`Project row ${index + 1} should use ${src}`);
+});
+if (/confidential/i.test(projectsHtml)) fail("Do not list a confidential project yet");
 
 for (const id of ["work", "projects", "team", "team-list"]) {
   if (!html.includes(`id="${id}"`)) fail(`Missing #${id}`);
@@ -80,10 +96,15 @@ for (const src of [
   'src="/images/look-back.png"',
   'src="/images/eating-on-30a.png"',
   'src="/images/eating-in-destin.png"',
+  'src="/images/walton-dune-lakes.png"',
+  'src="/images/where-is-your-beach.png"',
+  'src="/images/friends-of-scenic-30a.png"',
+  'src="/images/south-walton-connect.png"',
 ]) {
   if (!homeImages.some((tag) => tag.includes(src))) fail(`Missing image ${src}`);
 }
-if (homeImages.length !== 4) fail("Home page images should be the logo, the look-back collage, and the two project logos");
+if (homeImages.length !== 8) fail("Home page images should be the logo, the look-back collage, and the six project logos");
+if (html.includes("confidential-project")) fail("Confidential lockup must stay off the page");
 const videoTag = html.match(/<video\b[^>]*>/i);
 if (!videoTag) fail("Missing hero video");
 if (!/controls/i.test(videoTag[0])) fail("Hero video needs play controls");
@@ -105,11 +126,9 @@ for (const [name, source] of [["index.html", html], ["404.html", missing]]) {
   if (!footer.includes(">Contact Us</a>")) fail(`${name} footer must keep Contact Us`);
   if (footer.includes("What's Happening")) fail(`${name} footer must not include the company name`);
 }
-if (!css.includes(".project-card") || !/\.project-card\s*\{[^}]*background:\s*#fff/s.test(css)) {
-  fail("Project logos must sit on a white background");
-}
+if (!css.includes(".project-list")) fail("Current Projects should be a list");
 if (!/\.project-logo\s*\{[^}]*background:\s*#fff/s.test(css)) fail("Project logo images must use a white background");
-if (!/\.project-card\s*\{[^}]*width:\s*50%/s.test(css)) fail("Project logos must be about half the previous size");
+if (!/\.project-list a\s*\{[^}]*display:\s*flex/s.test(css)) fail("Each project row should place the logo beside the name");
 if (html.includes("across the country") || missing.includes("across the country")) {
   fail("Remove the old footer sentence");
 }
@@ -189,6 +208,11 @@ for (const icon of [
   "images/logo.png",
   "images/eating-on-30a.png",
   "images/eating-in-destin.png",
+  "images/walton-dune-lakes.png",
+  "images/where-is-your-beach.png",
+  "images/friends-of-scenic-30a.png",
+  "images/south-walton-connect.png",
+  "images/confidential-project.png",
 ]) {
   if (!existsSync(icon)) fail(`Missing ${icon}`);
 }
