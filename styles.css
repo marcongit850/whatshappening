@@ -276,8 +276,15 @@ a {
 }
 
 .background-grid .copy-block,
+.background-story,
 .look-back {
   min-width: 0;
+}
+
+.background-story {
+  display: grid;
+  gap: 2.5rem;
+  align-content: start;
 }
 
 .copy-block {
@@ -545,7 +552,7 @@ section[id] {
   }
 
   .build-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
