@@ -329,7 +329,6 @@ a {
   display: flex;
   align-items: center;
   gap: 1.15rem;
-  min-height: 5.5rem;
   padding: 0.75rem 0.15rem;
   color: var(--paper);
   text-decoration: none;
@@ -343,12 +342,13 @@ a {
 
 .project-logo {
   display: block;
-  width: 10.5rem;
-  height: 4rem;
+  width: auto;
+  height: 6.75rem;
+  max-width: 18rem;
   flex: 0 0 auto;
   object-fit: contain;
   object-position: center;
-  padding: 0.35rem 0.5rem;
+  padding: 0.45rem 0.6rem;
   background: #fff;
 }
 
@@ -606,8 +606,8 @@ section[id] {
   }
 
   .project-logo {
-    width: 7.25rem;
-    height: 3.15rem;
+    height: 4.75rem;
+    max-width: 9.5rem;
   }
 }
 
