@@ -1,6 +1,6 @@
 # What's Happening
 
-Static company site for What's Happening. One page covers the work, two current projects, and the team.
+Static company site for What's Happening. One page covers the work, the current projects, and the team.
 
 What's Happening is a marketing and media company. The homepage uses that description, the current projects, and the team list.
 
@@ -8,6 +8,10 @@ Current projects, linked exactly and set to open in a new tab:
 
 - Eating on 30A: https://eatingon30a.com/
 - Eating in Destin: https://eatingindestin.com/
+- Walton Dune Lakes: https://waltondunelakes.com/
+- Where is Your Beach: https://whereisyourbeach.com/
+- Friends of Scenic 30A: https://friendsofscenic30a.org/
+- South Walton Connect: https://southwaltonconnect.com/
 
 There is no database, login, or form. The public site name is [whatshappeningnetwork.com](https://whatshappeningnetwork.com/). Titles, canonical URLs, the footer, and meta tags use that name. This repo does not buy a domain or change DNS, and `wrangler.jsonc` does not attach the domain.
 
@@ -56,7 +60,7 @@ npx wrangler deploy
 
 Cloudflare assigns the workers.dev hostname. That hostname is the preview. Leave the custom domain empty.
 
-`npm run build` checks the page before you deploy: both project links, the team file, the contact route, and the copy rules.
+`npm run build` checks the page before you deploy: the project links, the team file, the contact route, and the copy rules.
 
 ## Contact
 
