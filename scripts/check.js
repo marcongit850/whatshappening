@@ -55,7 +55,7 @@ const projects = [
   ["South Walton Connect", "https://southwaltonconnect.com/", "/images/south-walton-connect.png"],
 ];
 const projectLinks = [...projectsHtml.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)].map((match) => match[0]);
-if (projectLinks.length !== projects.length) fail("Current Projects should list the six project rows");
+if (projectLinks.length !== projects.length) fail("Current Projects should list the six linked projects");
 projects.forEach(([name, href, src], index) => {
   const link = projectLinks[index];
   if (!link.includes(`href="${href}"`)) fail(`${href} should be project row ${index + 1}`);
@@ -64,7 +64,25 @@ projects.forEach(([name, href, src], index) => {
   if (!link.includes(`>${name}<`)) fail(`Project row ${index + 1} should spell ${name}`);
   if (!link.includes(`src="${src}"`)) fail(`Project row ${index + 1} should use ${src}`);
 });
-if (/confidential/i.test(projectsHtml)) fail("Do not list a confidential project yet");
+const projectItems = [...projectsHtml.matchAll(/<li\b[^>]*>[\s\S]*?<\/li>/gi)].map((match) => match[0]);
+if (projectItems.length !== 10) fail("Current Projects should list ten cards");
+const confidentialItems = projectItems.filter((item) => item.includes('src="/images/confidential-project.png"'));
+if (confidentialItems.length !== 4) fail("Current Projects should include four confidential cards");
+if (projectItems.slice(0, 6).some((item) => item.includes("confidential-project"))) {
+  fail("Confidential cards should follow the six live projects");
+}
+for (const item of confidentialItems) {
+  if (/<a\b|href=/i.test(item)) fail("Confidential cards must not link to a site");
+  if (!item.includes(">Early-stage work under NDA<")) fail("Confidential cards should say Early-stage work under NDA");
+  if (!item.includes('class="project-logo"') || !item.includes('class="project-name"')) {
+    fail("Confidential cards should use the same project card classes");
+  }
+}
+if (projectsHtml.split("Early-stage work under NDA").length - 1 !== 4) {
+  fail("The NDA line should appear exactly four times");
+}
+const projectsWithoutLogoFile = projectsHtml.replaceAll('confidential-project.png', "");
+if (/Confidential Project/i.test(projectsWithoutLogoFile)) fail("Do not add a Confidential Project title");
 
 for (const id of ["work", "projects", "team", "team-list"]) {
   if (!html.includes(`id="${id}"`)) fail(`Missing #${id}`);
@@ -100,11 +118,11 @@ for (const src of [
   'src="/images/where-is-your-beach.png"',
   'src="/images/friends-of-scenic-30a.png"',
   'src="/images/south-walton-connect.png"',
+  'src="/images/confidential-project.png"',
 ]) {
   if (!homeImages.some((tag) => tag.includes(src))) fail(`Missing image ${src}`);
 }
-if (homeImages.length !== 8) fail("Home page images should be the logo, the look-back collage, and the six project logos");
-if (html.includes("confidential-project")) fail("Confidential lockup must stay off the page");
+if (homeImages.length !== 12) fail("Home page images should be the logo, the look-back collage, the six project logos, and four confidential logos");
 const videoTag = html.match(/<video\b[^>]*>/i);
 if (!videoTag) fail("Missing hero video");
 if (!/controls/i.test(videoTag[0])) fail("Hero video needs play controls");
@@ -131,7 +149,7 @@ if (/\.project-logo\s*\{[^}]*background:\s*#fff/s.test(css)) fail("Project logos
 if (/\.project-logo\s*\{[^}]*padding:/s.test(css)) fail("Project logos should not sit in a padded box");
 if (!/\.band\s*\{[^}]*background:\s*var\(--paper-2\)/s.test(css)) fail("Current Projects should use a light background");
 if (!/\.project-name\s*\{[^}]*font-weight:\s*400/s.test(css)) fail("Project names should not be bold");
-if (!/\.project-list a\s*\{[^}]*flex-direction:\s*column/s.test(css)) fail("Each project name should sit under its logo");
+if (!/\.project-list a\s*,\s*\.project-card\s*\{[^}]*flex-direction:\s*column/s.test(css)) fail("Each project name should sit under its logo");
 if (!/\.project-list\s*\{[^}]*grid-template-columns:\s*1fr 1fr/s.test(css)) fail("Current Projects should use two columns");
 if (!/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?grid-template-columns:\s*1fr\s*;/.test(css)) {
   fail("Current Projects should stack to one column on a narrow screen");
