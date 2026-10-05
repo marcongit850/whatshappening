@@ -127,7 +127,10 @@ for (const [name, source] of [["index.html", html], ["404.html", missing]]) {
   if (footer.includes("What's Happening")) fail(`${name} footer must not include the company name`);
 }
 if (!css.includes(".project-list")) fail("Current Projects should be a list");
-if (!/\.project-logo\s*\{[^}]*background:\s*#fff/s.test(css)) fail("Project logo images must use a white background");
+if (/\.project-logo\s*\{[^}]*background:\s*#fff/s.test(css)) fail("Project logos should sit on the section background");
+if (/\.project-logo\s*\{[^}]*padding:/s.test(css)) fail("Project logos should not sit in a padded box");
+if (!/\.band\s*\{[^}]*background:\s*var\(--paper-2\)/s.test(css)) fail("Current Projects should use a light background");
+if (!/\.project-name\s*\{[^}]*font-weight:\s*400/s.test(css)) fail("Project names should not be bold");
 if (!/\.project-list a\s*\{[^}]*display:\s*flex/s.test(css)) fail("Each project row should place the logo beside the name");
 if (html.includes("across the country") || missing.includes("across the country")) {
   fail("Remove the old footer sentence");
