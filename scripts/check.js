@@ -131,7 +131,11 @@ if (/\.project-logo\s*\{[^}]*background:\s*#fff/s.test(css)) fail("Project logos
 if (/\.project-logo\s*\{[^}]*padding:/s.test(css)) fail("Project logos should not sit in a padded box");
 if (!/\.band\s*\{[^}]*background:\s*var\(--paper-2\)/s.test(css)) fail("Current Projects should use a light background");
 if (!/\.project-name\s*\{[^}]*font-weight:\s*400/s.test(css)) fail("Project names should not be bold");
-if (!/\.project-list a\s*\{[^}]*display:\s*flex/s.test(css)) fail("Each project row should place the logo beside the name");
+if (!/\.project-list a\s*\{[^}]*flex-direction:\s*column/s.test(css)) fail("Each project name should sit under its logo");
+if (!/\.project-list\s*\{[^}]*grid-template-columns:\s*1fr 1fr/s.test(css)) fail("Current Projects should use two columns");
+if (!/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?grid-template-columns:\s*1fr\s*;/.test(css)) {
+  fail("Current Projects should stack to one column on a narrow screen");
+}
 if (html.includes("across the country") || missing.includes("across the country")) {
   fail("Remove the old footer sentence");
 }
