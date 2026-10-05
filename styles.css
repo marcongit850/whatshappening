@@ -334,7 +334,8 @@ a {
   min-width: 0;
 }
 
-.project-list a {
+.project-list a,
+.project-card {
   position: relative;
   display: flex;
   flex-direction: column;
