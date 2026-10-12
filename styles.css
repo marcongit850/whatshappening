@@ -362,6 +362,12 @@ a {
   background: transparent;
 }
 
+.project-list a[href="https://friendsofscenic30a.org/"] .project-logo {
+  width: 8rem;
+  height: auto;
+  object-fit: contain;
+}
+
 .project-name {
   font-family: var(--sans);
   font-size: 1rem;
