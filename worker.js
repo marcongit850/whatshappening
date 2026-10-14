@@ -189,6 +189,7 @@ function isContactPath(pathname) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/dash" || url.pathname.startsWith("/dash/")) return env.DASH.fetch(request);
     if (isContactPath(url.pathname)) return handleContact(request, env);
     if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
       return new Response("Not found", {
