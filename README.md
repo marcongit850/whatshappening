@@ -12,6 +12,7 @@ Current projects, linked exactly and set to open in a new tab:
 - Where is Your Beach: https://whereisyourbeach.com/
 - Friends of Scenic 30A: https://friendsofscenic30a.org/
 - South Walton Connect: https://southwaltonconnect.com/
+- Walton Power Lines: https://waltonpowerlines.com/
 
 There is no database, login, or form. The public site name is [whatshappeningnetwork.com](https://whatshappeningnetwork.com/). Titles, canonical URLs, the footer, and meta tags use that name. This repo does not buy a domain or change DNS, and `wrangler.jsonc` does not attach the domain.
 
