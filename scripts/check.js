@@ -53,9 +53,10 @@ const projects = [
   ["Where is Your Beach", "https://whereisyourbeach.com/", "/images/where-is-your-beach.png"],
   ["Friends of Scenic 30A", "https://friendsofscenic30a.org/", "/images/friends-of-scenic-30a.png"],
   ["South Walton Connect", "https://southwaltonconnect.com/", "/images/south-walton-connect.png"],
+  ["Walton Power Lines", "https://waltonpowerlines.com/", "/images/walton-power-lines.png"],
 ];
 const projectLinks = [...projectsHtml.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)].map((match) => match[0]);
-if (projectLinks.length !== projects.length) fail("Current Projects should list the six linked projects");
+if (projectLinks.length !== projects.length) fail("Current Projects should list the seven linked projects");
 projects.forEach(([name, href, src], index) => {
   const link = projectLinks[index];
   if (!link.includes(`href="${href}"`)) fail(`${href} should be project row ${index + 1}`);
@@ -67,9 +68,9 @@ projects.forEach(([name, href, src], index) => {
 const projectItems = [...projectsHtml.matchAll(/<li\b[^>]*>[\s\S]*?<\/li>/gi)].map((match) => match[0]);
 if (projectItems.length !== 10) fail("Current Projects should list ten cards");
 const confidentialItems = projectItems.filter((item) => item.includes('src="/images/confidential-project.png"'));
-if (confidentialItems.length !== 4) fail("Current Projects should include four confidential cards");
-if (projectItems.slice(0, 6).some((item) => item.includes("confidential-project"))) {
-  fail("Confidential cards should follow the six live projects");
+if (confidentialItems.length !== 3) fail("Current Projects should include three confidential cards");
+if (projectItems.slice(0, projects.length).some((item) => item.includes("confidential-project"))) {
+  fail("Confidential cards should follow the live projects");
 }
 for (const item of confidentialItems) {
   if (/<a\b|href=/i.test(item)) fail("Confidential cards must not link to a site");
@@ -78,8 +79,8 @@ for (const item of confidentialItems) {
     fail("Confidential cards should use the same project card classes");
   }
 }
-if (projectsHtml.split("Early-stage work under NDA").length - 1 !== 4) {
-  fail("The NDA line should appear exactly four times");
+if (projectsHtml.split("Early-stage work under NDA").length - 1 !== 3) {
+  fail("The NDA line should appear exactly three times");
 }
 const projectsWithoutLogoFile = projectsHtml.replaceAll('confidential-project.png', "");
 if (/Confidential Project/i.test(projectsWithoutLogoFile)) fail("Do not add a Confidential Project title");
@@ -118,11 +119,12 @@ for (const src of [
   'src="/images/where-is-your-beach.png"',
   'src="/images/friends-of-scenic-30a.png"',
   'src="/images/south-walton-connect.png"',
+  'src="/images/walton-power-lines.png"',
   'src="/images/confidential-project.png"',
 ]) {
   if (!homeImages.some((tag) => tag.includes(src))) fail(`Missing image ${src}`);
 }
-if (homeImages.length !== 12) fail("Home page images should be the logo, the look-back collage, the six project logos, and four confidential logos");
+if (homeImages.length !== 12) fail("Home page images should be the logo, the look-back collage, the seven project logos, and three confidential logos");
 const videoTag = html.match(/<video\b[^>]*>/i);
 if (!videoTag) fail("Missing hero video");
 if (!/controls/i.test(videoTag[0])) fail("Hero video needs play controls");
@@ -237,6 +239,7 @@ for (const icon of [
   "images/where-is-your-beach.png",
   "images/friends-of-scenic-30a.png",
   "images/south-walton-connect.png",
+  "images/walton-power-lines.png",
   "images/confidential-project.png",
 ]) {
   if (!existsSync(icon)) fail(`Missing ${icon}`);
