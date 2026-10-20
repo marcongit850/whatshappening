@@ -200,6 +200,14 @@ if (/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(`${visible}\n${JSON.stringify(
 }
 if (/\b\d{3}[-.)\s]\d{3}[-.\s]\d{4}\b/.test(visible)) fail("Unexpected phone number");
 
+if (/"binding"\s*:\s*"DASH"/.test(wrangler) || /"service"\s*:\s*"dashboard"/.test(wrangler)) {
+  fail("wrangler.jsonc must not bind a DASH dashboard service");
+}
+if (/\/dash/.test(wrangler)) fail("wrangler.jsonc must not route /dash through the Worker");
+if (/env\.DASH\b|pathname\s*===\s*["']\/dash["']|startsWith\(["']\/dash\//.test(worker)) {
+  fail("worker.js must not proxy /dash");
+}
+
 if (!/"name": "whatshappening"/.test(wrangler)) fail("Worker name must be whatshappening");
 if (!/"previews"\s*:\s*\{\s*\}/.test(wrangler)) fail("wrangler.jsonc must include an empty previews object");
 if (/"pattern"\s*:/.test(wrangler) || /custom_domain/i.test(wrangler) || /routes/i.test(wrangler)) {
