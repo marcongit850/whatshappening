@@ -1,7 +1,5 @@
 {
-  // What's Happening site. Worker name is whatshappening.
-  // Contact mail uses Worker secrets RESEND_API_KEY and CONTACT_EMAIL.
-  // Do not put those values in this file.
+  // Sandbox placeholder. Worker name is whatshappening.
   // Do not add a custom domain in this file. DNS stays unset on purpose.
   "name": "whatshappening",
   "main": "worker.js",
@@ -10,8 +8,7 @@
     "directory": ".",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "404-page",
-    "run_worker_first": ["/api/contact", "/api/contact/"]
+    "not_found_handling": "404-page"
   },
   // Required by `npx wrangler preview`. Keep this empty. Do not put secrets here.
   "previews": {}
