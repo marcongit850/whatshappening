@@ -41,12 +41,18 @@ if (/<form\b/i.test(html) || /<form\b/i.test(missing)) fail("Placeholder pages m
 if (worker.includes("/api/contact") || worker.includes("handleContact") || worker.includes("RESEND")) {
   fail("Worker must not expose the contact API");
 }
+if (/"binding"\s*:\s*"DASH"/.test(wrangler) || /"service"\s*:\s*"dashboard"/.test(wrangler)) {
+  fail("wrangler.jsonc must not bind a DASH dashboard service");
+}
+if (/\/dash/.test(wrangler)) fail("wrangler.jsonc must not route /dash through the Worker");
+if (/env\.DASH\b|pathname\s*===\s*["']\/dash["']|startsWith\(["']\/dash\//.test(worker)) {
+  fail("worker.js must not proxy /dash");
+}
 if (!/"name": "whatshappening"/.test(wrangler)) fail("Worker name must be whatshappening");
 if (!/"previews"\s*:\s*\{\s*\}/.test(wrangler)) fail("wrangler.jsonc must include an empty previews object");
 if (/"pattern"\s*:/.test(wrangler) || /custom_domain/i.test(wrangler) || /routes/i.test(wrangler)) {
   fail("Do not configure a custom domain in wrangler.jsonc");
 }
-if (!wrangler.includes('"/dash"') || !wrangler.includes('"/dash/*"')) fail("wrangler.jsonc must keep /dash routing");
 if (!missing.includes("<h1>Page not found.</h1>")) fail("404 page needs a simple not-found heading");
 
 for (const path of ["images", "photos", "videos", "data", "contact.js", "team.js", "sitemap.xml"]) {

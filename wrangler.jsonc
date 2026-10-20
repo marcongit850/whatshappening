@@ -8,11 +8,8 @@
     "directory": ".",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "404-page",
-    "run_worker_first": ["/dash", "/dash/*"]
+    "not_found_handling": "404-page"
   },
-  // /dash is forwarded unchanged to the dashboard Worker. That Worker owns the prefix.
-  "services": [{ "binding": "DASH", "service": "dashboard" }],
   // Required by `npx wrangler preview`. Keep this empty. Do not put secrets here.
   "previews": {}
 }
