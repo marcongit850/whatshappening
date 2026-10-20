@@ -1,7 +1,5 @@
 {
-  // What's Happening site. Worker name is whatshappening.
-  // Contact mail uses Worker secrets RESEND_API_KEY and CONTACT_EMAIL.
-  // Do not put those values in this file.
+  // Sandbox placeholder. Worker name is whatshappening.
   // Do not add a custom domain in this file. DNS stays unset on purpose.
   "name": "whatshappening",
   "main": "worker.js",
@@ -11,7 +9,7 @@
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/api/contact", "/api/contact/", "/dash", "/dash/*"]
+    "run_worker_first": ["/dash", "/dash/*"]
   },
   // /dash is forwarded unchanged to the dashboard Worker. That Worker owns the prefix.
   "services": [{ "binding": "DASH", "service": "dashboard" }],

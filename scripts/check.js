@@ -3,17 +3,11 @@ import { existsSync, readFileSync } from "node:fs";
 const copyFiles = [
   "index.html",
   "404.html",
-  "README.md",
   "styles.css",
   "robots.txt",
   "_headers",
   "wrangler.jsonc",
-  "team.js",
-  "contact.js",
   "worker.js",
-  "data/team.json",
-  "sitemap.xml",
-  "robots.txt",
 ];
 
 const dash = /[\u2013\u2014]|&mdash;|&ndash;|&#8211;|&#8212;|&#x2013;|&#x2014;/i;
@@ -32,217 +26,31 @@ for (const file of copyFiles) {
 const html = readFileSync("index.html", "utf8");
 const missing = readFileSync("404.html", "utf8");
 const wrangler = readFileSync("wrangler.jsonc", "utf8");
-const css = readFileSync("styles.css", "utf8");
-const renderer = readFileSync("team.js", "utf8");
-
-if (!/<form\b[^>]*action="\/api\/contact"/i.test(html)) fail("Home page needs the contact form");
-if (/<form\b/i.test(missing)) fail("404 page must not include a form");
-if (/avatar|portrait|headshot|placeholder|unsplash|pravatar|thispersondoesnotexist|randomuser|gravatar/i.test(html)) {
-  fail("Home page must not use portrait placeholders");
-}
-if (/url\s*\(/i.test(css)) fail("Styles must not load image placeholders");
-
-const projectsStart = html.indexOf('id="projects"');
-const projectsEnd = html.indexOf('id="team"');
-if (projectsStart === -1 || projectsEnd === -1 || projectsEnd < projectsStart) fail("Missing projects section");
-const projectsHtml = html.slice(projectsStart, projectsEnd);
-const projects = [
-  ["Eating on 30A", "https://eatingon30a.com/", "/images/eating-on-30a.png"],
-  ["Eating in Destin", "https://eatingindestin.com/", "/images/eating-in-destin.png"],
-  ["Walton Dune Lakes", "https://waltondunelakes.com/", "/images/walton-dune-lakes.png"],
-  ["Where is Your Beach", "https://whereisyourbeach.com/", "/images/where-is-your-beach.png"],
-  ["Friends of Scenic 30A", "https://friendsofscenic30a.org/", "/images/friends-of-scenic-30a.png"],
-  ["South Walton Connect", "https://southwaltonconnect.com/", "/images/south-walton-connect.png"],
-  ["Walton Power Lines", "https://waltonpowerlines.com/", "/images/walton-power-lines.png"],
-];
-const projectLinks = [...projectsHtml.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)].map((match) => match[0]);
-if (projectLinks.length !== projects.length) fail("Current Projects should list the seven linked projects");
-projects.forEach(([name, href, src], index) => {
-  const link = projectLinks[index];
-  if (!link.includes(`href="${href}"`)) fail(`${href} should be project row ${index + 1}`);
-  if (!/target="_blank"/i.test(link)) fail(`${href} must open in a new tab`);
-  if (!/rel="noopener noreferrer"/i.test(link)) fail(`${href} must set rel="noopener noreferrer"`);
-  if (!link.includes(`>${name}<`)) fail(`Project row ${index + 1} should spell ${name}`);
-  if (!link.includes(`src="${src}"`)) fail(`Project row ${index + 1} should use ${src}`);
-});
-const projectItems = [...projectsHtml.matchAll(/<li\b[^>]*>[\s\S]*?<\/li>/gi)].map((match) => match[0]);
-if (projectItems.length !== 10) fail("Current Projects should list ten cards");
-const confidentialItems = projectItems.filter((item) => item.includes('src="/images/confidential-project.png"'));
-if (confidentialItems.length !== 3) fail("Current Projects should include three confidential cards");
-if (projectItems.slice(0, projects.length).some((item) => item.includes("confidential-project"))) {
-  fail("Confidential cards should follow the live projects");
-}
-for (const item of confidentialItems) {
-  if (/<a\b|href=/i.test(item)) fail("Confidential cards must not link to a site");
-  if (!item.includes(">Early-stage work under NDA<")) fail("Confidential cards should say Early-stage work under NDA");
-  if (!item.includes('class="project-logo"') || !item.includes('class="project-name"')) {
-    fail("Confidential cards should use the same project card classes");
-  }
-}
-if (projectsHtml.split("Early-stage work under NDA").length - 1 !== 3) {
-  fail("The NDA line should appear exactly three times");
-}
-const projectsWithoutLogoFile = projectsHtml.replaceAll('confidential-project.png', "");
-if (/Confidential Project/i.test(projectsWithoutLogoFile)) fail("Do not add a Confidential Project title");
-
-for (const id of ["work", "projects", "team", "team-list"]) {
-  if (!html.includes(`id="${id}"`)) fail(`Missing #${id}`);
-}
-if (!/<h1\b/i.test(html)) fail("Missing h1");
-if (!html.includes('src="/team.js"')) fail("Home page must load team.js");
-if (!html.includes('src="/images/logo.png"')) fail("Header must use the logo file");
-if (!renderer.includes('fetch("/data/team.json")')) fail("team.js must read data/team.json");
-if (!renderer.includes("createElement")) fail("team.js must render the list");
-
-const people = JSON.parse(readFileSync("data/team.json", "utf8"));
-if (!Array.isArray(people)) fail("data/team.json must be a list");
-for (const person of people) {
-  for (const field of ["name", "title", "bio", "photo"]) {
-    if (!person || typeof person[field] !== "string" || !person[field].trim()) {
-      fail(`Each person needs a ${field}`);
-    }
-  }
-  if (html.includes(person.name)) fail(`${person.name} is hard-coded in the page HTML`);
-  if (renderer.includes(person.name)) fail(`${person.name} is hard-coded in team.js`);
-  const photo = person.photo.replace(/^\/+/, "");
-  if (photo.includes("..") || !photo.startsWith("photos/")) fail(`Photo path must stay in photos/: ${person.photo}`);
-  if (!existsSync(photo)) fail(`Missing ${photo}`);
-}
-
-const homeImages = [...html.matchAll(/<img\b[^>]*>/gi)].map((match) => match[0]);
-for (const src of [
-  'src="/images/logo.png"',
-  'src="/images/look-back.png"',
-  'src="/images/eating-on-30a.png"',
-  'src="/images/eating-in-destin.png"',
-  'src="/images/walton-dune-lakes.png"',
-  'src="/images/where-is-your-beach.png"',
-  'src="/images/friends-of-scenic-30a.png"',
-  'src="/images/south-walton-connect.png"',
-  'src="/images/walton-power-lines.png"',
-  'src="/images/confidential-project.png"',
-]) {
-  if (!homeImages.some((tag) => tag.includes(src))) fail(`Missing image ${src}`);
-}
-if (homeImages.length !== 12) fail("Home page images should be the logo, the look-back collage, the seven project logos, and three confidential logos");
-const videoTag = html.match(/<video\b[^>]*>/i);
-if (!videoTag) fail("Missing hero video");
-if (!/controls/i.test(videoTag[0])) fail("Hero video needs play controls");
-if (/autoplay/i.test(videoTag[0])) fail("Hero video must not autoplay");
-if (!html.includes('poster="/images/whatshappening-hero-poster.jpg"')) fail("Missing hero poster");
-if (!html.includes('src="/videos/whatshappening-hero.mp4"')) fail("Missing hero video file");
-if (html.includes(">Stop</button>") || html.includes("hero-video-stop")) fail("Hero video should not have a stop button");
-if (!html.includes("A Look Back at What We Built")) fail("Missing look-back heading");
-if (!html.includes("Collage of magazines, maps, and branded promotional products")) {
-  fail("Look-back image needs alt text");
-}
-if (!html.includes("<h2 id=\"team-title\">Meet the Team</h2>")) fail("Team heading must be Meet the Team");
-if (!html.includes(">Contact Us</a>")) fail("Footer must link Contact Us");
-if (!html.includes('href="/#contact"')) fail("Contact Us must link to the contact section");
-for (const [name, source] of [["index.html", html], ["404.html", missing]]) {
-  const start = source.indexOf("<footer");
-  const footer = start === -1 ? "" : source.slice(start);
-  if (!footer.includes("whatshappeningnetwork.com")) fail(`${name} footer must keep the domain`);
-  if (!footer.includes(">Contact Us</a>")) fail(`${name} footer must keep Contact Us`);
-  if (footer.includes("What's Happening")) fail(`${name} footer must not include the company name`);
-}
-if (!css.includes(".project-list")) fail("Current Projects should be a list");
-if (/\.project-logo\s*\{[^}]*background:\s*#fff/s.test(css)) fail("Project logos should sit on the section background");
-if (/\.project-logo\s*\{[^}]*padding:/s.test(css)) fail("Project logos should not sit in a padded box");
-if (!/\.band\s*\{[^}]*background:\s*var\(--paper-2\)/s.test(css)) fail("Current Projects should use a light background");
-if (!/\.project-name\s*\{[^}]*font-weight:\s*400/s.test(css)) fail("Project names should not be bold");
-if (!/\.project-list a\s*,\s*\.project-card\s*\{[^}]*flex-direction:\s*column/s.test(css)) fail("Each project name should sit under its logo");
-if (!/\.project-list\s*\{[^}]*grid-template-columns:\s*1fr 1fr/s.test(css)) fail("Current Projects should use two columns");
-if (!/@media\s*\(max-width:\s*640px\)\s*\{[\s\S]*?grid-template-columns:\s*1fr\s*;/.test(css)) {
-  fail("Current Projects should stack to one column on a narrow screen");
-}
-if (html.includes("across the country") || missing.includes("across the country")) {
-  fail("Remove the old footer sentence");
-}
-if (!html.includes("Marketing, media, and brand development")) fail("Missing hero line");
-if (!html.includes("What We Do")) fail("Missing What We Do");
-if (!html.includes("Built on decades of experience")) fail("Missing background heading");
-if (!html.includes("Our work includes:")) fail("Missing What We Build intro");
 const worker = readFileSync("worker.js", "utf8");
-if (!worker.includes("env.RESEND_API_KEY")) fail("Worker must read RESEND_API_KEY");
-if (!worker.includes("env.CONTACT_EMAIL")) fail("Worker must read CONTACT_EMAIL");
-if (!worker.includes("Your message could not be sent.")) fail("Missing not-sent message");
-const emails = worker.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
-if (emails.some((address) => address.toLowerCase() !== "onboarding@resend.dev")) {
-  fail(`Worker has an unexpected email address: ${emails.join(", ")}`);
-}
-const favicon = readFileSync("favicon.png");
-const touch = readFileSync("apple-touch-icon.png");
-if (!favicon.equals(touch)) fail("Favicon and apple touch icon must be the same image");
-const banned = [
-  "marc",
-  "douglass",
-  "phil",
-  "lindsay",
-  "jennifer",
-  "deanna",
-  "gainesville",
-  "sterling",
-  "halo",
-  "award",
-  "founded",
-  "headquarters",
-  "testimonial",
-  "since 19",
-  "since 20",
-];
-const visible = `${html}\n${missing}`.toLowerCase();
-for (const word of banned) {
-  if (visible.includes(word)) fail(`Unexpected claim or contact detail: ${word}`);
-}
-if (/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(`${visible}\n${JSON.stringify(people)}`)) {
-  fail("Unexpected email");
-}
-if (/\b\d{3}[-.)\s]\d{3}[-.\s]\d{4}\b/.test(visible)) fail("Unexpected phone number");
 
+if (!html.includes("<title>whatshappeningnetwork.com</title>")) {
+  fail("Home title must be whatshappeningnetwork.com");
+}
+if (!html.includes('content="Sandbox, new project coming soon."')) {
+  fail("Home page needs the sandbox meta description");
+}
+if (!html.includes(">whatshappeningnetwork.com</p>")) fail("Home page needs the domain line");
+if (!html.includes("<h1>Sandbox, new project coming soon.</h1>")) fail("Home page needs the sandbox heading");
+if (!html.includes('href="styles.css"')) fail("Home page must link styles.css");
+if (/<form\b/i.test(html) || /<form\b/i.test(missing)) fail("Placeholder pages must not include a form");
+if (worker.includes("/api/contact") || worker.includes("handleContact") || worker.includes("RESEND")) {
+  fail("Worker must not expose the contact API");
+}
 if (!/"name": "whatshappening"/.test(wrangler)) fail("Worker name must be whatshappening");
 if (!/"previews"\s*:\s*\{\s*\}/.test(wrangler)) fail("wrangler.jsonc must include an empty previews object");
 if (/"pattern"\s*:/.test(wrangler) || /custom_domain/i.test(wrangler) || /routes/i.test(wrangler)) {
   fail("Do not configure a custom domain in wrangler.jsonc");
 }
-if (!html.includes('<link rel="canonical" href="https://whatshappeningnetwork.com/">')) {
-  fail("Home page needs the public canonical URL");
-}
-if (!html.includes("<title>What's Happening | whatshappeningnetwork.com</title>")) {
-  fail("Home title must use the public site name");
-}
-if (!html.includes('property="og:url" content="https://whatshappeningnetwork.com/"')) fail("Home og:url");
-if (!html.includes('property="og:site_name" content="whatshappeningnetwork.com"')) fail("Home og:site_name");
-if (!html.includes('href="https://whatshappeningnetwork.com/">whatshappeningnetwork.com</a>')) {
-  fail("Footer must show the public site name");
-}
-if (!missing.includes('<link rel="canonical" href="https://whatshappeningnetwork.com/404.html">')) {
-  fail("404 page needs the public canonical URL");
-}
-if (!missing.includes("<title>Page not found | whatshappeningnetwork.com</title>")) {
-  fail("404 title must use the public site name");
-}
-const sitemap = readFileSync("sitemap.xml", "utf8");
-if (!sitemap.includes("<loc>https://whatshappeningnetwork.com/</loc>")) fail("Sitemap loc");
-if (!readFileSync("robots.txt", "utf8").includes("Sitemap: https://whatshappeningnetwork.com/sitemap.xml")) {
-  fail("robots.txt sitemap");
-}
-if (!missing.includes('href="/"')) fail("404 page needs a link home");
-if (!missing.includes('src="/images/logo.png"')) fail("404 header must use the logo file");
-for (const icon of [
-  "favicon.png",
-  "apple-touch-icon.png",
-  "images/logo.png",
-  "images/eating-on-30a.png",
-  "images/eating-in-destin.png",
-  "images/walton-dune-lakes.png",
-  "images/where-is-your-beach.png",
-  "images/friends-of-scenic-30a.png",
-  "images/south-walton-connect.png",
-  "images/walton-power-lines.png",
-  "images/confidential-project.png",
-]) {
-  if (!existsSync(icon)) fail(`Missing ${icon}`);
+if (!wrangler.includes('"/dash"') || !wrangler.includes('"/dash/*"')) fail("wrangler.jsonc must keep /dash routing");
+if (!missing.includes("<h1>Page not found.</h1>")) fail("404 page needs a simple not-found heading");
+
+for (const path of ["images", "photos", "videos", "data", "contact.js", "team.js", "sitemap.xml"]) {
+  if (existsSync(path)) fail(`Remove old site path: ${path}`);
 }
 
 console.log("Site check passed.");
