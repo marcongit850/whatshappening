@@ -1,4 +1,6 @@
+import type { PaymentRow } from "./db";
 import { CONSTITUTIONAL_SQL } from "./overview";
+import { sqlIsPersonName } from "./parser";
 
 /** Object code for money moved from one county fund to another. */
 export const TRANSFER_OBJECT = "591000";
@@ -19,6 +21,9 @@ export interface BudgetFacts {
   left: number;
   amendments: number;
   transfer: number;
+  /** One-decimal percents from the SQL sums. Adopted is the budget commissioners passed. */
+  spentOfCurrentPct: number;
+  spentOfAdoptedPct: number;
 }
 
 interface FactRow {
@@ -30,6 +35,14 @@ interface FactRow {
   transfer_rev_cents: number;
   transfer_ytd_cents: number;
   transfer_enc_cents: number;
+  spent_of_current_tenths?: number;
+  spent_of_adopted_tenths?: number;
+}
+
+function percentOf(tenths: number | undefined, part: number, whole: number): number {
+  if (tenths != null && Number.isFinite(Number(tenths))) return Number(tenths) / 10;
+  if (!whole) return 0;
+  return (part / whole) * 100;
 }
 
 export function factsFromRow(row: FactRow): BudgetFacts {
@@ -61,6 +74,8 @@ export function factsFromRow(row: FactRow): BudgetFacts {
     left: current - spent,
     amendments: current - adopted,
     transfer: transferYtd,
+    spentOfCurrentPct: percentOf(row.spent_of_current_tenths, spent, current),
+    spentOfAdoptedPct: percentOf(row.spent_of_adopted_tenths, spent, adopted),
   };
 }
 
@@ -76,7 +91,17 @@ SELECT
   ${transferCase("orig_cents")} AS transfer_orig_cents,
   ${transferCase("rev_cents")} AS transfer_rev_cents,
   ${transferCase("ytd_cents")} AS transfer_ytd_cents,
-  ${transferCase("enc_cents")} AS transfer_enc_cents
+  ${transferCase("enc_cents")} AS transfer_enc_cents,
+  ROUND(CASE
+    WHEN (COALESCE(SUM(rev_cents), 0) - ${transferCase("rev_cents")}) = 0 THEN 0
+    ELSE ((COALESCE(SUM(ytd_cents), 0) - ${transferCase("ytd_cents")}) * 1000.0)
+      / (COALESCE(SUM(rev_cents), 0) - ${transferCase("rev_cents")})
+  END) AS spent_of_current_tenths,
+  ROUND(CASE
+    WHEN (COALESCE(SUM(orig_cents), 0) - ${transferCase("orig_cents")}) = 0 THEN 0
+    ELSE ((COALESCE(SUM(ytd_cents), 0) - ${transferCase("ytd_cents")}) * 1000.0)
+      / (COALESCE(SUM(orig_cents), 0) - ${transferCase("orig_cents")})
+  END) AS spent_of_adopted_tenths
 FROM accounts
 WHERE import_id = ?
 `;
@@ -238,6 +263,32 @@ export async function loadTopVendors(
     lines: Number(row.lines) || 0,
     checks: Number(row.checks) || 0,
   }));
+}
+
+/** Largest outside payments. Offices and transfers are left out before the limit, so a fund of office payments still shows a contractor. */
+export async function loadLargestPayments(
+  db: D1Database,
+  importId: number,
+  opts: { showNames: boolean; fund?: string; dept?: string },
+): Promise<PaymentRow[]> {
+  const rows = await db
+    .prepare(
+      `SELECT id, import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
+              amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key
+       FROM payments
+       WHERE import_id = ?
+         AND after_cutoff = 0
+         AND object_code != '${TRANSFER_OBJECT}'
+         AND NOT ${CONSTITUTIONAL_SQL}
+         AND (? = 1 OR ${sqlIsPersonName("vendor_name")} = 0)
+         AND (? = '' OR fund_code = ?)
+         AND (? = '' OR dept_code = ?)
+       ORDER BY amount_cents DESC
+       LIMIT 60`,
+    )
+    .bind(importId, opts.showNames ? 1 : 0, opts.fund || "", opts.fund || "", opts.dept || "", opts.dept || "")
+    .all<PaymentRow>();
+  return rows.results || [];
 }
 
 export async function loadVendorNames(db: D1Database, importId: number): Promise<string[]> {

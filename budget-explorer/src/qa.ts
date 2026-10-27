@@ -15,6 +15,8 @@ export const QA_SYSTEM = [
   "Use only the FACT lines and records in the user message. Do not use outside knowledge or memory of any county.",
   "The first sentence is the takeaway, in plain words a neighbor would understand.",
   "Say budget, money spent so far, and money left. Do not use accounting jargon.",
+  "The adopted budget is the amount commissioners passed. Say that first. Call the higher revised total the budget limit after mid-year changes, never the budget. That limit is a ceiling, not a spending plan. Do not say spending passed the adopted budget because projects were added. If you give a percent, call it the share of the mid-year limit.",
+  "Say payments, not checks, unless a FACT line gives a check number.",
   "Every dollar figure in the answer must be copied from a FACT line. Do not add, subtract, multiply, divide, or round.",
   "Do not quote raw report totals that still include transfers unless the question asks about transfers.",
   "Cite the account count and the account keys written in that FACT.",

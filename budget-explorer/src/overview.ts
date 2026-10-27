@@ -19,6 +19,7 @@ export function isCountyOfficeVendor(name: string): boolean {
   }
   if (!normalized.startsWith("WALTON COUNTY")) return false;
   const rest = normalized.slice("WALTON COUNTY".length).trim();
+  if (!rest) return true;
   return /^(SHERIF|PROPER|PROPERTY|APPRAIS|TAX|CLERK|SUPERVIS|ELECTION|BOARD|COMMISSION|BCC)\b/.test(rest);
 }
 
@@ -31,6 +32,7 @@ export const CONSTITUTIONAL_SQL = `(
   OR upper(vendor_name) LIKE '%PROPERTY APPRAIS%'
   OR upper(vendor_name) LIKE '%SUPERVISOR OF ELECT%'
   OR upper(vendor_name) LIKE '%TAX COLLECTOR%'
+  OR replace(replace(replace(upper(trim(vendor_name)), '.', ''), ',', ''), '  ', ' ') = 'WALTON COUNTY'
   OR (
     upper(trim(vendor_name)) LIKE 'WALTON COUNTY %'
     AND (

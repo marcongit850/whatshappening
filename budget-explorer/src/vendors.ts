@@ -27,6 +27,8 @@ export function vendorWords(value: string): string[] {
   return text.split(/[^a-z0-9]+/).filter(Boolean);
 }
 
+const DANGLING_WORD = new Set(["&", "of", "and"]);
+
 export function cleanVendorRaw(name: string): string {
   let text = name.trim().replace(/[\s,.;:]+$/g, "");
   if (name.trim().length >= 20) {
@@ -34,10 +36,12 @@ export function cleanVendorRaw(name: string): string {
     if (parts.length > 1 && parts[parts.length - 1].length === 1) parts.pop();
     text = parts.join(" ");
   }
-  return text;
+  const parts = text.split(/\s+/).filter(Boolean);
+  while (parts.length > 1 && DANGLING_WORD.has(parts[parts.length - 1].toLowerCase().replace(/[^a-z0-9&]/g, ""))) parts.pop();
+  return parts.join(" ");
 }
 
-const ALWAYS_UPPER = new Set(["llc", "inc", "llp", "pllc", "pa"]);
+const ALWAYS_UPPER = new Set(["llc", "inc", "llp", "pllc", "pa", "at&t"]);
 const COMPLETE_SHORT = new Set(["co", "pa", "lp", "pc", "of"]);
 const COMPLETE_WORD = new Set([
   "centers", "center", "office", "county", "fund", "company", "services", "service", "group", "bank",
@@ -52,6 +56,7 @@ export function titleCaseVendor(name: string): string {
     .filter(Boolean)
     .map((word) => {
       const lower = word.toLowerCase();
+      if (lower === "at&t") return "AT&T";
       if (ALWAYS_UPPER.has(lower)) return lower.toUpperCase();
       return lower.replace(/[a-z0-9]+/gi, (part, offset) => {
         if (part.length === 1 && offset > 0 && APOSTROPHES.includes(lower[offset - 1])) return part.toLowerCase();
@@ -95,8 +100,9 @@ function trimPartial(raw: string): { text: string; shortened: boolean } {
     return { text: parts.join(" "), shortened: true };
   }
   const dropShort = last.length <= 2 && !COMPLETE_SHORT.has(lastLower);
+  const dropStub = last.length >= 3 && last.length <= 4 && !COMPLETE_WORD.has(lastLower) && !COMPLETE_SHORT.has(lastLower) && !ALWAYS_UPPER.has(lastLower);
   const dropLong = last.length >= 5 && !COMPLETE_WORD.has(lastLower) && !ALWAYS_UPPER.has(lastLower);
-  if ((dropShort || dropLong) && parts.length > 1) {
+  if ((dropShort || dropStub || dropLong) && parts.length > 1) {
     parts.pop();
     return { text: parts.join(" "), shortened: true };
   }
@@ -105,6 +111,16 @@ function trimPartial(raw: string): { text: string; shortened: boolean } {
 
 export function vendorKey(value: string): string {
   return vendorWords(cleanVendorRaw(value)).join(" ");
+}
+
+/** All-caps businesses are title case. A person name with a middle initial stays as stored. */
+function keepPersonExact(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (trimmed.length === 20 || trimmed.includes("&")) return false;
+  if (!looksLikePersonName(trimmed)) return false;
+  const letters = trimmed.replace(/[^A-Za-z]/g, "");
+  if (letters && letters !== letters.toUpperCase()) return true;
+  return trimmed.split(/\s+/).some((word) => /^[A-Za-z]$/.test(word));
 }
 
 export function buildVendorIndex(names: string[]): (raw: string) => VendorLabel {
@@ -122,8 +138,8 @@ export function buildVendorIndex(names: string[]): (raw: string) => VendorLabel 
       cache.set(key, label);
       return label;
     }
-    if (looksLikePersonName(raw) && raw.trim().length !== 20) {
-      const label = { text: raw, shortened: false };
+    if (keepPersonExact(raw)) {
+      const label = { text: raw.trim(), shortened: false };
       cache.set(key, label);
       return label;
     }
@@ -132,6 +148,41 @@ export function buildVendorIndex(names: string[]): (raw: string) => VendorLabel 
     cache.set(key, label);
     return label;
   };
+}
+
+/**
+ * Combine cut-off payees that display as the same name, or as a prefix of exactly one longer name.
+ * A short name is merged only when the county report cut it (20 characters, or a dropped partial word).
+ */
+export function mergeVendorSpend<T extends { vendor_name: string; cents: number }>(rows: T[], display: (raw: string) => VendorLabel): T[] {
+  const labeled = rows.map((row) => {
+    const label = display(row.vendor_name || "");
+    return { row, text: label.text, shortened: label.shortened, rawLen: (row.vendor_name || "").trim().length };
+  });
+  const names = labeled.map((item) => {
+    const truncated = item.shortened || item.rawLen >= 18;
+    if (!truncated || item.text.length < 8) return item.text;
+    const matches = [...new Set(labeled.map((other) => other.text).filter((text) => text.length > item.text.length && text.startsWith(`${item.text} `)))];
+    return matches.length === 1 ? matches[0] : item.text;
+  });
+  const groups = new Map<string, T>();
+  labeled.forEach((item, index) => {
+    const name = names[index];
+    const key = name.toUpperCase();
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { ...item.row });
+      return;
+    }
+    const next = { ...existing, cents: existing.cents + item.row.cents };
+    const bag = next as unknown as Record<string, number>;
+    const extra = item.row as unknown as Record<string, number>;
+    for (const field of ["lines", "checks", "payments", "land_cents"]) {
+      if (typeof extra[field] === "number") bag[field] = Number(bag[field] || 0) + extra[field];
+    }
+    groups.set(key, next);
+  });
+  return [...groups.values()].sort((a, b) => b.cents - a.cents);
 }
 
 export function withDisplayNames<T extends { vendor_name: string | null }>(rows: T[], display: (raw: string) => VendorLabel): T[] {

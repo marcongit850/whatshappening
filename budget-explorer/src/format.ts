@@ -142,6 +142,16 @@ export const PACE_LABEL: Record<Pace, string> = {
   under: "Under",
 };
 
+/** Short pill text. The long wording stays in the chart legend. */
+export const PACE_PILL: Record<Pace, string> = {
+  green: "In line",
+  yellow: "Ahead",
+  red: "Over budget",
+  gray: "No budget set",
+  none: "No spending yet",
+  under: "Under",
+};
+
 /** Money left, or a plain over-budget amount when spending is already past the budget. */
 export function leftLabel(revCents: number, ytdCents: number): { title: string; value: string; over: boolean; unbudgeted: boolean } {
   if (revCents <= 0) {

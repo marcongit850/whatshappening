@@ -9,9 +9,11 @@ import { publishImport, saveImport } from "../src/db";
 import { leftLabel } from "../src/format";
 import { isCountyOfficeVendor } from "../src/overview";
 import { parseReport } from "../src/parser";
-import { collapsePayments, paymentWho } from "../src/view";
+import { collapsePayments, disambiguatedDepartmentNames, paymentWho } from "../src/view";
+import { vendorSpendAnswer } from "../src/answers";
 import {
   buildVendorIndex,
+  mergeVendorSpend,
   sumVendorMatches,
   titleCaseVendor,
   vendorNameMatches,
@@ -134,6 +136,22 @@ describe("vendor names", () => {
     expect(alone("C&A Landscape Mainte").text).toBe("C&A Landscape");
     expect(alone("South Walton Fire Di").text).toBe("South Walton Fire");
     expect(alone("JM PHELPS CONSTRUCTI").text).toBe("Jm Phelps");
+    expect(alone("TOPSAIL PRESERVE STA").text).toBe("Topsail Preserve");
+    expect(alone("HEFFLEY &").text).toBe("Heffley");
+    expect(alone("VINTAGE SIGN &").text).toBe("Vintage Sign");
+    expect(alone("REFLECTION CITY OF").text).toBe("Reflection City");
+    expect(alone("HARPER LANDSCAPING").text).toBe("Harper Landscaping");
+    expect(alone("SOUTH WALTON TURTLE").text).toBe("South Walton Turtle");
+    expect(alone("AT&T MOBILITY").text).toBe("AT&T Mobility");
+    const merged = mergeVendorSpend(
+      [
+        { vendor_name: "FLORIDA DEPARTMENT O", cents: 100 },
+        { vendor_name: "FLORIDA DEPARTMENT OF", cents: 40 },
+      ],
+      alone,
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].cents).toBe(140);
   });
 
   it("matches Lowe's and a cut-off sheriff, and does not match a different word", () => {
@@ -194,6 +212,8 @@ describe("net of transfers SQL", () => {
     expect(facts.spent).toBe(145000);
     expect(facts.transfer).toBe(333300);
     expect(facts.left).toBe(225000);
+    expect(facts.spentOfCurrentPct).toBe(39.2);
+    expect(facts.spentOfAdoptedPct).toBe(48.3);
 
     const vendors = raw.prepare(TOP_VENDOR_SQL).all(1, 1, "", "", "", "") as { vendor_name: string; cents: number }[];
     const names = vendors.map((vendor) => vendor.vendor_name);
@@ -232,6 +252,8 @@ describe("county offices, categories, and payment lines", () => {
     expect(isCountyOfficeVendor("WALTON COUNTY SHERIF")).toBe(true);
     expect(isCountyOfficeVendor("WALTON COUNTY PROPER")).toBe(true);
     expect(isCountyOfficeVendor("WALTON COUNTY PROPERTY APPRAISER")).toBe(true);
+    expect(isCountyOfficeVendor("WALTON COUNTY")).toBe(true);
+    expect(isCountyOfficeVendor("WALTON COUNTY TIMES")).toBe(false);
     expect(isCountyOfficeVendor("ACME SUPPLY CO")).toBe(false);
     expect(isCountyOfficeVendor("SHERIF'S MARKET")).toBe(false);
     expect(leftLabel(100_000, 150_000)).toEqual({ title: "Over budget by", value: "$500", over: true, unbudgeted: false });
@@ -247,6 +269,30 @@ describe("county offices, categories, and payment lines", () => {
     ]);
     expect(collapsed.map((item) => item.lines)).toEqual([1, 3]);
     expect(collapsed[1].row.vendor_name).toBe("ADKINSON LAW FIRM");
+    const shared = collapsePayments([
+      { pay_date: "2026-04-03", amount_cents: 100, vendor_name: "", check_number: "9", journal: "", object_code: "534000" },
+      { pay_date: "2026-04-03", amount_cents: 100, vendor_name: "ADKINSON LAW FIRM", check_number: "9", journal: "", object_code: "552000" },
+    ]);
+    expect(shared).toHaveLength(1);
+    expect(shared[0].lines).toBe(2);
+    expect(shared[0].row.vendor_name).toBe("ADKINSON LAW FIRM");
+    expect(vendorSpendAnswer("Lowe's Home Centers", { cents: 80000, lines: 99, checks: 99, names: [], transferOnly: false })).toBe(
+      "The county paid Lowe's Home Centers $800.00 so far this year. That is 99 payments.",
+    );
+    expect(vendorSpendAnswer("Lowe's Home Centers", { cents: 80000, lines: 99, checks: 99, names: [], transferOnly: false })).not.toContain("check");
+    const labels = disambiguatedDepartmentNames(
+      [
+        { code: "11101000", fund_code: "111", report_name: "Marketing" },
+        { code: "00122000", fund_code: "001", report_name: "Marketing" },
+      ],
+      { fund: new Map([["111", "Tourist Development"], ["001", "General Fund"]]), department: new Map(), object: new Map() },
+      new Map([
+        ["111", "Tourist Development"],
+        ["001", "General Fund"],
+      ]),
+    );
+    expect(labels.get("11101000")).toBe("Marketing (Tourist Development)");
+    expect(labels.get("00122000")).toBe("Marketing (General Fund)");
   });
 
   it("merges categories that share a label and drops a zero row", async () => {
@@ -283,6 +329,19 @@ describe("budget pages", () => {
     expect(overviewRes.headers.get("Content-Security-Policy")).toContain("https://cloudflareinsights.com");
     expect(overview).toContain("How we count the budget");
     expect(overview).toContain("Budget passed by commissioners");
+    expect(overview).toContain("Commissioners adopted a $3,000 budget for FY2026");
+    expect(overview).toContain("the county's books show");
+    expect(overview).toContain("paid out");
+    expect(overview).toContain("about $192M");
+    expect(overview).toContain("Resolution 2025-82");
+    expect(overview).toContain("budget limit after mid-year changes");
+    expect(overview).toContain("Share of the mid-year limit: 39.2%");
+    expect(overview).not.toContain("of its $3,700");
+    expect(overview).not.toContain("current budget");
+    expect(overview).not.toContain("$200M");
+    expect(overview).not.toContain("$151M");
+    expect(overview).not.toContain("carryforward");
+    expect(overview).not.toContain("carry-over");
     expect(overview).toContain("$3,000");
     expect(overview).toContain("$3,700");
     expect(overview).toContain("$1,450");
@@ -303,8 +362,11 @@ describe("budget pages", () => {
     expect(funds).toContain("Tourist Development");
 
     const fund = await (await app.request("http://localhost/funds/111", { headers }, env)).text();
-    expect(fund.indexOf("Budgeted")).toBeLessThan(fund.indexOf("Where the money went"));
-    expect(fund).toContain("Money spent so far");
+    expect(fund.indexOf("Adopted budget")).toBeLessThan(fund.indexOf("Where the money went"));
+    expect(fund).toContain("Paid out");
+    expect(fund).not.toContain("$800</b><span>$800");
+    expect(fund).toContain("Lowe&#39;s Home Centers");
+    expect(fund).toContain("$500.00");
     expect(fund).toContain("Money left");
     expect(fund).toContain("$1,500");
     expect(fund).toContain("$800");
@@ -314,7 +376,7 @@ describe("budget pages", () => {
     expect(fund).not.toContain("SHERIF");
 
     const dept = await (await app.request("http://localhost/departments/11101000", { headers }, env)).text();
-    expect(dept.indexOf("Budgeted")).toBeLessThan(dept.indexOf("Where the money went"));
+    expect(dept.indexOf("Adopted budget")).toBeLessThan(dept.indexOf("Where the money went"));
     expect(dept.indexOf("Where the money went")).toBeLessThan(dept.indexOf("Accounts in this department"));
     expect(dept).toContain("/search?dept=11101000&amp;vendor=");
     expect(dept).toContain('href="/departments/11101000/552000/_"');
@@ -339,6 +401,8 @@ describe("budget pages", () => {
     const lowesAnswer = await ask("How much did the county pay Lowe's this year?");
     expect(lowesAnswer).toContain("Lowe&#39;s Home Centers");
     expect(lowesAnswer).toContain("$800.00");
+    expect(lowesAnswer).toContain("That is 2 payments.");
+    expect(lowesAnswer).not.toMatch(/\d+ checks/);
     expect(lowesAnswer).not.toContain("could not be answered");
     const lowesAgain = await ask("How much did the county pay Lowes this year?");
     expect(lowesAgain).toContain("$800.00");
@@ -350,8 +414,19 @@ describe("budget pages", () => {
     expect(most).toContain("$800.00");
     expect(most).not.toContain("SHERIF");
     const budget = await ask("What is the county budget?");
-    expect(budget).toContain("$3,000");
+    expect(budget).toContain("Commissioners adopted a $3,000 budget");
+    expect(budget).toContain("about $192M");
+    expect(budget).not.toContain("current budget");
+    expect(budget).not.toContain("$200M");
+    expect(budget).not.toContain("$151M");
     expect(budget).not.toContain("$7,033");
+
+    const search = await (await app.request("http://localhost/search", { headers }, env)).text();
+    expect(search).toContain("$1,450.00");
+    expect(search).not.toContain("$4,783.00");
+    expect(search).toContain("Money moved between county funds is not included.");
+    const withTransfers = await (await app.request("http://localhost/search?transfers=1", { headers }, env)).text();
+    expect(withTransfers).toContain("$4,783.00");
     expect(budget).not.toContain("$6,333");
     const transfers = await ask("How much was transferred between funds?");
     expect(transfers).toContain("$3,333");

@@ -43,37 +43,45 @@ export function matchFundQuestion(question: string, funds: { code: string; name:
 
 export function publicFactText(facts: BudgetFacts, asOfLabel: string): string {
   return [
-    `Budget passed by commissioners: ${moneyExact(facts.adopted)}.`,
-    `Current budget: ${moneyExact(facts.current)}.`,
-    `Money spent so far through ${asOfLabel}: ${moneyExact(facts.spent)}.`,
-    `Money left: ${moneyExact(facts.left)}.`,
+    `Adopted budget passed by commissioners: ${moneyExact(facts.adopted)}.`,
+    `Budget limit after mid-year changes: ${moneyExact(facts.current)}. That limit is a ceiling, not a spending plan.`,
+    `Paid out through ${asOfLabel}: ${moneyExact(facts.spent)}.`,
+    `Share of the mid-year limit: ${facts.spentOfCurrentPct.toFixed(1)}%.`,
+    `Room under the mid-year limit: ${moneyExact(facts.left)}.`,
     `Transfers between county funds left out of those totals: ${moneyExact(facts.transfer)}.`,
   ].join(" ");
 }
 
 export function countyBudgetAnswer(facts: BudgetFacts, asOfLabel: string): string {
-  const takeaway = `The budget the commissioners passed is ${moneyWords(facts.adopted)}.`;
-  const rest = `The current budget is ${moneyWords(facts.current)}. That adds money carried over from last year and other changes, mostly grants. ${moneyWords(facts.spent)} has been spent through ${asOfLabel}. That leaves ${moneyWords(facts.left)}. About ${moneyWords(facts.transfer)} moved between county funds and is not counted again.`;
-  return `${takeaway} ${rest}`;
+  const takeaway = `Commissioners adopted a ${moneyWords(facts.adopted)} budget. Through ${asOfLabel} the county's books show ${moneyWords(facts.spent)} paid out.`;
+  const raised =
+    facts.current > facts.adopted
+      ? ` Budget limits were raised to ${moneyWords(facts.current)} during the year after commissioners re-approved about $192M of unfinished projects, grants and last-year commitments (Resolution 2025-82). The higher limit is a ceiling, not a spending plan.`
+      : "";
+  const rest = ` About ${moneyWords(facts.transfer)} moved between county funds and is not counted again.`;
+  return `${takeaway}${raised}${rest}`;
 }
 
 export function transferAnswer(facts: BudgetFacts): string {
   const takeaway = `About ${moneyWords(facts.transfer)} moved between county funds.`;
-  const rest = `A transfer moves money from one county fund to another, like moving cash between checking accounts. The raw report counts that move as spending twice. We count it once. Because you asked about transfers, the raw report's revised total is ${moneyWords(facts.grossRev)}, its original total is ${moneyWords(facts.grossOrig)}, and its spent total is ${moneyWords(facts.grossYtd)}. The current budget on this site is ${moneyWords(facts.current)}.`;
+  const rest = `A transfer moves money from one county fund to another, like moving cash between checking accounts. The raw report counts that move as spending twice. We count it once. Because you asked about transfers, the raw report's revised total is ${moneyWords(facts.grossRev)}, its original total is ${moneyWords(facts.grossOrig)}, and its spent total is ${moneyWords(facts.grossYtd)}. The budget limit after mid-year changes on this site is ${moneyWords(facts.current)}.`;
   return `${takeaway} ${rest}`;
 }
 
 export function fundBudgetAnswer(name: string, facts: BudgetFacts, asOfLabel: string): string {
-  const takeaway = `${name} has a current budget of ${moneyWords(facts.current)}.`;
-  const rest = `${moneyWords(facts.spent)} has been spent through ${asOfLabel}. That leaves ${moneyWords(facts.left)}.`;
-  return `${takeaway} ${rest}`;
+  const takeaway = `The adopted budget for ${name} is ${moneyWords(facts.adopted)}.`;
+  const current =
+    facts.current > facts.adopted ? ` The budget limit after mid-year changes is ${moneyWords(facts.current)}.` : "";
+  const rest = `${current} The books show ${moneyWords(facts.spent)} paid out through ${asOfLabel}.`;
+  return `${takeaway}${rest}`;
 }
 
 export function vendorSpendAnswer(name: string, totals: VendorMatchTotals): string {
   const takeaway = `The county paid ${name} ${moneyExact(totals.cents)} so far this year.`;
-  const checks = totals.checks === 1 ? "1 check" : `${totals.checks.toLocaleString("en-US")} checks`;
+  const payments = totals.checks === 1 ? "1 payment" : `${totals.checks.toLocaleString("en-US")} payments`;
+  if (totals.lines === totals.checks) return `${takeaway} That is ${payments}.`;
   const lines = totals.lines === 1 ? "1 payment line" : `${totals.lines.toLocaleString("en-US")} payment lines`;
-  return `${takeaway} That is ${lines} and ${checks}.`;
+  return `${takeaway} That is ${payments}, listed as ${lines} in search.`;
 }
 
 export function transferVendorAnswer(name: string, totals: VendorMatchTotals): string {
@@ -154,7 +162,7 @@ export async function directAnswer(
       const name = displayMatchName(paid.names);
       return {
         answer: vendorSpendAnswer(name, paid),
-        records: [{ kind: "total", text: `${name}: ${moneyExact(paid.cents)}, ${paid.lines} lines, ${paid.checks} checks.` }],
+        records: [{ kind: "total", text: `${name}: ${moneyExact(paid.cents)}, ${paid.lines} payment lines, ${paid.checks} payments.` }],
       };
     }
     const moved = await lookupVendorSpend(db, importId, phrase, showNames, true);
