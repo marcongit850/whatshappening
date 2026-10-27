@@ -3,3 +3,7 @@
 .dev.vars
 node_modules
 dist
+budget-explorer/data/
+budget-explorer/.dev.vars
+budget-explorer/.wrangler
+budget-explorer/node_modules

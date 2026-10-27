@@ -1,0 +1,26 @@
+{
+  // Budget Explorer. Separate Worker from the placeholder site.
+  // database_id is a placeholder. Create the D1 database, then paste its id here.
+  "name": "budget-explorer",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-27",
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "budget-explorer",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "vars": {
+    "PUBLIC_BASE_URL": ""
+  }
+}
