@@ -1,5 +1,6 @@
 import type { ChartNames } from "./csv";
-import { foldedPayrollNote, type ParseResult, type ParsedPayment, type ParsedPayrollLine } from "./parser";
+import { CONSTITUTIONAL_SQL, VENDOR_SOURCES } from "./overview";
+import { foldedPayrollNote, sqlIsPersonName, type ParseResult, type ParsedPayment, type ParsedPayrollLine } from "./parser";
 
 export interface ImportRow {
   id: number;
@@ -428,6 +429,161 @@ export async function fundNameMap(db: D1Database, importId: number): Promise<Map
   return new Map((rows.results || []).map((row) => [row.code, row.report_name || ""]));
 }
 
+export async function fundRollups(db: D1Database, importId: number): Promise<FundRollup[]> {
+  const rows = await db
+    .prepare(
+      `SELECT f.code AS code, f.report_name AS report_name,
+              COALESCE(SUM(a.orig_cents), 0) AS orig_cents,
+              COALESCE(SUM(a.adj_cents), 0) AS adj_cents,
+              COALESCE(SUM(a.rev_cents), 0) AS rev_cents,
+              COALESCE(SUM(a.ytd_cents), 0) AS ytd_cents,
+              COALESCE(SUM(a.enc_cents), 0) AS enc_cents,
+              COALESCE(SUM(a.avail_cents), 0) AS avail_cents,
+              COUNT(a.object_code) AS accounts
+       FROM funds f
+       LEFT JOIN accounts a ON a.import_id = f.import_id AND a.fund_code = f.code
+       WHERE f.import_id = ?
+       GROUP BY f.code
+       ORDER BY ytd_cents DESC`,
+    )
+    .bind(importId)
+    .all<FundRollup>();
+  return rows.results || [];
+}
+
+function cutoffDate(asOf: string): string {
+  return asOf || "9999-12-31";
+}
+
+/** Payments and payroll through the as-of date, split by kind. Does not select names. */
+export async function monthlyParts(db: D1Database, importId: number, asOf: string, fund = ""): Promise<MonthParts[]> {
+  const fundSql = fund ? "AND fund_code = ?" : "";
+  const binds: (string | number)[] = [importId, cutoffDate(asOf)];
+  if (fund) binds.push(fund);
+  const payments = await db
+    .prepare(
+      `SELECT substr(pay_date, 1, 7) AS ym,
+              SUM(CASE WHEN source IN ('API','APM','GRV') THEN amount_cents ELSE 0 END) AS vendor_cents,
+              SUM(CASE WHEN source IN ('GEN','GCR') THEN amount_cents ELSE 0 END) AS journal_cents,
+              SUM(CASE WHEN source NOT IN ('API','APM','GRV','GEN','GCR','PRJ') THEN amount_cents ELSE 0 END) AS other_cents
+       FROM payments
+       WHERE import_id = ? AND after_cutoff = 0 AND pay_date <= ? ${fundSql}
+       GROUP BY ym`,
+    )
+    .bind(...binds)
+    .all<{ ym: string; vendor_cents: number; journal_cents: number; other_cents: number }>();
+  const payroll = await db
+    .prepare(
+      `SELECT substr(pay_date, 1, 7) AS ym, SUM(amount_cents) AS cents
+       FROM payroll_lines
+       WHERE import_id = ? AND after_cutoff = 0 AND pay_date <= ? ${fundSql}
+       GROUP BY ym`,
+    )
+    .bind(...binds)
+    .all<{ ym: string; cents: number }>();
+  const map = new Map<string, MonthParts>();
+  const slot = (ym: string) => {
+    const existing = map.get(ym);
+    if (existing) return existing;
+    const created = { ym, vendor_cents: 0, payroll_cents: 0, other_cents: 0, journal_cents: 0 };
+    map.set(ym, created);
+    return created;
+  };
+  for (const row of payments.results || []) {
+    if (!row.ym) continue;
+    const item = slot(row.ym);
+    item.vendor_cents += Number(row.vendor_cents);
+    item.journal_cents += Number(row.journal_cents);
+    item.other_cents += Number(row.other_cents);
+  }
+  for (const row of payroll.results || []) {
+    if (!row.ym) continue;
+    slot(row.ym).payroll_cents += Number(row.cents);
+  }
+  return [...map.values()];
+}
+
+/** Organizations only. Person names are excluded in SQL in both name-switch modes. */
+export async function organizationVendors(db: D1Database, importId: number, asOf: string, limit = 10): Promise<OrgVendor[]> {
+  const sources = VENDOR_SOURCES.map((source) => `'${source}'`).join(", ");
+  const person = sqlIsPersonName("vendor_name");
+  const rows = await db
+    .prepare(
+      `SELECT CASE WHEN vendor_number = '' THEN vendor_name ELSE vendor_number END AS vendor_key,
+              MAX(vendor_number) AS vendor_number,
+              MAX(vendor_name) AS vendor_name,
+              SUM(amount_cents) AS cents,
+              COUNT(*) AS payments,
+              SUM(CASE WHEN object_code = '561000' THEN amount_cents ELSE 0 END) AS land_cents
+       FROM payments
+       WHERE import_id = ?
+         AND after_cutoff = 0
+         AND pay_date <= ?
+         AND source IN (${sources})
+         AND vendor_name IS NOT NULL
+         AND trim(vendor_name) != ''
+         AND ${person} = 0
+         AND NOT ${CONSTITUTIONAL_SQL}
+       GROUP BY vendor_key
+       ORDER BY cents DESC
+       LIMIT ?`,
+    )
+    .bind(importId, cutoffDate(asOf), limit)
+    .all<OrgVendor>();
+  return (rows.results || []).map((row) => ({
+    vendor_number: row.vendor_number || "",
+    vendor_name: (row.vendor_name || "").trim(),
+    cents: Number(row.cents),
+    payments: Number(row.payments),
+    land_cents: Number(row.land_cents),
+  }));
+}
+
+export async function constitutionalTransferCents(db: D1Database, importId: number, asOf: string): Promise<number> {
+  const sources = VENDOR_SOURCES.map((source) => `'${source}'`).join(", ");
+  const row = await db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cents), 0) AS cents
+       FROM payments
+       WHERE import_id = ?
+         AND after_cutoff = 0
+         AND pay_date <= ?
+         AND source IN (${sources})
+         AND ${CONSTITUTIONAL_SQL}`,
+    )
+    .bind(importId, cutoffDate(asOf))
+    .first<{ cents: number }>();
+  return Number(row?.cents || 0);
+}
+
+export async function landSpendByMonth(db: D1Database, importId: number, asOf: string): Promise<{ ym: string; cents: number }[]> {
+  const rows = await db
+    .prepare(
+      `SELECT substr(pay_date, 1, 7) AS ym, SUM(amount_cents) AS cents
+       FROM payments
+       WHERE import_id = ? AND after_cutoff = 0 AND pay_date <= ?
+         AND object_code = '561000' AND source NOT IN ('GEN','GCR')
+       GROUP BY ym`,
+    )
+    .bind(importId, cutoffDate(asOf))
+    .all<{ ym: string; cents: number }>();
+  return (rows.results || []).filter((row) => row.ym).map((row) => ({ ym: row.ym, cents: Number(row.cents) }));
+}
+
+export async function landSpendByDept(db: D1Database, importId: number, asOf: string): Promise<Map<string, number>> {
+  const rows = await db
+    .prepare(
+      `SELECT dept_code, SUM(amount_cents) AS cents
+       FROM payments
+       WHERE import_id = ? AND after_cutoff = 0 AND pay_date <= ?
+         AND object_code = '561000' AND source NOT IN ('GEN','GCR')
+       GROUP BY dept_code`,
+    )
+    .bind(importId, cutoffDate(asOf))
+    .all<{ dept_code: string; cents: number }>();
+  return new Map((rows.results || []).map((row) => [row.dept_code, Number(row.cents)]));
+}
+
 export async function monthlyCents(db: D1Database, importId: number): Promise<{ ym: string; cents: number }[]> {
   const payments = await db
     .prepare("SELECT substr(pay_date, 1, 7) AS ym, SUM(amount_cents) AS cents FROM payments WHERE import_id = ? GROUP BY ym")
@@ -470,9 +626,38 @@ export interface SearchFilters {
   q: string;
   vendor: string;
   dept: string;
+  fund: string;
   minCents: number;
   from: string;
   to: string;
+}
+
+export interface FundRollup {
+  code: string;
+  report_name: string;
+  orig_cents: number;
+  adj_cents: number;
+  rev_cents: number;
+  ytd_cents: number;
+  enc_cents: number;
+  avail_cents: number;
+  accounts: number;
+}
+
+export interface MonthParts {
+  ym: string;
+  vendor_cents: number;
+  payroll_cents: number;
+  other_cents: number;
+  journal_cents: number;
+}
+
+export interface OrgVendor {
+  vendor_number: string;
+  vendor_name: string;
+  cents: number;
+  payments: number;
+  land_cents: number;
 }
 
 export async function reconAccounts(db: D1Database, importId: number): Promise<AccountRow[]> {
