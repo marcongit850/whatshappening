@@ -71,6 +71,7 @@ ${stateMap()}
 <ul class="state-pills" data-state-list>
 ${statePills()}
 </ul>
+<p class="state-empty" data-state-empty hidden>No state matches that name.</p>
 </section>
 <section class="door-section">
 <h2>How to use this site</h2>
@@ -84,7 +85,7 @@ ${statePills()}
 <section class="door-section">
 <h2>Walton County is live</h2>
 <p class="caption">The first county on this site.</p>
-<p class="explainer">${esc(liveCountyLine())} The figures come from public records provided by the Walton County Clerk and Comptroller. The page is unofficial. Access is currently private.</p>
+<p class="body-copy">${esc(liveCountyLine())} The figures come from public records provided by the Walton County Clerk and Comptroller. The page is unofficial. Access is currently private.</p>
 <p><a class="btn gold" href="/walton">Open Walton County</a></p>
 </section>
 </div></main>`,
@@ -341,7 +342,9 @@ ${formError(opts.error)}
 <textarea id="idea" name="idea">${esc(opts.idea)}</textarea></div>
 </div>
 <div><label for="source">Source or link, if you have one</label><input id="source" name="source" type="text" value="${esc(opts.source)}"></div>
-<div><label for="county">County</label><select id="county" name="county">${options}</select></div>
+<div><label for="county">County</label>
+<p class="caption">Required. Choose the county this note is about.</p>
+<select id="county" name="county" required>${options}</select></div>
 <div><label for="report_name">Your name, if you want a follow-up</label><input id="report_name" name="name" type="text" autocomplete="name" value="${esc(opts.name)}"></div>
 <div><label for="report_email">Your email, if you want a follow-up</label>
 <p class="caption">Leave this blank if you want. It is saved and it is not shown on the page.</p>
@@ -353,7 +356,16 @@ ${formError(opts.error)}
   });
 }
 
-export function renderThanks(opts: { title: string; message: string; path: string; backHref: string; backLabel: string }): string {
+export function renderThanks(opts: {
+  title: string;
+  message: string;
+  path: string;
+  backHref: string;
+  backLabel: string;
+  eyebrow?: string;
+  closeNote?: string | null;
+}): string {
+  const close = opts.closeNote === null ? "" : `<p class="caption">${esc(opts.closeNote ?? "You can close this page.")}</p>`;
   return document({
     title: opts.title,
     description: opts.message,
@@ -361,10 +373,10 @@ export function renderThanks(opts: { title: string; message: string; path: strin
     index: false,
     jsonLd: null,
     body: `<section class="door-hero"><div class="door-wrap">
-<p class="eyebrow">Received</p>
+<p class="eyebrow">${esc(opts.eyebrow ?? "Received")}</p>
 <h1>${esc(opts.title)}</h1>
 <p class="explainer">${esc(opts.message)}</p>
-<p class="caption">You can close this page.</p>
+${close}
 <div class="door-actions"><a class="btn gold" href="${esc(opts.backHref)}">${esc(opts.backLabel)}</a></div>
 </div></section>`,
   });

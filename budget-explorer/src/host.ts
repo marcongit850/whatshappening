@@ -1,3 +1,5 @@
+import { safeRedirectLocation, unsafeRequestPath } from "./redirect-path";
+
 /** Apex host used in canonical URLs, Open Graph, and the sitemap. */
 export const CANONICAL_ORIGIN = "https://howtheyspendmytaxes.com";
 
@@ -68,14 +70,21 @@ export function prefixHtml(html: string, base = WALTON_PREFIX): string {
 
 /** Rewrite a root-relative Location, including a `next` path inside the query string. */
 export function prefixLocation(location: string, base = WALTON_PREFIX): string {
-  if (!base || !location.startsWith("/") || location.startsWith("//")) return location;
+  const pathPart = location.split("?")[0] || "";
+  if (!base || unsafeRequestPath(pathPart) || location.includes("\\") || !location.startsWith("/") || location.startsWith("//")) {
+    return base || "/";
+  }
   const url = new URL(location, CANONICAL_ORIGIN);
   const next = url.searchParams.get("next");
-  if (next && next.startsWith("/") && !next.startsWith("//")) {
-    url.searchParams.set("next", prefixPath(next, base));
+  if (next) {
+    if (unsafeRequestPath(next) || next.includes("\\") || !next.startsWith("/") || next.startsWith("//")) {
+      url.searchParams.set("next", prefixPath("/", base));
+    } else {
+      url.searchParams.set("next", prefixPath(next, base));
+    }
   }
   url.pathname = prefixPath(url.pathname, base).split(/[?#]/)[0];
-  return `${url.pathname}${url.search}`;
+  return safeRedirectLocation(`${url.pathname}${url.search}`);
 }
 
 export const SITEMAP_PATHS = ["/", "/florida", "/walton"] as const;

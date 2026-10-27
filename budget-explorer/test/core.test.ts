@@ -253,6 +253,10 @@ ACCOUNTS FOR: 001 GENERAL FUND
     expect(safeNext("/departments", origin)).toBe("/departments");
     expect(safeNext("//evil.com", origin)).toBe("/");
     expect(safeNext("/\\evil.com", origin)).toBe("/");
+    expect(safeNext("///evil.com", origin)).toBe("/");
+    expect(safeNext("/%2f%2fevil.com", origin)).toBe("/");
+    expect(safeNext("/%5Cevil.com", origin)).toBe("/");
+    expect(safeNext("%252f%252fevil.com", origin)).toBe("/");
     expect(safeNext("https://evil.com", origin)).toBe("/");
     expect(safeNext("/%0d%0aSet-Cookie:x", origin)).toBe("/");
     expect(safeNext("javascript:alert(1)", origin)).toBe("/");

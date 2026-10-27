@@ -541,6 +541,7 @@ body.door main { max-width: none; margin: 0; padding: 0; }
 .door-hero h1 { color: #f6f4ee; font-size: clamp(42px, 6vw, 72px); max-width: 16ch; line-height: 1.05; margin: 0 0 16px; }
 .door-hero .eyebrow { color: #e6c46a; }
 .door-hero .explainer { font-size: 22px; line-height: 1.45; max-width: 40rem; color: #e7e1d6; margin: 0; }
+.door-section .body-copy { font-size: 22px; line-height: 1.45; max-width: 40rem; color: var(--ink); margin: 12px 0 0; }
 .door-hero .caption, .door-section .caption { font-size: 20px; line-height: 1.4; margin: 12px 0 0; }
 .door-hero .caption { color: #c9d3da; }
 .door-section .caption { color: var(--muted); }
@@ -578,6 +579,7 @@ body.door .door-login label, body.door .door-login legend { font-size: 20px; let
 .state-finder { margin-top: 18px; max-width: 720px; }
 .state-finder label { font-size: 20px; letter-spacing: 0; text-transform: none; color: var(--ink); font-weight: 600; }
 .state-finder input { min-height: 64px; font-size: 22px; }
+.state-empty { font-size: 22px; line-height: 1.45; margin: 16px 0 0; max-width: 40rem; }
 body.door .door-login legend { font-family: var(--serif); font-size: 32px; font-weight: 560; }
 body.door .door-login fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 body.door .door-login input[type="text"], body.door .door-login input[type="email"], body.door .door-login input[type="password"], body.door .door-login select, body.door .door-login textarea { min-height: 64px; font-size: 20px; max-width: 100%; }
@@ -627,12 +629,17 @@ export const CLIENT_JS = `
   const filter = document.querySelector("[data-state-filter]");
   if (filter instanceof HTMLInputElement) {
     const rows = document.querySelectorAll("[data-state-name]");
+    const empty = document.querySelector("[data-state-empty]");
     filter.addEventListener("input", () => {
       const query = filter.value.trim().toLowerCase();
+      let shown = 0;
       rows.forEach((row) => {
         const name = (row.getAttribute("data-state-name") || "").toLowerCase();
-        row.hidden = Boolean(query) && !name.includes(query);
+        const hide = Boolean(query) && !name.includes(query);
+        row.hidden = hide;
+        if (!hide) shown += 1;
       });
+      if (empty instanceof HTMLElement) empty.hidden = query.length === 0 || shown > 0;
     });
   }
   const form = document.querySelector("[data-busy]");

@@ -14,6 +14,7 @@ import type { AppEnv } from "./env";
 import { handleCountyForm, handleReport } from "./intake";
 import { countiesIn, countyByPath, stateBySlug } from "./places";
 import { applyPublicHeaders, publicHtml, publicRedirect } from "./public-http";
+import { safeRedirectLocation, unsafeRequestPath } from "./redirect-path";
 import { renderFlorida, renderPublicHome, renderPublicMissing, renderStateHub, renderWaltonLanding } from "./public-page";
 
 type DashboardApp = {
@@ -35,9 +36,12 @@ export function createSite(dashboard: DashboardApp): Hono<{ Bindings: AppEnv }> 
 async function taxesRequest(c: Context<{ Bindings: AppEnv }>, dashboard: DashboardApp): Promise<Response> {
   const url = new URL(c.req.url);
   const pathname = url.pathname;
+  if (unsafeRequestPath(pathname)) return notFoundFor(c.req.method);
   if (pathname.length > 1 && pathname.endsWith("/")) {
     const bare = pathname.slice(0, -1);
-    return redirect(taxesTarget(bare) + url.search, 301);
+    const target = taxesTarget(bare);
+    if (!target) return notFoundFor(c.req.method);
+    return redirect(`${target}${url.search}`, 301);
   }
 
   if (pathname === "/robots.txt") return text(robotsTxt(), "text/plain; charset=utf-8");
@@ -87,18 +91,23 @@ async function taxesRequest(c: Context<{ Bindings: AppEnv }>, dashboard: Dashboa
   if (pathname === "/favicon.svg" || pathname.startsWith("/assets/")) return forward(c, dashboard, pathname);
   if (isDashboardPath(pathname)) {
     if (c.req.method === "GET" || c.req.method === "HEAD") {
-      return redirect(prefixPath(pathname) + url.search, 301);
+      return redirect(`${prefixPath(pathname)}${url.search}`, 301);
     }
     return forward(c, dashboard, pathname);
   }
-  if (c.req.method !== "GET" && c.req.method !== "HEAD") return text("Not found", "text/plain; charset=utf-8", 404, false);
-  return html(renderPublicMissing(), 404, false);
+  return notFoundFor(c.req.method);
 }
 
-function taxesTarget(pathname: string): string {
+function taxesTarget(pathname: string): string | null {
+  if (unsafeRequestPath(pathname)) return null;
   if (pathname === WALTON_PREFIX || pathname.startsWith(`${WALTON_PREFIX}/`)) return pathname;
   if (isDashboardPath(pathname)) return prefixPath(pathname);
   return pathname;
+}
+
+function notFoundFor(method: string): Response {
+  if (method === "GET" || method === "HEAD") return html(renderPublicMissing(), 404, false);
+  return text("Not found", "text/plain; charset=utf-8", 404, false);
 }
 
 function waltonLanding(): Response {
@@ -126,7 +135,10 @@ async function forward(c: Context<{ Bindings: AppEnv }>, dashboard: DashboardApp
 async function rewriteDashboard(response: Response): Promise<Response> {
   const headers = new Headers(response.headers);
   const location = headers.get("Location");
-  if (location && location.startsWith("/")) headers.set("Location", prefixLocation(location));
+  if (location) {
+    const nextLocation = location.startsWith("/") || location.startsWith("\\") ? prefixLocation(location) : safeRedirectLocation(location);
+    headers.set("Location", nextLocation);
+  }
   const type = headers.get("content-type") || "";
   if (!type.includes("text/html")) return new Response(response.body, { status: response.status, headers });
   const htmlBody = prefixHtml(await response.text());
