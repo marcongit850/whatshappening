@@ -10,7 +10,7 @@ import { uploadAllowed } from "../src/limits";
 import { MAX_REPORT_LINE, MIN_PAYROLL_BATCH_LINES, dedupePayments, foldPayrollBatches, looksLikePersonName, parseReport, parseVendorRest, storedText, type ParsedPayrollBatch } from "../src/parser";
 import { safeNext } from "../src/safe-next";
 import { renderLogin, renderUnlock } from "../src/view";
-import { XLSX_MAX_COMPRESSED_BYTES, uncompressedWithinLimits, xlsxToRows, zipEntryAllowed } from "../src/xlsx";
+import { XLSX_MAX_COMPRESSED_BYTES, unzipChecked, uncompressedWithinLimits, xlsxToRows, zipEntryAllowed } from "../src/xlsx";
 
 const REPORT = `Walton County
 YEAR-TO-DATE BUDGET REPORT
@@ -353,6 +353,20 @@ describe("xlsx limits", () => {
     expect(() => xlsxToRows(forged, { entry: 100, total: 100 })).toThrow(/larger than declared/i);
   });
 
+  it("stops a forged uncompressed size before the whole entry is inflated", () => {
+    const uncompressed = 32 * 1024 * 1024;
+    const raw = new Uint8Array(uncompressed);
+    const packed = zipSync({ "xl/worksheets/sheet1.xml": raw });
+    const forged = forgeHeaderUncompressedSize(packed, 128);
+    const before = process.memoryUsage().heapUsed;
+    const started = performance.now();
+    expect(() => unzipChecked(forged, { entry: 2_000_000, total: 2_000_000 })).toThrow(/larger than declared|too large/i);
+    const elapsed = performance.now() - started;
+    const delta = process.memoryUsage().heapUsed - before;
+    expect(elapsed).toBeLessThan(1500);
+    expect(delta).toBeLessThan(24 * 1024 * 1024);
+  });
+
   it("reads a small worksheet", () => {
     const sheet = `<?xml version="1.0"?><worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>HELLO</t></is></c></row></sheetData></worksheet>`;
     const packed = zipSync({ "xl/worksheets/sheet1.xml": strToU8(sheet) });
@@ -369,6 +383,25 @@ function forgeUncompressedSize(packed: Uint8Array, from: number, to: number): Ui
   for (let i = 0; i <= copy.length - 4; i += 1) {
     if (copy[i] === fromBytes[0] && copy[i + 1] === fromBytes[1] && copy[i + 2] === fromBytes[2] && copy[i + 3] === fromBytes[3]) {
       copy.set(toBytes, i);
+      patched += 1;
+    }
+  }
+  if (patched < 2) throw new Error("Could not forge the zip size fields");
+  return copy;
+}
+
+function forgeHeaderUncompressedSize(packed: Uint8Array, to: number): Uint8Array {
+  const copy = packed.slice();
+  const toBytes = uint32(to);
+  let patched = 0;
+  for (let i = 0; i <= copy.length - 30; i += 1) {
+    const local = copy[i] === 0x50 && copy[i + 1] === 0x4b && copy[i + 2] === 0x03 && copy[i + 3] === 0x04;
+    const central = copy[i] === 0x50 && copy[i + 1] === 0x4b && copy[i + 2] === 0x01 && copy[i + 3] === 0x02;
+    if (local) {
+      copy.set(toBytes, i + 22);
+      patched += 1;
+    } else if (central) {
+      copy.set(toBytes, i + 24);
       patched += 1;
     }
   }

@@ -354,7 +354,7 @@ export function renderAccount(opts: {
   const payrollNote = opts.account.is_payroll
     ? opts.showNames
       ? `<p class="note">This is a payroll account. Employee names and individual pay are shown.</p>`
-      : `<p class="note">This is a payroll account. Rows are labeled Payroll (batch total). Person names and individual pay are hidden.</p>`
+      : `<p class="note">This is a payroll account. Totals that clear the group minimum are labeled Payroll (batch total). Smaller groups are combined as Other payroll when that total also clears the minimum, and left off this list when it does not. Person names and individual pay are hidden.</p>`
     : "";
   const table = `<div class="table-wrap"><table>
 <thead><tr><th>Date</th><th>Vendor</th><th>Invoice number</th><th>Description</th><th>Check number</th><th class="num">Amount</th></tr></thead>
