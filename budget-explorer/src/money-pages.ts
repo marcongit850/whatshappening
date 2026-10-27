@@ -35,7 +35,7 @@ export function revenueDocument(ledger: PublishedLedger, fundCodes: Set<string>)
   const transfers = ledger.notIncome.find((item) => item.key === "transfers");
   return `<p class="crumb"><a href="/">Overview</a> / Income</p>
 <h1>Where the county's income comes from</h1>
-<p class="lead">The lead figures are audited actual income for the year that ended September 30, 2025. Later years on this page are budgets, not money already collected.</p>
+<p class="lead page-intro">The lead figures are audited actual income for the year that ended September 30, 2025. Later years on this page are budgets, not money already collected.</p>
 <section class="kpis">
 <a class="card kpi k1" href="#income-chart"><div class="l">Audited actual</div><div class="n">${esc(moneyCompact(total))}</div><div class="s">Income received in FY2025. Money moved between county funds is not included.</div></a>
 <a class="card kpi k2" href="#property-taxes"><div class="l">Property taxes</div><div class="n">${esc(property ? moneyCompact(property.cents) : "")}</div><div class="s">${property ? `${property.pct.toFixed(1)}% of audited income.` : ""}</div></a>
@@ -65,7 +65,7 @@ export function reservesDocument(ledger: PublishedLedger, fundCodes: Set<string>
   const months = reserves.policy.months.toFixed(1);
   return `<p class="crumb"><a href="/">Overview</a> / Savings</p>
 <h1>Savings the county held</h1>
-<p class="lead">Audited year-end balance, not a live balance. The FY2026 year-end balance will exist after the spring 2027 audit.</p>
+<p class="lead page-intro">Audited year-end balance, not a live balance. The FY2026 year-end balance will exist after the spring 2027 audit.</p>
 <section class="kpis">
 <a class="card kpi k1" href="#by-type"><div class="l">September 30, 2025</div><div class="n">${esc(moneyCompact(reserves.totalCents))}</div><div class="s">Savings in all governmental funds. A year earlier it was ${esc(moneyCompact(reserves.priorCents))}.</div></a>
 <a class="card kpi k2" href="#class-unassigned"><div class="l">Free to spend</div><div class="n">${esc(moneyCompact(reserves.classes.find((item) => item.key === "unassigned")?.cents || 0))}</div><div class="s">General Fund money with no purpose set. The rest is already spoken for.</div></a>
@@ -185,7 +185,7 @@ ${ledger.beach
     (line) => `<article class="cmp">
 <h3><a href="${esc(href)}">${esc(line.label)}</a></h3>
 <p class="figure-n">${esc(moneyCompact(line.cents))}</p>
-<p class="cap">${esc(line.label === "Other beach vending permits" ? "not explained in the county budget file" : "Budget for one year. General Fund account 329004.")}</p>
+<p class="cap">Budget for one year.</p>
 <p>${esc(gulfName(line.detail))}</p>
 </article>`,
   )

@@ -172,8 +172,11 @@ describe("published import", () => {
 
   it("round-trips the ledger through SQL", () => {
     const ledger = buildLedger(revenue, reserves, beach);
+    const sql = ledgerToSql(ledger);
+    expect(sql).not.toMatch(/\bBEGIN\b/);
+    expect(sql).not.toMatch(/\bCOMMIT\b/);
     const { raw } = openDb();
-    raw.exec(ledgerToSql(ledger));
+    raw.exec(sql);
     const loaded = ledgerFromRows("2025-09-30", rowsFrom(raw));
     expect(loaded.incomeTotalCents).toBe(ledger.incomeTotalCents);
     expect(loaded.reserves.totalCents).toBe(ledger.reserves.totalCents);
@@ -223,8 +226,11 @@ describe("revenue and reserves pages", () => {
     }
     expect(revenue).toContain("Audited actual");
     expect(revenue).toContain("Budget");
-    expect(revenue).toContain("Coastal Parasail, Inc.");
-    expect(revenue).toContain("not explained in the county budget file");
+    expect(revenue).toContain("Paid by Coastal Parasail, Inc.");
+    expect(revenue).not.toContain("Inc..");
+    expect(revenue.match(/not explained in the county budget file/g)).toEqual(["not explained in the county budget file"]);
+    expect(revenue.match(/General Fund account 329004\./g)?.length).toBe(3);
+    expect(reserves).not.toContain("The commissioners voted to use this for a stated purpose. The commissioners voted");
     expect(revenue).toContain("How much is in savings");
     expect(revenue).toContain("<svg");
     expect(reserves).toContain("Audited year-end balance, not a live balance");

@@ -885,7 +885,7 @@ export function ledgerToSql(ledger: PublishedLedger, createdAt = new Date().toIS
         `(${id}, ${q(row.section)}, ${q(row.itemKey)}, ${q(row.parentKey)}, ${q(row.label)}, ${row.amountCents}, ${row.sortOrder}, ${q(row.basis)}, ${row.fiscalYear}, ${q(row.fundCode)}, ${q(row.status)}, ${q(row.sourceUrl)}, ${q(row.sourcePages)}, ${q(row.detail)})`,
     )
     .join(",\n");
-  return `BEGIN;\nDELETE FROM published_amounts;\nDELETE FROM published_snapshots;\n${header}\nINSERT INTO published_amounts (\n  snapshot_id, section, item_key, parent_key, label, amount_cents, sort_order, basis, fiscal_year, fund_code, status, source_url, source_pages, detail\n) VALUES\n${values};\nCOMMIT;\n`;
+  return `DELETE FROM published_amounts;\nDELETE FROM published_snapshots;\n${header}\nINSERT INTO published_amounts (\n  snapshot_id, section, item_key, parent_key, label, amount_cents, sort_order, basis, fiscal_year, fund_code, status, source_url, source_pages, detail\n) VALUES\n${values};\n`;
 }
 
 function buildIncome(revenue: unknown): { totalCents: number; income: AmountItem[]; notIncome: AmountItem[] } {
@@ -1323,11 +1323,13 @@ function buildBeach(beach: unknown, revenue: unknown): { lines: AmountItem[]; no
 }
 
 function beachDetail(line: Record<string, unknown>): string {
-  const payer = str(line.payer, "");
-  const detail = str(line.detail, "beach detail");
-  const fund = "General Fund";
-  if (payer) return `${detail} Paid by ${payer}. ${fund} account 329004. This is a budget amount, not an audited receipt.`;
-  return `${detail}. ${fund} account 329004. This is a budget amount, not an audited receipt.`;
+  const payer = str(line.payer, "").replace(/\.+$/, "");
+  let detail = str(line.detail, "beach detail").trim().replace(/\.+$/, "");
+  detail = detail.replace(/\s*General Fund account 329004$/i, "").trim().replace(/\.+$/, "");
+  const account = "General Fund account 329004";
+  const receipt = "This is a budget amount, not an audited receipt";
+  if (payer) return `${detail}. Paid by ${payer}. ${account}. ${receipt}.`;
+  return `${detail}. ${account}. ${receipt}.`;
 }
 
 function buildBedTax(revenue: unknown): PublishedLedger["bedTax"] {
@@ -1533,7 +1535,7 @@ function buildReserves(reserves: unknown, revenue: unknown): PublishedLedger["re
       plain: cls.plain,
       cents: classRows[index][classRows[index].length - 1] * 100,
       pct: classPercents[index],
-      detail: cls.plain,
+      detail: "",
     })),
     funds: builtFunds,
     policy: {
