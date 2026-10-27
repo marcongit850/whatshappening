@@ -1,7 +1,9 @@
+import { TRANSFER_OBJECT } from "./budget";
 import type { PaymentRow, SearchFilters } from "./db";
 import { accountKey, moneyExact } from "./format";
 import { QA_MAX_CHARS } from "./auth";
 import { QA_SYSTEM, type QaPack, type QaRecord } from "./qa";
+import { vendorCompact, vendorCompactSql } from "./vendors";
 
 /**
  * Default for "Show person names and individual pay" when settings has no row.
@@ -132,15 +134,23 @@ function paymentBranch(importId: number, filters: SearchFilters | null, showName
     where.push("pay_date <= ?");
     binds.push(filters.to);
   }
+  if (filters?.fund) {
+    where.push("fund_code = ?");
+    binds.push(filters.fund);
+  }
+  if (filters?.excludeTransfer) where.push(`object_code != '${TRANSFER_OBJECT}'`);
   if (filters?.vendor.trim()) {
     const pattern = like(filters.vendor);
+    const compact = vendorCompact(filters.vendor);
+    const extra = compact.length >= 3 ? ` OR ${vendorCompactSql("vendor_name")} LIKE ?` : "";
     if (showNames) {
-      where.push("vendor_name LIKE ?");
+      where.push(`(vendor_name LIKE ?${extra})`);
       binds.push(pattern);
     } else {
-      where.push("is_person_name = 0 AND vendor_name LIKE ?");
+      where.push(`(is_person_name = 0 AND (vendor_name LIKE ?${extra}))`);
       binds.push(pattern);
     }
+    if (compact.length >= 3) binds.push(`${compact}%`);
   }
   if (filters?.q.trim()) {
     const pattern = like(filters.q);
@@ -159,6 +169,10 @@ function payrollBranch(importId: number, filters: SearchFilters | null, showName
   const where = ["import_id = ?", "after_cutoff = 0"];
   const binds: Bind[] = [importId];
   pushScope(where, binds, scope);
+  if (filters?.fund) {
+    where.push("fund_code = ?");
+    binds.push(filters.fund);
+  }
   if (filters?.dept) {
     where.push("dept_code = ?");
     binds.push(filters.dept);
@@ -383,7 +397,13 @@ export function qaSystem(showNames: boolean): string {
   return `${QA_SYSTEM} ${payroll}`;
 }
 
-export async function buildQuestionContext(db: D1Database, importId: number, question: string, showNames: boolean): Promise<QaPack> {
+export async function buildQuestionContext(
+  db: D1Database,
+  importId: number,
+  question: string,
+  showNames: boolean,
+  factText = "",
+): Promise<QaPack> {
   const records: QaRecord[] = [];
   const codes = question.match(/\b\d{3,8}\b/g) || [];
   const words = tokens(question);
@@ -432,7 +452,7 @@ export async function buildQuestionContext(db: D1Database, importId: number, que
     }
   }
   if (showNames && /\b(how much|total|sum|spent)\b/i.test(question) && words.length) {
-    const found = await searchLines(db, importId, { q: words[0], vendor: "", dept: "", minCents: 0, from: "", to: "" }, 0, 200, true);
+    const found = await searchLines(db, importId, { q: words[0], vendor: "", dept: "", minCents: 0, from: "", to: "" }, 0, 24, true);
     if (found.total > 0) {
       records.push({
         kind: "total",
@@ -447,7 +467,8 @@ export async function buildQuestionContext(db: D1Database, importId: number, que
     return true;
   }).slice(0, 40);
   const body = unique.map((record, index) => `[${index + 1}] ${record.text}`).join("\n");
-  const prompt = `Question: ${question.slice(0, QA_MAX_CHARS)}\n\nRecords from the imported budget file:\n${body || "(none)"}`;
+  const facts = factText ? `Facts calculated in SQL. Use these for countywide totals.\n${factText}\n\n` : "";
+  const prompt = `Question: ${question.slice(0, QA_MAX_CHARS)}\n\n${facts}Records from the imported budget file:\n${body || "(none)"}`;
   return { records: unique, prompt };
 }
 

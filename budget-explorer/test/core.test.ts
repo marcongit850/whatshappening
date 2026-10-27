@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { adminUnlockAllowed, constantTimeEqual, csrfOk, newSession, rateDecision, readSession, signSession, throttleDecision } from "../src/auth";
 import { historyStatuses, rowCountsMatch } from "../src/db";
 import { adminPasswordSet } from "../src/env";
-import { csvAmount, csvCell, fiscalPosition, pace } from "../src/format";
+import { csvAmount, csvCell, fiscalPosition, pace, pct } from "../src/format";
 import { uploadAllowed } from "../src/limits";
 import { MAX_REPORT_LINE, MIN_PAYROLL_BATCH_LINES, dedupePayments, foldPayrollBatches, looksLikePersonName, parseReport, parseVendorRest, storedText, type ParsedPayrollBatch } from "../src/parser";
 import { safeNext } from "../src/safe-next";
@@ -133,12 +133,15 @@ describe("burn rate", () => {
     expect(elapsed.elapsedPct).toBeCloseTo(95.8904, 2);
   });
 
-  it("classifies pace from spent plus encumbered", () => {
-    expect(pace(1000, 900, 50, elapsed.elapsedPct)).toBe("green");
+  it("classifies pace from money spent, not from money promised but unpaid", () => {
+    expect(pace(1000, 900, 200, elapsed.elapsedPct)).toBe("green");
     expect(pace(1000, 980, 0, elapsed.elapsedPct)).toBe("yellow");
     expect(pace(1000, 1100, 0, elapsed.elapsedPct)).toBe("red");
-    expect(pace(0, 0, 0, elapsed.elapsedPct)).toBe("gray");
+    expect(pace(1000, 0, 50, elapsed.elapsedPct)).toBe("none");
+    expect(pace(0, 0, 0, elapsed.elapsedPct)).toBe("none");
     expect(pace(0, 10, 0, elapsed.elapsedPct)).toBe("red");
+    expect(pct(10, 0)).toBe("n/a");
+    expect(pct(0, 1000)).toBe("0.0%");
   });
 });
 

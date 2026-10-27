@@ -1,3 +1,4 @@
+import { TRANSFER_OBJECT } from "./budget";
 import type { ChartNames } from "./csv";
 import { foldedPayrollNote, type ParseResult, type ParsedPayment, type ParsedPayrollLine } from "./parser";
 
@@ -39,6 +40,10 @@ export interface DeptRollup {
   enc_cents: number;
   avail_cents: number;
   accounts: number;
+  transfer_orig_cents: number;
+  transfer_rev_cents: number;
+  transfer_ytd_cents: number;
+  transfer_enc_cents: number;
 }
 
 export interface AccountRow {
@@ -411,7 +416,11 @@ export async function departmentRollups(db: D1Database, importId: number): Promi
               COALESCE(SUM(a.ytd_cents), 0) AS ytd_cents,
               COALESCE(SUM(a.enc_cents), 0) AS enc_cents,
               COALESCE(SUM(a.avail_cents), 0) AS avail_cents,
-              COUNT(a.dept_code) AS accounts
+              COUNT(a.dept_code) AS accounts,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.orig_cents ELSE 0 END), 0) AS transfer_orig_cents,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.rev_cents ELSE 0 END), 0) AS transfer_rev_cents,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.ytd_cents ELSE 0 END), 0) AS transfer_ytd_cents,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.enc_cents ELSE 0 END), 0) AS transfer_enc_cents
        FROM departments d
        LEFT JOIN accounts a ON a.import_id = d.import_id AND a.dept_code = d.code
        WHERE d.import_id = ?
@@ -430,7 +439,12 @@ export async function fundNameMap(db: D1Database, importId: number): Promise<Map
 
 export async function monthlyCents(db: D1Database, importId: number): Promise<{ ym: string; cents: number }[]> {
   const payments = await db
-    .prepare("SELECT substr(pay_date, 1, 7) AS ym, SUM(amount_cents) AS cents FROM payments WHERE import_id = ? GROUP BY ym")
+    .prepare(
+      `SELECT substr(pay_date, 1, 7) AS ym, SUM(amount_cents) AS cents
+       FROM payments
+       WHERE import_id = ? AND after_cutoff = 0 AND object_code != '${TRANSFER_OBJECT}'
+       GROUP BY ym`,
+    )
     .bind(importId)
     .all<{ ym: string; cents: number }>();
   const payroll = await db
@@ -470,9 +484,11 @@ export interface SearchFilters {
   q: string;
   vendor: string;
   dept: string;
+  fund?: string;
   minCents: number;
   from: string;
   to: string;
+  excludeTransfer?: boolean;
 }
 
 export async function reconAccounts(db: D1Database, importId: number): Promise<AccountRow[]> {

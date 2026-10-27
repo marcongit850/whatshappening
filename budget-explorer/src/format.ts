@@ -52,6 +52,19 @@ export function csvAmount(cents: number): string {
   return negative ? `-${text}` : text;
 }
 
+/** Headline amount in everyday words, such as $12.5 million. */
+export function moneyWords(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const dollars = Math.abs(cents) / 100;
+  if (dollars >= 1_000_000) {
+    const millions = dollars / 1_000_000;
+    const digits = millions >= 10 ? 1 : 2;
+    return `${sign}$${millions.toFixed(digits)} million`;
+  }
+  if (dollars >= 100) return `${sign}$${Math.round(dollars).toLocaleString("en-US")}`;
+  return moneyExact(cents);
+}
+
 /** Compact axis label. Full figures stay on the cards and in the tables. */
 export function moneyShort(cents: number): string {
   const sign = cents < 0 ? "-" : "";
@@ -63,7 +76,7 @@ export function moneyShort(cents: number): string {
 }
 
 export function pct(part: number, whole: number, digits = 1): string {
-  if (!whole) return "0.0%";
+  if (!whole) return "n/a";
   return `${((part / whole) * 100).toFixed(digits)}%`;
 }
 
@@ -88,14 +101,15 @@ export function accountKey(fund: string, dept: string, objectCode: string, proje
   return `${fund}-${dept}-${objectCode}-${project}`;
 }
 
-export type Pace = "green" | "yellow" | "red" | "gray";
+export type Pace = "green" | "yellow" | "red" | "gray" | "none";
 
-export function pace(revCents: number, ytdCents: number, encCents: number, elapsedPct: number): Pace {
-  if (revCents <= 0) return ytdCents + encCents > 0 ? "red" : "gray";
-  const used = ytdCents + encCents;
-  if (used > revCents) return "red";
+/** Compare money spent with the share of the year that has passed. Promised but unpaid amounts are not part of the comparison. */
+export function pace(revCents: number, ytdCents: number, _encCents: number, elapsedPct: number): Pace {
+  if (ytdCents <= 0) return "none";
+  if (revCents <= 0) return "red";
+  if (ytdCents > revCents) return "red";
   const elapsed = elapsedPct / 100;
-  if (used > revCents * elapsed) return "yellow";
+  if (ytdCents > revCents * elapsed) return "yellow";
   return "green";
 }
 
@@ -104,6 +118,7 @@ export const PACE_LABEL: Record<Pace, string> = {
   yellow: "Above pace",
   red: "Over budget",
   gray: "No budget",
+  none: "No spending yet",
 };
 
 export interface FiscalPosition {

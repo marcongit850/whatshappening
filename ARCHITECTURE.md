@@ -18,13 +18,17 @@ Static company site for What's Happening, a marketing and media company. One pag
 
 Private prototype for reading a Walton County year to date budget report. It is budget software only. It is unofficial, it does not use the county seal, and it is not indexed.
 
-- Purpose: show budget to actual spending from an imported Clerk report, with department burn rates, payment search, a recreation plat fee history, and questions answered only from imported rows.
+- Purpose: show each fund and department budget next to what has actually been spent. Pages also include payment search, a recreation plat fee history, and questions answered only from imported rows.
 - Worker name: `budget-explorer`
 - Project directory: `budget-explorer/`
 - Domain: budget.whatshappeningnetwork.com
 - workers.dev hostname: budget-explorer.352marc.workers.dev
 - D1 database: `budget-explorer` (binding `DB`). The id is in `budget-explorer/wrangler.jsonc`. Migration `0001_init.sql` is already applied remotely. Migration `0002_settings.sql` adds the names switch and payroll line storage. Apply it remotely before deploying this change.
-- Workers AI binding: `AI`. The model id is the constant `AI_MODEL` in `budget-explorer/src/qa.ts`. The model only sees rows retrieved for that question.
+- Workers AI binding: `AI`. The model id is the constant `AI_MODEL` in `budget-explorer/src/qa.ts`. The model only sees rows retrieved for that question. Vendor totals, a named fund, the county budget, and transfer questions are answered from SQL in `budget-explorer/src/answers.ts` and do not call the model.
+- Public totals leave out object code `591000` (money moved from one county fund to another). Adopted, current, and spent figures on the site are the report columns minus those transfer rows. The transfer amount is shown on its own. The admin import preview still shows the printed report totals so an import can be checked. Default answers do not quote the raw report totals. A question about transfers may.
+- `/funds` and `/funds/:code` are fund pages. `/departments` and `/departments/:dept` stay the department drill-down. Each of those pages leads with budgeted, money spent so far, and money left, then where the money went.
+- Vendor names on public pages are title case. A name cut off at 20 characters is expanded when a longer stored name has the same start. Questions match vendor names with punctuation and apostrophes removed, then a prefix check, before any model call.
+- Content Security Policy allows the Cloudflare Web Analytics script at `https://static.cloudflareinsights.com` and its beacon at `https://cloudflareinsights.com`. No other third-party script or connect hosts are allowed.
 - Secret names only. Do not commit values.
   - `SITE_PASSWORD` (required): shared site password
   - `SESSION_SECRET` (required): HMAC key for the session cookie
