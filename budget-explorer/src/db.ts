@@ -1,3 +1,4 @@
+import { TRANSFER_OBJECT } from "./budget";
 import type { ChartNames } from "./csv";
 import { CONSTITUTIONAL_SQL, VENDOR_SOURCES } from "./overview";
 import { foldedPayrollNote, sqlIsPersonName, type ParseResult, type ParsedPayment, type ParsedPayrollLine } from "./parser";
@@ -40,6 +41,10 @@ export interface DeptRollup {
   enc_cents: number;
   avail_cents: number;
   accounts: number;
+  transfer_orig_cents: number;
+  transfer_rev_cents: number;
+  transfer_ytd_cents: number;
+  transfer_enc_cents: number;
 }
 
 export interface AccountRow {
@@ -412,7 +417,11 @@ export async function departmentRollups(db: D1Database, importId: number): Promi
               COALESCE(SUM(a.ytd_cents), 0) AS ytd_cents,
               COALESCE(SUM(a.enc_cents), 0) AS enc_cents,
               COALESCE(SUM(a.avail_cents), 0) AS avail_cents,
-              COUNT(a.dept_code) AS accounts
+              COUNT(a.dept_code) AS accounts,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.orig_cents ELSE 0 END), 0) AS transfer_orig_cents,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.rev_cents ELSE 0 END), 0) AS transfer_rev_cents,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.ytd_cents ELSE 0 END), 0) AS transfer_ytd_cents,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.enc_cents ELSE 0 END), 0) AS transfer_enc_cents
        FROM departments d
        LEFT JOIN accounts a ON a.import_id = d.import_id AND a.dept_code = d.code
        WHERE d.import_id = ?
@@ -439,7 +448,11 @@ export async function fundRollups(db: D1Database, importId: number): Promise<Fun
               COALESCE(SUM(a.ytd_cents), 0) AS ytd_cents,
               COALESCE(SUM(a.enc_cents), 0) AS enc_cents,
               COALESCE(SUM(a.avail_cents), 0) AS avail_cents,
-              COUNT(a.object_code) AS accounts
+              COUNT(a.object_code) AS accounts,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.orig_cents ELSE 0 END), 0) AS transfer_orig_cents,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.rev_cents ELSE 0 END), 0) AS transfer_rev_cents,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.ytd_cents ELSE 0 END), 0) AS transfer_ytd_cents,
+              COALESCE(SUM(CASE WHEN a.object_code = '${TRANSFER_OBJECT}' THEN a.enc_cents ELSE 0 END), 0) AS transfer_enc_cents
        FROM funds f
        LEFT JOIN accounts a ON a.import_id = f.import_id AND a.fund_code = f.code
        WHERE f.import_id = ?
@@ -522,6 +535,7 @@ export async function organizationVendors(db: D1Database, importId: number, asOf
          AND source IN (${sources})
          AND vendor_name IS NOT NULL
          AND trim(vendor_name) != ''
+         AND object_code != '${TRANSFER_OBJECT}'
          AND ${person} = 0
          AND NOT ${CONSTITUTIONAL_SQL}
        GROUP BY vendor_key
@@ -549,6 +563,7 @@ export async function constitutionalTransferCents(db: D1Database, importId: numb
          AND after_cutoff = 0
          AND pay_date <= ?
          AND source IN (${sources})
+         AND object_code != '${TRANSFER_OBJECT}'
          AND ${CONSTITUTIONAL_SQL}`,
     )
     .bind(importId, cutoffDate(asOf))
@@ -586,7 +601,12 @@ export async function landSpendByDept(db: D1Database, importId: number, asOf: st
 
 export async function monthlyCents(db: D1Database, importId: number): Promise<{ ym: string; cents: number }[]> {
   const payments = await db
-    .prepare("SELECT substr(pay_date, 1, 7) AS ym, SUM(amount_cents) AS cents FROM payments WHERE import_id = ? GROUP BY ym")
+    .prepare(
+      `SELECT substr(pay_date, 1, 7) AS ym, SUM(amount_cents) AS cents
+       FROM payments
+       WHERE import_id = ? AND after_cutoff = 0 AND object_code != '${TRANSFER_OBJECT}'
+       GROUP BY ym`,
+    )
     .bind(importId)
     .all<{ ym: string; cents: number }>();
   const payroll = await db
@@ -630,6 +650,7 @@ export interface SearchFilters {
   minCents: number;
   from: string;
   to: string;
+  excludeTransfer?: boolean;
 }
 
 export interface FundRollup {
@@ -642,6 +663,10 @@ export interface FundRollup {
   enc_cents: number;
   avail_cents: number;
   accounts: number;
+  transfer_orig_cents?: number;
+  transfer_rev_cents?: number;
+  transfer_ytd_cents?: number;
+  transfer_enc_cents?: number;
 }
 
 export interface MonthParts {

@@ -8,8 +8,9 @@ The site is not indexed. Every response sends `X-Robots-Tag: noindex, nofollow, 
 
 - TypeScript Worker on [Hono](https://hono.dev), server-rendered HTML.
 - D1 binding `DB`. Migrations live in `migrations/`.
-- Workers AI binding `AI`. Questions use the model id in `src/qa.ts` (`AI_MODEL`). Fund, department, object, and vendor totals are summed in SQL first. The model is told to quote those figures and not to do arithmetic. If nothing matches, it is not called.
+- Workers AI binding `AI`. Questions use the model id in `src/qa.ts` (`AI_MODEL`). Fund, department, object, and vendor totals are summed in SQL first. The model is told to quote those figures and not to do arithmetic. If nothing matches, it is not called. A vendor payment, the county budget, or a transfer question can be answered from SQL without the model. A question such as "spent on" a fund or department still uses the fund and department totals.
 - The overview is drawn from the published import on each request (inline SVG and CSS, no chart library). The question box on that page posts to `/ask`. Fund pages are `/funds` and `/funds/:code`. Search accepts a fund code and a date range.
+- Public totals leave out object code `591000`, money moved between county funds, and payments to other county offices are kept out of the outside-vendor chart. The admin import preview still prints the report's own totals.
 - Links are relative. An optional `PUBLIC_BASE_URL` is shown on About when it is an http(s) URL. The app does not hardcode a hostname, so the Worker can move to another custom domain later.
 - Money is stored as integer cents. The published pages read the latest import whose status is `published`. Older imports are kept.
 

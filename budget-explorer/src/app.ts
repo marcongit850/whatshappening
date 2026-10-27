@@ -11,6 +11,9 @@ import {
   showPersonNames,
   showPersonNamesFromForm,
 } from "./access";
+import { directAnswer, publicFactText } from "./answers";
+import { loadBudgetFacts, loadCategorySpend, loadFundRollups, loadOfficePaymentCents, loadTopAccounts, loadTopVendors, loadVendorNames } from "./budget";
+import { buildVendorIndex, withDisplayNames } from "./vendors";
 import type { SessionPayload } from "./auth";
 import {
   FORM_COOKIE,
@@ -63,7 +66,7 @@ import {
   type SearchFilters,
 } from "./db";
 import { adminPasswordSet, publicBase, type AppEnv } from "./env";
-import { csvAmount, csvCell, isoDate } from "./format";
+import { csvAmount, csvCell, displayDate, isoDate } from "./format";
 import { uploadAllowed } from "./limits";
 import { parseReport } from "./parser";
 import { safeNext } from "./safe-next";
@@ -96,11 +99,11 @@ const app = new Hono<{ Bindings: AppEnv; Variables: { session: SessionPayload; s
 
 const CSP = [
   "default-src 'none'",
-  "script-src 'self'",
+  "script-src 'self' https://static.cloudflareinsights.com",
   "style-src 'self' https://fonts.googleapis.com",
   "font-src https://fonts.gstatic.com",
   "img-src 'self' data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://cloudflareinsights.com",
   "base-uri 'none'",
   "form-action 'self'",
   "frame-ancestors 'none'",
@@ -203,8 +206,9 @@ app.get("/", async (c) => {
   const current = await latestPublished(c.env.DB);
   const session = c.get("session");
   if (!current) return c.html(renderEmpty(session.csrf, isAdmin(c), c.get("showNames")));
+  const showNames = c.get("showNames");
   const asOf = current.data_as_of || "";
-  const [departments, names, funds, rollups, months, vendors, officeCents, landMonths, landDepts, platMonths] = await Promise.all([
+  const [departments, names, funds, rollups, months, vendors, officeCents, landMonths, landDepts, platMonths, facts, vendorNames] = await Promise.all([
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
@@ -215,6 +219,8 @@ app.get("/", async (c) => {
     landSpendByMonth(c.env.DB, current.id, asOf),
     landSpendByDept(c.env.DB, current.id, asOf),
     monthlyParts(c.env.DB, current.id, asOf, "114"),
+    loadBudgetFacts(c.env.DB, current.id),
+    loadVendorNames(c.env.DB, current.id),
   ]);
   return c.html(
     renderOverview({
@@ -229,9 +235,11 @@ app.get("/", async (c) => {
       landByMonth: landMonths,
       landByDept: landDepts,
       platMonths,
+      facts,
+      displayName: buildVendorIndex(vendorNames),
       csrf: session.csrf,
       isAdmin: isAdmin(c),
-      showNames: c.get("showNames"),
+      showNames,
     }),
   );
 });
@@ -240,7 +248,16 @@ app.get("/funds", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
   const [funds, names] = await Promise.all([fundRollups(c.env.DB, current.id), loadNames(c.env.DB)]);
-  return c.html(renderFunds({ row: current, funds, names, csrf: c.get("session").csrf, isAdmin: isAdmin(c), showNames: c.get("showNames") }));
+  return c.html(
+    renderFunds({
+      row: current,
+      funds,
+      names,
+      csrf: c.get("session").csrf,
+      isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
+    }),
+  );
 });
 
 app.get("/funds/:code", async (c) => {
@@ -248,10 +265,17 @@ app.get("/funds/:code", async (c) => {
   if (current instanceof Response) return current;
   const code = c.req.param("code");
   if (!/^\d{3}$/.test(code)) return c.text("Not found", 404);
-  const [funds, departments, names] = await Promise.all([
+  const showNames = c.get("showNames");
+  const [funds, departments, names, categories, accounts, vendors, vendorNames, payments, officeCents] = await Promise.all([
     fundRollups(c.env.DB, current.id),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
+    loadCategorySpend(c.env.DB, current.id, { fund: code }),
+    loadTopAccounts(c.env.DB, current.id, { fund: code }),
+    loadTopVendors(c.env.DB, current.id, { showNames, fund: code }),
+    loadVendorNames(c.env.DB, current.id),
+    searchLines(c.env.DB, current.id, { q: "", vendor: "", dept: "", fund: code, minCents: 0, from: "", to: "", excludeTransfer: true }, 0, 24, showNames),
+    loadOfficePaymentCents(c.env.DB, current.id, { fund: code }),
   ]);
   const fund = funds.find((item) => item.code === code);
   if (!fund) return c.text("Fund not found", 404);
@@ -260,10 +284,16 @@ app.get("/funds/:code", async (c) => {
       row: current,
       fund,
       departments: departments.filter((item) => item.fund_code === code),
+      categories,
+      accounts,
+      vendors,
+      payments: payments.rows,
+      officeCents,
       names,
+      displayName: buildVendorIndex(vendorNames),
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
-      showNames: c.get("showNames"),
+      showNames,
     }),
   );
 });
@@ -292,10 +322,16 @@ app.get("/departments/:dept", async (c) => {
   const departments = await departmentRollups(c.env.DB, current.id);
   const found = departments.find((item) => item.code === dept);
   if (!found) return c.text("Department not found", 404);
-  const [accounts, names, funds] = await Promise.all([
+  const showNames = c.get("showNames");
+  const [accounts, names, funds, categories, vendors, vendorNames, payments, officeCents] = await Promise.all([
     accountsForDept(c.env.DB, current.id, dept),
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
+    loadCategorySpend(c.env.DB, current.id, { dept }),
+    loadTopVendors(c.env.DB, current.id, { showNames, dept }),
+    loadVendorNames(c.env.DB, current.id),
+    searchLines(c.env.DB, current.id, { q: "", vendor: "", dept, fund: found.fund_code, minCents: 0, from: "", to: "", excludeTransfer: true }, 0, 24, showNames),
+    loadOfficePaymentCents(c.env.DB, current.id, { dept }),
   ]);
   return c.html(
     renderDepartment({
@@ -304,9 +340,14 @@ app.get("/departments/:dept", async (c) => {
       accounts,
       fundReport: funds.get(found.fund_code) || "",
       names,
+      categories,
+      vendors,
+      payments: payments.rows,
+      officeCents,
+      displayName: buildVendorIndex(vendorNames),
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
-      showNames: c.get("showNames"),
+      showNames,
     }),
   );
 });
@@ -322,9 +363,10 @@ app.get("/departments/:dept/:object/:project", async (c) => {
   if (!account) return c.text("Account not found", 404);
   const pageIndex = pageNumber(c.req.query("page"));
   const pageSize = 25;
-  const [payments, names] = await Promise.all([
+  const [payments, names, vendorNames] = await Promise.all([
     accountLines(c.env.DB, current.id, dept, objectCode, project, pageIndex, pageSize, c.get("showNames")),
     loadNames(c.env.DB),
+    loadVendorNames(c.env.DB, current.id),
   ]);
   const departments = await departmentRollups(c.env.DB, current.id);
   const deptRow = departments.find((item) => item.code === dept);
@@ -332,7 +374,7 @@ app.get("/departments/:dept/:object/:project", async (c) => {
     renderAccount({
       row: current,
       account,
-      payments: payments.rows,
+      payments: withDisplayNames(payments.rows, buildVendorIndex(vendorNames)),
       total: payments.total,
       pageIndex,
       pageSize,
@@ -350,10 +392,11 @@ app.get("/search", async (c) => {
   if (current instanceof Response) return current;
   const filters = readFilters(c);
   const pageIndex = pageNumber(c.req.query("page"));
-  const [result, departments, names, funds] = await Promise.all([
+  const [result, departments, names, vendorNames, funds] = await Promise.all([
     searchLines(c.env.DB, current.id, filters, pageIndex, 25, c.get("showNames")),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
+    loadVendorNames(c.env.DB, current.id),
     fundNameMap(c.env.DB, current.id),
   ]);
   return c.html(
@@ -363,7 +406,7 @@ app.get("/search", async (c) => {
       departments,
       fundReports: funds,
       names,
-      payments: result.rows,
+      payments: withDisplayNames(result.rows, buildVendorIndex(vendorNames)),
       total: result.total,
       totalCents: result.totalCents,
       pageIndex,
@@ -379,9 +422,13 @@ app.get("/search.csv", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
   const filters = readFilters(c);
-  const result = await searchLines(c.env.DB, current.id, filters, 0, 2000, c.get("showNames"));
+  const [result, vendorNames] = await Promise.all([
+    searchLines(c.env.DB, current.id, filters, 0, 2000, c.get("showNames")),
+    loadVendorNames(c.env.DB, current.id),
+  ]);
+  const named = withDisplayNames(result.rows, buildVendorIndex(vendorNames));
   const lines = ["date,vendor,invoice,description,department,check,amount"];
-  for (const row of result.rows) {
+  for (const row of named) {
     lines.push(
       [csvCell(row.pay_date), csvCell(row.vendor_name), csvCell(row.invoice), csvCell(row.description), csvCell(row.dept_code), csvCell(row.check_number), csvAmount(row.amount_cents)].join(","),
     );
@@ -418,7 +465,14 @@ app.post("/ask", async (c) => {
   }
   await bumpQa(c.env.DB, session.sid, hour);
   await bumpQa(c.env.DB, session.sid, day);
-  const pack = await buildQuestionContext(c.env.DB, current.id, question, shown);
+  const asOfLabel = displayDate(current.data_as_of) || "the report date";
+  const [facts, fundRows] = await Promise.all([loadBudgetFacts(c.env.DB, current.id), loadFundRollups(c.env.DB, current.id)]);
+  const direct = await directAnswer(c.env.DB, current.id, question, facts, fundRows, shown, asOfLabel);
+  if (direct) {
+    const finalAnswer = await finalizeAnswer(c.env.DB, current.id, direct.answer, direct.records, shown);
+    return c.html(renderAsk({ row: current, csrf: session.csrf, question, answer: finalAnswer.answer, records: finalAnswer.records, error: "", isAdmin: isAdmin(c), showNames: shown }));
+  }
+  const pack = await buildQuestionContext(c.env.DB, current.id, question, shown, publicFactText(facts, asOfLabel));
   if (!pack.records.length) {
     return c.html(
       renderAsk({
@@ -441,7 +495,7 @@ app.post("/ask", async (c) => {
         { role: "system", content: qaSystem(shown) },
         { role: "user", content: pack.prompt },
       ],
-      max_tokens: 700,
+      max_tokens: 400,
     });
     answer = modelText(result).trim();
   } catch {
@@ -469,8 +523,12 @@ app.get("/plat", async (c) => {
   const requested = Number(c.req.query("import") || 0);
   const selected = history.find((item) => item.id === requested) || [...history].reverse().find((item) => item.status === "published") || history[history.length - 1];
   const payments = selected ? await platLines(c.env.DB, selected.id, "114", "11444000", c.get("showNames")) : [];
-  const names = await loadNames(c.env.DB);
-  return c.html(renderPlat({ row: current, history, payments, selected: selected?.id ?? null, names, csrf: session.csrf, isAdmin: isAdmin(c), showNames: c.get("showNames") }));
+  const [names, vendorNames] = await Promise.all([
+    loadNames(c.env.DB),
+    selected ? loadVendorNames(c.env.DB, selected.id) : Promise.resolve([]),
+  ]);
+  const displayName = buildVendorIndex(vendorNames);
+  return c.html(renderPlat({ row: current, history, payments: withDisplayNames(payments, displayName), selected: selected?.id ?? null, names, csrf: session.csrf, isAdmin: isAdmin(c), showNames: c.get("showNames") }));
 });
 
 app.get("/admin", async (c) => {

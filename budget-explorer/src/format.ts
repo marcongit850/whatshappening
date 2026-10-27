@@ -52,6 +52,19 @@ export function csvAmount(cents: number): string {
   return negative ? `-${text}` : text;
 }
 
+/** Headline amount in everyday words, such as $12.5 million. */
+export function moneyWords(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const dollars = Math.abs(cents) / 100;
+  if (dollars >= 1_000_000) {
+    const millions = dollars / 1_000_000;
+    const digits = millions >= 10 ? 1 : 2;
+    return `${sign}$${millions.toFixed(digits)} million`;
+  }
+  if (dollars >= 100) return `${sign}$${Math.round(dollars).toLocaleString("en-US")}`;
+  return moneyExact(cents);
+}
+
 /** Headline and chart label. Full cents stay in tables and in question facts. */
 export function moneyCompact(cents: number): string {
   const sign = cents < 0 ? "-" : "";
@@ -77,7 +90,7 @@ export function moneyShort(cents: number): string {
 }
 
 export function pct(part: number, whole: number, digits = 1): string {
-  if (!whole) return "0.0%";
+  if (!whole) return "n/a";
   return `${((part / whole) * 100).toFixed(digits)}%`;
 }
 
@@ -102,23 +115,43 @@ export function accountKey(fund: string, dept: string, objectCode: string, proje
   return `${fund}-${dept}-${objectCode}-${project}`;
 }
 
-export type Pace = "green" | "yellow" | "red" | "gray";
+export type Pace = "green" | "yellow" | "red" | "gray" | "none" | "under";
 
-export function pace(revCents: number, ytdCents: number, encCents: number, elapsedPct: number): Pace {
-  if (revCents <= 0) return ytdCents + encCents > 0 ? "red" : "gray";
-  const used = ytdCents + encCents;
-  if (used > revCents) return "red";
-  const elapsed = elapsedPct / 100;
-  if (used > revCents * elapsed) return "yellow";
+/**
+ * Compare money spent with the year percent shown on the page (rounded to a whole number).
+ * Promised but unpaid amounts are not part of the comparison.
+ * In line means within 1 percentage point of that year percent.
+ */
+export function pace(revCents: number, ytdCents: number, _encCents: number, elapsedPct: number): Pace {
+  if (ytdCents <= 0) return "none";
+  if (revCents <= 0) return "red";
+  if (ytdCents > revCents) return "red";
+  const yearShown = Math.round(elapsedPct);
+  const spentPct = (ytdCents / revCents) * 100;
+  if (spentPct > yearShown + 1) return "yellow";
+  if (spentPct < yearShown - 1) return "under";
   return "green";
 }
 
 export const PACE_LABEL: Record<Pace, string> = {
-  green: "On pace",
-  yellow: "Above pace",
+  green: "In line",
+  yellow: "Spending more than the year's progress",
   red: "Over budget",
-  gray: "No budget",
+  gray: "No budget set in the county report",
+  none: "No spending yet",
+  under: "Under",
 };
+
+/** Money left, or a plain over-budget amount when spending is already past the budget. */
+export function leftLabel(revCents: number, ytdCents: number): { title: string; value: string; over: boolean; unbudgeted: boolean } {
+  if (revCents <= 0) {
+    return { title: "Money left", value: "No budget set in the county report", over: false, unbudgeted: true };
+  }
+  if (ytdCents > revCents) {
+    return { title: "Over budget by", value: money(ytdCents - revCents), over: true, unbudgeted: false };
+  }
+  return { title: "Money left", value: money(revCents - ytdCents), over: false, unbudgeted: false };
+}
 
 export interface FiscalPosition {
   fyLabel: string;

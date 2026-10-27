@@ -300,7 +300,7 @@ describe("person check at read time", () => {
     const headers = { cookie: reader.header };
     await setShowPersonNames(db, false);
     const org = await app.request("http://localhost/search?q=ACME", { headers }, env);
-    expect(await org.text()).toContain("ACME SUPPLY CO");
+    expect(await org.text()).toContain("Acme Supply Co");
     for (const query of ["Jane", "Mary", "Smith", "John"]) {
       const page = await app.request(`http://localhost/search?q=${query}`, { headers }, env);
       const html = await page.text();
@@ -424,23 +424,23 @@ describe("description person names", () => {
     expect(shownHtml).toContain("Miller, Rowan K.");
     expect(shownHtml).toContain("Nguyen, Quinn Jr");
     expect(shownHtml).toContain("Services, supplies");
-    expect(shownHtml).toContain("SAMPLE COUNTY HOUSING AUTHORITY");
+    expect(shownHtml).toContain("Sample County Housing Authority");
     const shownPerson = await app.request("http://localhost/search?q=Mary", { headers }, env);
     expect(await shownPerson.text()).toContain("Mary Anne Jane Public");
     const shownOrg = await app.request("http://localhost/search?q=ACME", { headers }, env);
-    expect(await shownOrg.text()).toContain("ACME SUPPLY CO");
+    expect(await shownOrg.text()).toContain("Acme Supply Co");
 
     await setShowPersonNames(db, false);
     const hidden = await app.request("http://localhost/search?q=housing", { headers }, env);
     const hiddenHtml = await hidden.text();
-    expect(hiddenHtml).toContain("SAMPLE COUNTY HOUSING AUTHORITY");
+    expect(hiddenHtml).toContain("Sample County Housing Authority");
     expect(hiddenHtml).toContain("Services, supplies");
     expect(hiddenHtml).not.toContain("Doe, Jamie");
     expect(hiddenHtml).not.toContain("Jamie");
     expect(hiddenHtml).not.toContain("Miller, Rowan");
     expect(hiddenHtml).not.toContain("Nguyen, Quinn");
     const hiddenOrg = await app.request("http://localhost/search?q=ACME", { headers }, env);
-    expect(await hiddenOrg.text()).toContain("ACME SUPPLY CO");
+    expect(await hiddenOrg.text()).toContain("Acme Supply Co");
     const hiddenPerson = await app.request("http://localhost/search?q=Mary", { headers }, env);
     const hiddenPersonHtml = await hiddenPerson.text();
     expect(hiddenPersonHtml).toContain("0 payments found");
@@ -454,9 +454,9 @@ describe("description person names", () => {
     expect(drillHtml).not.toContain("Mary Anne");
     expect(drillHtml).not.toContain("Jane &amp; John");
     expect(drillHtml).toContain("Services, supplies");
-    expect(drillHtml).toContain("SAMPLE COUNTY HOUSING AUTHORITY");
+    expect(drillHtml).toContain("Sample County Housing Authority");
     expect(drillHtml).toContain("Name withheld");
-    expect(drillHtml).toContain("ACME SUPPLY CO");
+    expect(drillHtml).toContain("Acme Supply Co");
 
     const csv = await app.request("http://localhost/search.csv?q=housing", { headers }, env);
     const csvText = await csv.text();
@@ -465,7 +465,7 @@ describe("description person names", () => {
     expect(csvText).not.toContain("Nguyen, Quinn");
     expect(csvText).not.toContain("Mary Anne");
     expect(csvText).toContain("Services, supplies");
-    expect(csvText).toContain("SAMPLE COUNTY HOUSING AUTHORITY");
+    expect(csvText).toContain("Sample County Housing Authority");
     expect(csvText).not.toContain("Doe, Jamie");
 
     const asker = await cookie(false);

@@ -167,8 +167,14 @@ describe("overview dashboard", () => {
     expect(html).toContain("Data as of 09/15/2026");
     expect(html).toContain("Fraunces");
     expect(html).toContain("IBM+Plex+Sans");
-    expect(html).toContain(moneyCompact(IMPORT_YTD));
-    expect(html).toContain(`${((IMPORT_YTD / IMPORT_REV) * 100).toFixed(1)}%`);
+    const netYtd = IMPORT_YTD - 1_000;
+    const netRev = IMPORT_REV - 9_000_000;
+    expect(html).toContain(moneyCompact(netYtd));
+    expect(html).toContain(`${((netYtd / netRev) * 100).toFixed(1)}%`);
+    expect(html).toContain("How we count the budget");
+    expect(html).toContain("Money moved between county funds");
+    expect(html).toContain("Payments to other county offices");
+    expect(html).not.toContain("funds$");
     expect(html).toContain(`${fiscal.elapsedPct.toFixed(1)}%`);
     expect(html).toContain("Ask a question about the budget");
     expect(html).toContain('action="/ask"');
@@ -204,7 +210,7 @@ describe("overview dashboard", () => {
     await setShowPersonNames(db, false);
     const hidden = await (await app.request("http://localhost/", { headers: { cookie: session.header } }, env)).text();
     expect(hidden).not.toContain("JANE");
-    expect(hidden).toContain("NORTH BUILDERS LLC");
+    expect(hidden).toContain("North Builders LLC");
     expect(hidden).not.toContain("SAMPLE COUNTY SHERIFF");
   });
 
@@ -222,13 +228,13 @@ describe("overview dashboard", () => {
     expect(fund).not.toContain("JANE");
 
     const inFund = await (await app.request("http://localhost/search?fund=114", { headers }, env)).text();
-    expect(inFund).toContain("NORTH BUILDERS LLC");
+    expect(inFund).toContain("North Builders LLC");
     expect(inFund).not.toContain("ACME WIDGET CO");
     expect(inFund).not.toContain("JANE");
     expect(inFund).not.toContain("LATE VENDOR CO");
 
     const october = await (await app.request("http://localhost/search?from=2025-10-01&to=2025-10-31", { headers }, env)).text();
-    expect(october).toContain("NORTH BUILDERS LLC");
+    expect(october).toContain("North Builders LLC");
     expect(october).not.toContain("ACME WIDGET CO");
     expect(october).not.toContain("LATE VENDOR CO");
   });
@@ -288,5 +294,25 @@ describe("question facts", () => {
       body: new URLSearchParams({ csrf: "nope", question: "How much has department 11444000 spent?" }),
     }, env);
     expect(denied.status).toBe(403);
+
+    const fundQuestion = await app.request("http://localhost/ask", {
+      method: "POST",
+      headers: { cookie: session.header, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf: session.csrf, question: "How much has the Recreation Plat Fee Fund spent?" }),
+    }, env);
+    const fundAnswer = await fundQuestion.text();
+    expect(fundAnswer).not.toContain("No vendor in this budget matches that name.");
+    expect(fundAnswer).toContain(moneyExact(FUND_YTD));
+
+    const most = await app.request("http://localhost/ask", {
+      method: "POST",
+      headers: { cookie: session.header, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf: session.csrf, question: "Who is paid the most?" }),
+    }, env);
+    const mostAnswer = await most.text();
+    expect(mostAnswer).toContain("North Builders LLC");
+    expect(mostAnswer).toContain(moneyExact(17_000_000));
+    expect(mostAnswer).not.toContain("SAMPLE COUNTY SHERIFF");
+    expect(mostAnswer).not.toContain("JANE");
   });
 });

@@ -1,9 +1,11 @@
+import { TRANSFER_OBJECT } from "./budget";
 import { departmentRollups, fundRollups, type PaymentRow, type SearchFilters } from "./db";
 import { accountKey, moneyExact, pace } from "./format";
 import { QA_MAX_CHARS } from "./auth";
 import { QA_SYSTEM, mentionedCodes, nameMatchesQuestion, vendorTokens, type QaPack, type QaRecord } from "./qa";
 import { isTransferDepartment } from "./overview";
 import { ORG_NAME_TOKENS, looksLikePersonName, sqlIsPersonName } from "./parser";
+import { vendorCompact, vendorCompactSql } from "./vendors";
 
 /**
  * Default for "Show person names and individual pay" when settings has no row.
@@ -151,15 +153,23 @@ function paymentBranch(importId: number, filters: SearchFilters | null, showName
     where.push("pay_date <= ?");
     binds.push(filters.to);
   }
+  if (filters?.fund) {
+    where.push("fund_code = ?");
+    binds.push(filters.fund);
+  }
+  if (filters?.excludeTransfer) where.push(`object_code != '${TRANSFER_OBJECT}'`);
   if (filters?.vendor.trim()) {
     const pattern = like(filters.vendor);
+    const compact = vendorCompact(filters.vendor);
+    const extra = compact.length >= 3 ? ` OR ${vendorCompactSql("vendor_name")} LIKE ?` : "";
     if (showNames) {
-      where.push("vendor_name LIKE ?");
+      where.push(`(vendor_name LIKE ?${extra})`);
       binds.push(pattern);
     } else {
-      where.push(`${sqlIsPersonName("vendor_name")} = 0 AND vendor_name LIKE ?`);
+      where.push(`(${sqlIsPersonName("vendor_name")} = 0 AND (vendor_name LIKE ?${extra}))`);
       binds.push(pattern);
     }
+    if (compact.length >= 3) binds.push(`${compact}%`);
   }
   if (filters?.q.trim()) {
     const pattern = like(filters.q);
@@ -178,6 +188,10 @@ function payrollBranch(importId: number, filters: SearchFilters | null, showName
   const where = ["import_id = ?", "after_cutoff = 0"];
   const binds: Bind[] = [importId];
   pushScope(where, binds, scope);
+  if (filters?.fund) {
+    where.push("fund_code = ?");
+    binds.push(filters.fund);
+  }
   if (filters?.dept) {
     where.push("dept_code = ?");
     binds.push(filters.dept);
@@ -597,8 +611,11 @@ interface NamedHit {
 async function sumAccounts(db: D1Database, importId: number, whereSql: string, binds: (string | number)[]): Promise<AccountSum | null> {
   const totals = await db
     .prepare(
-      `SELECT COALESCE(SUM(rev_cents), 0) AS rev, COALESCE(SUM(ytd_cents), 0) AS ytd,
-              COALESCE(SUM(enc_cents), 0) AS enc, COALESCE(SUM(avail_cents), 0) AS avail, COUNT(*) AS n
+      `SELECT COALESCE(SUM(CASE WHEN object_code != '${TRANSFER_OBJECT}' THEN rev_cents ELSE 0 END), 0) AS rev,
+              COALESCE(SUM(CASE WHEN object_code != '${TRANSFER_OBJECT}' THEN ytd_cents ELSE 0 END), 0) AS ytd,
+              COALESCE(SUM(CASE WHEN object_code != '${TRANSFER_OBJECT}' THEN enc_cents ELSE 0 END), 0) AS enc,
+              COALESCE(SUM(CASE WHEN object_code != '${TRANSFER_OBJECT}' THEN avail_cents ELSE 0 END), 0) AS avail,
+              COALESCE(SUM(CASE WHEN object_code != '${TRANSFER_OBJECT}' THEN 1 ELSE 0 END), 0) AS n
        FROM accounts WHERE import_id = ? AND ${whereSql}`,
     )
     .bind(importId, ...binds)
@@ -607,7 +624,7 @@ async function sumAccounts(db: D1Database, importId: number, whereSql: string, b
   const keyRows = await db
     .prepare(
       `SELECT fund_code, dept_code, object_code, project_code
-       FROM accounts WHERE import_id = ? AND ${whereSql}
+       FROM accounts WHERE import_id = ? AND ${whereSql} AND object_code != '${TRANSFER_OBJECT}'
        ORDER BY ytd_cents DESC`,
     )
     .bind(importId, ...binds)
@@ -722,7 +739,13 @@ async function titleFact(db: D1Database, importId: number, question: string): Pr
   return factRecord(`Accounts whose title matches ${tokens.join(", ")}`, totals);
 }
 
-export async function buildQuestionContext(db: D1Database, importId: number, question: string, showNames: boolean): Promise<QaPack> {
+export async function buildQuestionContext(
+  db: D1Database,
+  importId: number,
+  question: string,
+  showNames: boolean,
+  factText = "",
+): Promise<QaPack> {
   const records: QaRecord[] = [];
   const codes = mentionedCodes(question);
   const catalog = await loadQuestionNames(db, importId);
@@ -795,7 +818,6 @@ export async function buildQuestionContext(db: D1Database, importId: number, que
       records.push({ kind: "total", text: lineText(row) });
     }
   }
-
   const seen = new Set<string>();
   const unique = records.filter((record) => {
     if (seen.has(record.text)) return false;
@@ -806,9 +828,10 @@ export async function buildQuestionContext(db: D1Database, importId: number, que
   const prompt = [
     `Question: ${question.slice(0, QA_MAX_CHARS)}`,
     "",
+    factText ? `Countywide facts, already net of money moved between funds. ${factText}` : "",
     "FACTS computed in SQL. Copy dollar figures from FACT lines only. Do not add, subtract, multiply, divide, or round. Cite the account count and account keys from the FACT you use.",
     body || "(no computed total)",
-  ].join("\n");
+  ].filter((line) => line !== "").join("\n");
   return { records: unique, prompt };
 }
 

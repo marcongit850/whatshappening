@@ -72,7 +72,9 @@ button, input, select { font: inherit; color: inherit; }
   align-items: center;
   justify-content: space-between;
   gap: 24px;
+  min-width: 0;
 }
+.nav-scroller { flex: 1; min-width: 0; overflow-x: auto; }
 .header-top { display: flex; align-items: center; }
 .brand { color: var(--teal); text-decoration: none; }
 .brand:hover { color: var(--teal); }
@@ -156,7 +158,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums lining-nu
 .pill.green { background: var(--good-bg); color: var(--good); }
 .pill.yellow { background: var(--warn-bg); color: var(--warn); }
 .pill.red { background: var(--bad-bg); color: var(--bad); }
-.pill.gray { background: var(--gray-bg); color: var(--gray); }
+.pill.gray, .pill.none { background: var(--gray-bg); color: var(--gray); }
+.pill.under { background: #e7eef2; color: #1d4e63; }
+.bar-spent.under { background: var(--teal2); }
+.metric-value.metric-text { font-family: var(--sans); font-size: 22px; line-height: 1.3; font-weight: 600; }
+.transfer-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+.transfer-row span { margin-right: 12px; }
+.table-hint { display: none; }
 .bar { position: relative; height: 8px; background: #e6e1d8; border-radius: 999px; min-width: 140px; }
 .bar-spent, .bar-enc, .bar-mark { position: absolute; top: 0; bottom: 0; }
 .bar-spent { left: 0; border-radius: 999px; }
@@ -291,11 +299,12 @@ a.brow:hover { background: #fbfaf6; }
 .bbudget { left: 0; background: #e9e5d8; }
 .bspent { left: 0; background: var(--teal); }
 .benc { background: repeating-linear-gradient(135deg, var(--teal3) 0 4px, #d4e6e9 4px 8px); border-radius: 0 5px 5px 0; }
-.donutwrap { display: flex; flex-direction: column; align-items: center; }
-.donut { width: 240px; height: 240px; }
+.donutwrap { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 28px; }
+.donut { width: min(360px, 100%); height: auto; aspect-ratio: 1; }
+.donut-label { font-size: 18px; font-weight: 600; }
 .dn1 { font-family: var(--serif); font-size: 21px; fill: var(--ink); }
 .dn2 { font-size: 11px; fill: #4d5d6a; letter-spacing: 0.04em; }
-.lgs { width: 100%; margin-top: 18px; }
+.lgs { width: min(360px, 100%); margin-top: 0; }
 a.lg { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center; padding: 7px 0; font-size: 16px; border-top: 1px solid #efece2; text-decoration: none; color: inherit; }
 a.lg i { width: 14px; height: 14px; border-radius: 4px; }
 a.lg b { font-weight: 600; }
@@ -310,7 +319,8 @@ a.drow:hover { background: #fbfaf6; }
 .dbar.green, .denc.green { --c: var(--g); }
 .dbar.yellow, .denc.yellow { --c: var(--y); }
 .dbar.red, .denc.red { --c: var(--r); }
-.dbar.gray, .denc.gray { --c: #9aa7b0; }
+.dbar.gray, .denc.gray, .dbar.none, .denc.none { --c: #9aa7b0; }
+.dbar.under, .denc.under { --c: var(--teal2); }
 .dbar { background: var(--c); }
 .denc { background: repeating-linear-gradient(135deg, var(--c) 0 3px, rgba(255,255,255,.65) 3px 7px); opacity: .55; border-radius: 0 5px 5px 0; }
 .dnum b { display: block; font-family: var(--serif); font-weight: 500; font-size: 24px; line-height: 1.1; }
@@ -319,7 +329,8 @@ a.drow:hover { background: #fbfaf6; }
 .card .pill.green { background: #e1f0e8; color: #1c5a3b; border: 1px solid #a9d3bd; }
 .card .pill.yellow { background: #fbefd0; color: #6e4b00; border: 1px solid #e3c36d; }
 .card .pill.red { background: #f7e0df; color: #842b28; border: 1px solid #e1a9a7; }
-.card .pill.gray { background: #eef1f3; color: #4d5d6a; border: 1px solid #d5dbe2; }
+.card .pill.gray, .card .pill.none { background: #eef1f3; color: #4d5d6a; border: 1px solid #d5dbe2; }
+.card .pill.under { background: #e7eef2; color: #1d4e63; border: 1px solid #b7c9d4; }
 .axis { position: relative; height: 30px; margin: 6px 314px 0 292px; }
 .axis.top { height: 46px; margin-top: 0; margin-bottom: -8px; }
 .axis u { position: absolute; top: 0; transform: translateX(-50%); font-size: 13px; color: var(--muted); text-decoration: none; }
@@ -409,7 +420,11 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
   .dnum b { display: inline; font-size: 21px; margin-right: 6px; }
   .axis, .axis.top, .pacew { display: none; }
   .mchart { gap: 4px; }
-  .mval { font-size: 0; height: 6px; }
+  .mval { font-size: 10px; height: auto; }
+  .donutwrap { flex-direction: column; }
+  .donut { width: min(300px, 100%); }
+  .table-hint { display: block; }
+  .nav-scroller { width: 100%; }
   .long { display: none; }
   .short { display: inline; }
   .mlab { font-size: 14px; }

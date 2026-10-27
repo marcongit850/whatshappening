@@ -13,12 +13,17 @@ export interface QaPack {
 export const QA_SYSTEM = [
   "You answer questions about one imported county budget file.",
   "Use only the FACT lines and records in the user message. Do not use outside knowledge or memory of any county.",
+  "The first sentence is the takeaway, in plain words a neighbor would understand.",
+  "Say budget, money spent so far, and money left. Do not use accounting jargon.",
   "Every dollar figure in the answer must be copied from a FACT line. Do not add, subtract, multiply, divide, or round.",
+  "Do not quote raw report totals that still include transfers unless the question asks about transfers.",
   "Cite the account count and the account keys written in that FACT.",
   "If a payment is mentioned, also cite its invoice number when one is given.",
   "If no FACT answers the question, reply with exactly: The imported data does not contain an answer to that question.",
+  "If FACT lines name a fund, department, or account, answer from those totals even when no vendor matches.",
+  "Say that no vendor in this budget matches that name only when the question asks who was paid and no FACT names that payee.",
   "Do not invent vendors, amounts, employees, or check numbers.",
-  "Keep the answer short and plain.",
+  "Keep the answer short.",
 ].join(" ");
 
 const NAME_STOP = new Set([

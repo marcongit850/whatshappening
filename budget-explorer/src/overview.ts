@@ -10,21 +10,43 @@ export function isTransferDepartment(reportName: string, chartName = ""): boolea
  * Sheriff, Clerk, Property Appraiser, and Supervisor of Elections.
  * Payments to those offices are budget transfers, not vendor spending.
  */
+/** A payee that is Walton County itself or another county office, including names cut off at 20 characters. */
+export function isCountyOfficeVendor(name: string): boolean {
+  const normalized = name.toUpperCase().replace(/[^A-Z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+  if (normalized.includes("SHERIFF") || normalized.includes("PROPERTY APPRAIS") || normalized.includes("SUPERVISOR OF ELECT") || normalized.includes("TAX COLLECTOR")) {
+    return true;
+  }
+  if (!normalized.startsWith("WALTON COUNTY")) return false;
+  const rest = normalized.slice("WALTON COUNTY".length).trim();
+  return /^(SHERIF|PROPER|PROPERTY|APPRAIS|TAX|CLERK|SUPERVIS|ELECTION|BOARD|COMMISSION|BCC)\b/.test(rest);
+}
+
 export function isConstitutionalOffice(name: string): boolean {
-  const normalized = name.toUpperCase();
-  return (
-    normalized.includes("SHERIFF") ||
-    normalized.includes("CLERK") ||
-    normalized.includes("PROPERTY APPRAIS") ||
-    normalized.includes("SUPERVISOR OF ELECT")
-  );
+  return isCountyOfficeVendor(name);
 }
 
 export const CONSTITUTIONAL_SQL = `(
   upper(vendor_name) LIKE '%SHERIFF%'
-  OR upper(vendor_name) LIKE '%CLERK%'
   OR upper(vendor_name) LIKE '%PROPERTY APPRAIS%'
   OR upper(vendor_name) LIKE '%SUPERVISOR OF ELECT%'
+  OR upper(vendor_name) LIKE '%TAX COLLECTOR%'
+  OR (
+    upper(trim(vendor_name)) LIKE 'WALTON COUNTY %'
+    AND (
+      upper(vendor_name) LIKE 'WALTON COUNTY SHERIF%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY PROPER%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY PROPERTY%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY APPRAIS%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY TAX%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY CLERK%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY SUPERVIS%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY ELECTION%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY BOARD%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY COMMISSION%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY BCC%'
+    )
+  )
 )`;
 
 export const VENDOR_SOURCES = ["API", "APM", "GRV"] as const;
