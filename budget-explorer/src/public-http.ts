@@ -2,7 +2,7 @@ import { CSP } from "./headers";
 
 export function applyPublicHeaders(headers: Headers, index: boolean): void {
   headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("Referrer-Policy", "no-referrer");
+  headers.set("Referrer-Policy", "same-origin");
   headers.set("X-Frame-Options", "DENY");
   headers.set("Content-Security-Policy", CSP);
   headers.set("X-Robots-Tag", index ? "index, follow" : "noindex, nofollow, noarchive");

@@ -12,9 +12,9 @@ import {
 } from "./host";
 import type { AppEnv } from "./env";
 import { handleCountyForm, handleReport } from "./intake";
-import { countyByPath, stateBySlug } from "./places";
+import { countiesIn, countyByPath, stateBySlug } from "./places";
 import { applyPublicHeaders, publicHtml, publicRedirect } from "./public-http";
-import { renderComingSoon, renderFlorida, renderPublicHome, renderPublicMissing, renderWaltonLanding } from "./public-page";
+import { renderFlorida, renderPublicHome, renderPublicMissing, renderStateHub, renderWaltonLanding } from "./public-page";
 
 type DashboardApp = {
   fetch: (request: Request, env: AppEnv) => Response | Promise<Response>;
@@ -50,16 +50,20 @@ async function taxesRequest(c: Context<{ Bindings: AppEnv }>, dashboard: Dashboa
     if (!state) return html(renderPublicMissing(), 404, false);
     return handleCountyForm(c.req.raw, c.env, { action: pathname, state, county: null });
   }
+  const stateMatch = /^\/states\/([a-z-]+)$/.exec(pathname);
+  if (stateMatch) {
+    if (stateMatch[1] === "florida") return redirect("/florida", 301);
+    const state = stateBySlug(stateMatch[1]);
+    if (!state) return c.req.method === "GET" || c.req.method === "HEAD" ? html(renderPublicMissing(), 404, false) : text("Not found", "text/plain; charset=utf-8", 404, false);
+    if (countiesIn(state.slug).length === 0) return handleCountyForm(c.req.raw, c.env, { action: pathname, state, county: null });
+    if (c.req.method === "GET" || c.req.method === "HEAD") {
+      const live = countiesIn(state.slug).some((county) => county.live);
+      return html(renderStateHub(state), 200, live);
+    }
+  }
   if (c.req.method === "GET" || c.req.method === "HEAD") {
     if (pathname === "/") return html(renderPublicHome(), 200, true);
     if (pathname === "/florida") return html(renderFlorida(), 200, true);
-    const stateMatch = /^\/states\/([a-z-]+)$/.exec(pathname);
-    if (stateMatch) {
-      if (stateMatch[1] === "florida") return redirect("/florida", 301);
-      const state = stateBySlug(stateMatch[1]);
-      if (!state) return html(renderPublicMissing(), 404, false);
-      return html(renderComingSoon(state), 200, false);
-    }
     if (pathname === WALTON_PREFIX) {
       const session = await readSession(c.env.SESSION_SECRET || "", readCookie(c.req.header("cookie"), SESSION_COOKIE));
       if (!session) return waltonLanding();

@@ -33,7 +33,8 @@ export function renderPublicHome(): string {
       url: canonicalUrl("/"),
       description: HOME_DESCRIPTION,
     },
-    body: `<section class="door-hero"><div class="door-wrap">
+    body: `<section class="door-hero"><div class="door-wrap door-hero-grid">
+<div>
 <p class="eyebrow">County budgets, in plain words</p>
 <h1>See how your county spends your tax dollars</h1>
 <p class="explainer">Pick a state. Then pick a county. You can read the budget the county passed and the money it has paid out, without a stack of reports.</p>
@@ -42,19 +43,32 @@ export function renderPublicHome(): string {
 <a class="btn gold" href="/florida">Open Florida</a>
 <a class="btn line" href="/walton">Walton County</a>
 </div>
+</div>
+<aside class="feature-panel">
+<p class="eyebrow">Live now</p>
+<h2>Florida is live</h2>
+<p>Walton County is the first county on this site. Open it to read the budget, the spending, the income, and the savings.</p>
+<a class="btn gold" href="/florida">Open Florida</a>
+</aside>
 </div></section>
 <main><div class="door-wrap">
 <section class="door-section" id="map">
 <h2>Pick your state</h2>
-<p class="caption">Florida is open. Every other state is marked coming soon.</p>
+<p class="caption">Florida is live. Every other state is marked coming soon.</p>
 <div class="map-card">
 ${stateMap()}
-<div class="map-legend"><span class="swatch live"></span> Open <span class="swatch soon"></span> Coming soon</div>
+<div class="map-legend"><span class="swatch live"></span> Live <span class="swatch soon"></span> Coming soon</div>
 </div>
 <p class="caption">Gray states are coming soon. They do not have county pages yet.</p>
-<h3>Every state</h3>
-<p class="caption">Same choices as the map, in large type.</p>
-<ul class="state-pills">
+</section>
+<section class="door-section" id="browse">
+<h2>Browse by name</h2>
+<p class="caption">One list. Type a state, then press the button. Florida is live.</p>
+<div class="state-finder">
+<label for="state-filter">Find a state</label>
+<input id="state-filter" data-state-filter type="search" placeholder="Type a state name" autocomplete="off">
+</div>
+<ul class="state-pills" data-state-list>
 ${statePills()}
 </ul>
 </section>
@@ -87,19 +101,53 @@ export function renderFlorida(): string {
     body: `<section class="door-hero"><div class="door-wrap">
 <p class="eyebrow">Florida</p>
 <h1>Florida counties</h1>
-<p class="explainer">Pick a county to see how it spends county tax dollars. A live county opens its budget page. Any other county on the list is coming soon.</p>
-<p class="caption">${esc(liveCountyLine())}</p>
+<p class="explainer">Open a county to see the budget it passed, the money it has spent, the income it took in, and what it holds in savings.</p>
+<p class="caption">${esc(liveCountyLine())} The pages use plain words and large type.</p>
 </div></section>
 <main><div class="door-wrap">
+<div class="card-row">
+<article class="info-card">
+<p class="eyebrow">Live now</p>
+<h2>Walton County</h2>
+<p>The dashboard shows the budget, spending, income, and savings. It is unofficial. Access is currently private.</p>
+<a class="btn gold" href="/walton">Open Walton County</a>
+</article>
+<article class="info-card">
+<p class="eyebrow">Not listed yet</p>
+<h2>Request your county</h2>
+<p>Ask for a Florida county that is not on this page. The form does not show your email.</p>
+<a class="btn gold" href="/florida/request">Request your county</a>
+</article>
+</div>
 <section class="door-section">
 <h2>Counties</h2>
 <p class="caption">The list comes from one catalog. A county is added there when its page is ready.</p>
 ${countyItems("florida")}
-<p class="explainer">Want your county here? Ask for it. The form does not show your email on the page.</p>
-<p><a class="btn gold" href="/florida/request">Request a Florida county</a></p>
 <p><a class="btn secondary" href="/">Back to the United States</a></p>
 </section>
 </div></main>`,
+  });
+}
+
+export function renderStateHub(state: UsState): string {
+  const description = `Counties listed for ${state.name}. A live county opens its budget page.`;
+  const live = countiesIn(state.slug).some((county) => county.live);
+  return document({
+    title: `${state.name} counties`,
+    description,
+    path: `/states/${state.slug}`,
+    index: live,
+    jsonLd: webPage(`${state.name} counties`, description, `/states/${state.slug}`),
+    body: `<section class="door-hero"><div class="door-wrap">
+<p class="eyebrow">${esc(state.name)}</p>
+<h1>${esc(state.name)} counties</h1>
+<p class="explainer">Pick a county. A live county opens its budget page. Any other county on the list is coming soon.</p>
+</div></section>
+<main><div class="door-wrap"><section class="door-section">
+<h2>Counties</h2>
+${countyItems(state.slug)}
+<p><a class="btn secondary" href="/">Back to the United States</a></p>
+</section></div></main>`,
   });
 }
 
@@ -128,27 +176,6 @@ export function renderWaltonLanding(formToken: string): string {
 </form>
 </section>
 </div></main>`,
-  });
-}
-
-export function renderComingSoon(state: UsState): string {
-  const description = `${state.name} does not have county budget pages yet. No counties are listed.`;
-  return document({
-    title: `${state.name} is coming soon`,
-    description,
-    path: `/states/${state.slug}`,
-    index: false,
-    jsonLd: webPage(`${state.name} is coming soon`, description, `/states/${state.slug}`),
-    body: `<section class="door-hero"><div class="door-wrap">
-<p class="eyebrow">Coming soon</p>
-<h1>${esc(state.name)}</h1>
-<p class="explainer">Coming soon. We do not have county budget pages for ${esc(state.name)} yet.</p>
-<p class="caption">No counties are listed for ${esc(state.name)}.</p>
-<div class="door-actions">
-<a class="btn gold" href="/states/${esc(state.slug)}/request">Request a county in ${esc(state.name)}</a>
-<a class="btn line" href="/">Back to all states</a>
-</div>
-</div></section>`,
   });
 }
 
@@ -212,10 +239,13 @@ export function renderCountyRequest(opts: {
   countyName: string;
 }): string {
   const locked = Boolean(opts.county);
-  const title = locked ? `${opts.county?.name} is coming soon` : `Request a county in ${opts.state.name}`;
+  const stateEmpty = !locked && countiesIn(opts.state.slug).length === 0;
+  const title = locked ? `${opts.county?.name} is coming soon` : stateEmpty ? `${opts.state.name} is coming soon` : `Request a county in ${opts.state.name}`;
   const description = locked
     ? `${opts.county?.name} does not have budget pages yet. You can ask for them.`
-    : `Ask for a county in ${opts.state.name}. The state is filled in.`;
+    : stateEmpty
+      ? `Coming soon. We do not have county budget pages for ${opts.state.name} yet.`
+      : `Ask for a county in ${opts.state.name}. The state is filled in.`;
   const countyField = locked
     ? `<p class="locked">County</p><p class="locked-value">${esc(opts.county?.name || "")}</p>`
     : `<div><label for="county_name">County</label><input id="county_name" name="county_name" type="text" autocomplete="organization" required value="${esc(opts.countyName)}"></div>`;
@@ -226,10 +256,9 @@ export function renderCountyRequest(opts: {
     index: false,
     jsonLd: webPage(title, description, opts.action),
     body: `<section class="door-hero"><div class="door-wrap">
-<p class="eyebrow">${locked ? "Coming soon" : esc(opts.state.name)}</p>
+<p class="eyebrow">${locked || stateEmpty ? "Coming soon" : esc(opts.state.name)}</p>
 <h1>${esc(title)}</h1>
-<p class="explainer">${esc(description)} We do not send email from this site.</p>
-<p class="caption">Your email is saved. It is not shown on this page.</p>
+<p class="explainer">${esc(description)} Ask with the form below. We never publish your email.</p>
 </div></section>
 <main><div class="door-wrap">
 <section class="door-section">
@@ -286,7 +315,7 @@ export function renderReportForm(opts: {
 <main><div class="door-wrap">
 <section class="door-section">
 <h2>Your note</h2>
-<p class="caption">Large type. Nothing here is published with your email.</p>
+<p class="caption">We never publish your email.</p>
 <form class="door-login report-form" method="post" action="${esc(opts.action)}" data-busy>
 <input type="hidden" name="form_token" value="${esc(opts.token)}">
 ${honeypot()}
@@ -396,8 +425,8 @@ ${opts.body}
 }
 
 function stateMap(): string {
-  const size = 92;
-  const gap = 8;
+  const size = 104;
+  const gap = 12;
   const cols = 12;
   const rows = 8;
   const width = cols * (size + gap) + gap;
@@ -407,10 +436,10 @@ function stateMap(): string {
     const x = gap + state.col * (size + gap);
     const y = gap + state.row * (size + gap);
     const href = live ? "/florida" : `/states/${state.slug}`;
-    const status = live ? "Open" : "Coming soon";
-    return `<a class="tile ${live ? "live" : "soon"}" href="${href}" aria-label="${esc(state.name)}, ${live ? "open" : "coming soon"}"><title>${esc(state.name)}. ${esc(status)}.</title><rect x="${x}" y="${y}" width="${size}" height="${size}" rx="16"></rect><text x="${x + size / 2}" y="${y + 40}" text-anchor="middle" font-size="22">${esc(state.abbr)}</text><text class="tile-note" x="${x + size / 2}" y="${y + 64}" text-anchor="middle" font-size="13">${esc(status)}</text></a>`;
+    const status = live ? "Live" : "Soon";
+    return `<a class="tile ${live ? "live" : "soon"}" tabindex="-1" href="${href}" aria-label="${esc(state.name)}, ${live ? "live" : "coming soon"}"><title>${esc(state.name)}. ${esc(status)}.</title><rect x="${x}" y="${y}" width="${size}" height="${size}" rx="16"></rect><text x="${x + size / 2}" y="${y + 46}" text-anchor="middle" font-size="30">${esc(state.abbr)}</text><text class="tile-note" x="${x + size / 2}" y="${y + 78}" text-anchor="middle" font-size="20">${esc(status)}</text></a>`;
   }).join("");
-  return `<svg class="us-map" viewBox="0 0 ${width} ${height}" role="group" aria-label="United States. Pick a state. Florida is open. Other states are coming soon.">${tiles}</svg>`;
+  return `<svg class="us-map" viewBox="0 0 ${width} ${height}" role="group" aria-label="United States. Pick a state. Florida is live. Other states are coming soon.">${tiles}</svg>`;
 }
 
 function statePills(): string {
@@ -419,8 +448,8 @@ function statePills(): string {
     .map((state) => {
       const live = isLiveState(state);
       const href = live ? "/florida" : `/states/${state.slug}`;
-      const label = live ? `${state.name}, open` : `${state.name}, coming soon`;
-      return `<li><a class="${live ? "open" : "soon"}" href="${href}">${esc(label)}</a></li>`;
+      const label = live ? `${state.name}, live` : `${state.name}, coming soon`;
+      return `<li data-state-name="${esc(state.name)}"><a class="${live ? "open" : "soon"}" href="${href}">${esc(label)}</a></li>`;
     })
     .join("");
 }

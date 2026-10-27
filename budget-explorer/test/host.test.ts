@@ -112,7 +112,12 @@ describe("taxes host public door", () => {
     const html = await home.text();
     expect(home.status).toBe(200);
     expect(home.headers.get("X-Robots-Tag")).toBe("index, follow");
+    expect(home.headers.get("Referrer-Policy")).toBe("same-origin");
     expect(html).toContain("See how your county spends your tax dollars");
+    expect(html).toContain("Browse by name");
+    expect(html).toContain("Florida, live");
+    expect(html).toContain('tabindex="-1"');
+    expect(html).toContain("Florida is live");
     expect(html).toContain("Pick a state. Then pick a county.");
     expect(html).toContain("<svg");
     expect(html).toContain('href="/florida"');
@@ -140,6 +145,11 @@ describe("taxes host public door", () => {
     expect(florida.headers.get("X-Robots-Tag")).toBe("index, follow");
     expect(floridaHtml).toContain(">Walton County, live<");
     expect(floridaHtml).toContain('href="/walton"');
+    expect(floridaHtml).toContain("Request your county");
+    expect(floridaHtml).toContain("budget");
+    expect(floridaHtml).toContain("spending");
+    expect(floridaHtml).toContain("income");
+    expect(floridaHtml).toContain("savings");
     expect(floridaHtml).toContain('rel="canonical" href="https://howtheyspendmytaxes.com/florida"');
     expect(floridaHtml).toContain('"@type":"WebPage"');
     expect(floridaHtml).not.toContain("Okaloosa");
@@ -152,7 +162,9 @@ describe("taxes host public door", () => {
     expect(soon.status).toBe(200);
     expect(soon.headers.get("X-Robots-Tag")).toContain("noindex");
     expect(soonHtml).toContain("Coming soon");
-    expect(soonHtml).toContain("No counties are listed for Texas");
+    expect(soonHtml).toContain("Request this county");
+    expect(soonHtml).toContain('name="county_name"');
+    expect(soonHtml).not.toContain("No counties are listed");
     expect(soonHtml).not.toContain("Walton");
     expect(soonHtml).not.toContain("Okaloosa");
 
@@ -218,6 +230,8 @@ describe("taxes host public door", () => {
     expect(login.status).toBe(200);
     expect(login.headers.get("X-Robots-Tag")).toContain("noindex");
     expect(loginHtml).toContain("noindex");
+    expect(loginHtml).toContain("<title>Sign in | Budget Explorer</title>");
+    expect(loginHtml).not.toMatch(/<title>[^<]*[.\u2014\u2013]/);
     expect(loginHtml).toContain("Walton County Clerk and Comptroller");
     expect(loginHtml).toContain("Unofficial. Built from public records");
 
@@ -286,14 +300,22 @@ async function openForm(url: string, dbEnv: ReturnType<typeof envFor>) {
   return { response, html, token, cookie: cookieValue(response.headers.get("set-cookie")) };
 }
 
-function postForm(url: string, dbEnv: ReturnType<typeof envFor>, cookie: string, fields: Record<string, string>) {
+function postForm(
+  url: string,
+  dbEnv: ReturnType<typeof envFor>,
+  cookie: string,
+  fields: Record<string, string>,
+  ip = "203.0.113.44",
+  extra: Record<string, string> = {},
+) {
   return app.request(url, {
     method: "POST",
     headers: {
       cookie,
       origin: new URL(url).origin,
       "content-type": "application/x-www-form-urlencoded",
-      "cf-connecting-ip": "203.0.113.44",
+      "cf-connecting-ip": ip,
+      ...extra,
     },
     body: new URLSearchParams(fields),
   }, dbEnv);
@@ -396,6 +418,86 @@ describe("county catalog and request form", () => {
     expect(Number(total?.n)).toBe(INTAKE_HOUR_LIMIT);
   });
 
+  it("accepts a browser post with a matching Origin or Origin null plus Sec-Fetch-Site, and rejects a cross-site post", async () => {
+    const dbEnv = envFor(openDb());
+    const page = await openForm(`${TAXES}/florida/request`, dbEnv);
+    const fields = {
+      form_token: page.token,
+      name: "Ada",
+      email: ASKER,
+      county_name: "Holmes County",
+      note: "",
+      company_website: "",
+    };
+    const matching = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, fields, "203.0.113.50");
+    expect(matching.status).toBe(303);
+
+    const opaque = await postForm(
+      `${TAXES}/florida/request`,
+      dbEnv,
+      page.cookie,
+      { ...fields, county_name: "Holmes County" },
+      "203.0.113.51",
+      { origin: "null", "sec-fetch-site": "same-origin" },
+    );
+    expect(opaque.status).toBe(303);
+
+    const beforeCross = await dbEnv.DB.prepare("SELECT COUNT(*) AS n FROM county_requests").first<{ n: number }>();
+    const cross = await postForm(
+      `${TAXES}/florida/request`,
+      dbEnv,
+      page.cookie,
+      fields,
+      "203.0.113.52",
+      { origin: "https://evil.example" },
+    );
+    expect(cross.status).toBe(403);
+    const nullCross = await postForm(
+      `${TAXES}/florida/request`,
+      dbEnv,
+      page.cookie,
+      fields,
+      "203.0.113.53",
+      { origin: "null", "sec-fetch-site": "cross-site" },
+    );
+    expect(nullCross.status).toBe(403);
+    const nullBare = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, fields, "203.0.113.54", { origin: "null" });
+    expect(nullBare.status).toBe(403);
+    const afterCross = await dbEnv.DB.prepare("SELECT COUNT(*) AS n FROM county_requests").first<{ n: number }>();
+    expect(Number(afterCross?.n)).toBe(Number(beforeCross?.n));
+    expect(Number(afterCross?.n)).toBe(2);
+  });
+
+  it("says Walton County is already live when that name is typed", async () => {
+    const dbEnv = envFor(openDb());
+    const page = await openForm(`${TAXES}/florida/request`, dbEnv);
+    const posted = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, {
+      form_token: page.token,
+      name: "Ada",
+      email: ASKER,
+      county_name: "Walton County",
+      note: "",
+      company_website: "",
+    }, "203.0.113.60");
+    const html = await posted.text();
+    expect(posted.status).toBe(200);
+    expect(html).toContain("Walton County is already live, open it.");
+    expect(html).toContain('href="/walton"');
+    expect(html).not.toContain(ASKER);
+    const again = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, {
+      form_token: page.token,
+      name: "Ada",
+      email: ASKER,
+      county_name: "WALTON COUNTY",
+      note: "",
+      company_website: "",
+    }, "203.0.113.61");
+    expect(again.status).toBe(200);
+    expect(await again.text()).toContain("Walton County is already live, open it.");
+    const total = await dbEnv.DB.prepare("SELECT COUNT(*) AS n FROM county_requests").first<{ n: number }>();
+    expect(Number(total?.n)).toBe(0);
+  });
+
   it("shows a coming soon page with the county filled in when that county is not live", async () => {
     const added = { stateSlug: "florida", slug: "sample", name: "Sample County", live: false };
     COUNTIES.push(added);
@@ -447,6 +549,8 @@ describe("report a problem or share an idea", () => {
     expect(taxes.response.headers.get("X-Robots-Tag")).toContain("noindex");
     expect(taxes.html).toContain('content="noindex, nofollow"');
     expect(taxes.html).toContain("What is this about?");
+    expect(taxes.html).toContain("We never publish your email.");
+    expect(taxes.html).not.toContain("Large type. Nothing here is published with your email.");
     expect(taxes.html).toContain("Something looks wrong");
     expect(taxes.html).toContain("An idea for using this data better");
     expect(taxes.html).toContain("Your idea");

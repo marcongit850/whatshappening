@@ -235,7 +235,7 @@ export function renderLogin(error: string, next: string, formToken = "", showNam
     ? "This is an unofficial look at how Walton County, Florida spends county money. It is built from public records provided by the Walton County Clerk and Comptroller. It is not a county website. Access is currently private."
     : "One shared password opens this prototype. Nothing here is an official county system.";
   return page({
-    title: "Sign in. Budget Explorer",
+    title: "Sign in | Budget Explorer",
     active: "",
     csrf: "",
     bare: true,

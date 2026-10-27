@@ -46,6 +46,7 @@ body {
 a { color: var(--teal); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 a:hover { color: var(--navy); }
 button, input, select { font: inherit; color: inherit; }
+input[type="radio"], input[type="checkbox"] { accent-color: #b78a2d; }
 :focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
 .private-strip {
   background: var(--navy-deep);
@@ -519,7 +520,19 @@ body.door { background: var(--paper); }
 body.door main { max-width: none; margin: 0; padding: 0; }
 .door-note { background: #14232f; color: #e4eaf0; text-align: center; font-size: 18px; line-height: 1.4; padding: 12px 16px; }
 .door-bar { background: #0e1a23; color: #f6f4ee; }
-.door-wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.door-wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+.door-hero-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr); gap: 36px; align-items: center; }
+.feature-panel { background: #fff; color: var(--ink); border-radius: 20px; padding: 28px 24px; min-width: 0; }
+.feature-panel h2 { color: var(--ink); font-size: clamp(32px, 4vw, 46px); margin: 0 0 10px; }
+.feature-panel p { font-size: 20px; line-height: 1.45; margin: 0; color: var(--ink); }
+.feature-panel .eyebrow { color: #8a6420; font-size: 16px; }
+.feature-panel .btn { margin-top: 22px; }
+.card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.info-card { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 28px 24px; min-width: 0; box-shadow: var(--shadow); }
+.info-card h2 { font-size: clamp(32px, 4vw, 44px); margin-bottom: 8px; }
+.info-card p { font-size: 20px; line-height: 1.45; margin: 0; }
+.info-card .eyebrow { font-size: 16px; letter-spacing: 0.08em; }
+.info-card .btn { margin-top: 20px; }
 .bar-inner { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 18px; padding-bottom: 18px; }
 .door-brand { font-family: var(--serif); font-size: clamp(26px, 3vw, 36px); font-weight: 560; line-height: 1.15; color: #f6f4ee; text-decoration: none; max-width: 100%; }
 .door-bar a { color: #f6f4ee; }
@@ -540,7 +553,7 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .door-section { padding: 36px 0 8px; }
 .door-section h2 { font-size: clamp(32px, 4vw, 48px); }
 .door-section h3 { font-family: var(--serif); font-size: 28px; font-weight: 560; margin: 28px 0 0; }
-.map-card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-top: 18px; box-shadow: var(--shadow); }
+.map-card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-top: 18px; box-shadow: var(--shadow); overflow-x: auto; }
 .us-map { width: 100%; height: auto; display: block; overflow: hidden; }
 .us-map text { font-family: var(--sans); font-weight: 650; }
 .us-map .live rect { fill: #b78a2d; }
@@ -554,14 +567,17 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .map-legend .swatch.soon { background: #e4dfd4; border: 1px solid #d0c9ba; }
 .state-pills, .county-list { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-wrap: wrap; gap: 10px; }
 .county-list { display: block; }
-.county-list a, .state-pills a { display: inline-flex; align-items: center; min-height: 56px; padding: 12px 16px; border-radius: 14px; font-size: 18px; font-weight: 600; text-decoration: none; max-width: 100%; line-height: 1.3; }
+.county-list a, .state-pills a { display: inline-flex; align-items: center; min-height: 56px; padding: 12px 16px; border-radius: 14px; font-size: 18px; font-weight: 600; text-decoration: none; max-width: 100%; line-height: 1.3; overflow-wrap: anywhere; }
 .state-pills a.open, .county-list a { background: #b78a2d; color: #14232f; }
 .state-pills a.soon { background: #fff; color: #24343f; border: 1px solid #d9d3c6; }
 .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
 .step { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 22px; min-width: 0; }
 .step b { display: block; font-family: var(--serif); font-size: 28px; font-weight: 560; line-height: 1.2; margin-bottom: 8px; }
-.door-login { display: grid; gap: 16px; width: 100%; max-width: 560px; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px; margin-top: 18px; }
-body.door .door-login label, body.door .door-login legend { font-size: 18px; letter-spacing: 0; text-transform: none; color: var(--ink); font-weight: 600; }
+.door-login { display: grid; gap: 16px; width: 100%; max-width: none; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px; margin-top: 18px; }
+body.door .door-login label, body.door .door-login legend { font-size: 20px; letter-spacing: 0; text-transform: none; color: var(--ink); font-weight: 600; }
+.state-finder { margin-top: 18px; max-width: 720px; }
+.state-finder label { font-size: 20px; letter-spacing: 0; text-transform: none; color: var(--ink); font-weight: 600; }
+.state-finder input { min-height: 64px; font-size: 22px; }
 body.door .door-login legend { font-family: var(--serif); font-size: 32px; font-weight: 560; }
 body.door .door-login fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 body.door .door-login input[type="text"], body.door .door-login input[type="email"], body.door .door-login input[type="password"], body.door .door-login select, body.door .door-login textarea { min-height: 64px; font-size: 20px; max-width: 100%; }
@@ -581,11 +597,19 @@ body.door .door-login .hp input[type="text"] { width: 1px; min-height: 0; height
 .door-foot-link a { font-size: 22px; font-weight: 650; color: var(--navy); }
 .county-list a.soon { background: #fff; color: #24343f; border: 1px solid #d9d3c6; }
 body.door .warning { font-size: 20px; }
+@media (min-width: 801px) {
+  .state-pills { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .state-pills a { width: 100%; }
+}
 @media (max-width: 800px) {
-  .steps { grid-template-columns: 1fr; }
+  .steps, .card-row, .door-hero-grid { grid-template-columns: 1fr; }
   .door-wrap { padding-left: 16px; padding-right: 16px; }
   .door-hero { padding-top: 12px; }
   .door-hero h1 { font-size: 40px; }
+  .map-card { display: none; }
+  .state-pills { display: grid; grid-template-columns: 1fr 1fr; }
+  .state-pills li { min-width: 0; }
+  .state-pills a { width: 100%; justify-content: center; min-height: 72px; font-size: 18px; text-align: center; }
 }
 `;
 
@@ -600,6 +624,17 @@ export const CLIENT_JS = `
       /* Keep the server-rendered link. */
     }
   });
+  const filter = document.querySelector("[data-state-filter]");
+  if (filter instanceof HTMLInputElement) {
+    const rows = document.querySelectorAll("[data-state-name]");
+    filter.addEventListener("input", () => {
+      const query = filter.value.trim().toLowerCase();
+      rows.forEach((row) => {
+        const name = (row.getAttribute("data-state-name") || "").toLowerCase();
+        row.hidden = Boolean(query) && !name.includes(query);
+      });
+    });
+  }
   const form = document.querySelector("[data-busy]");
   if (!form) return;
   form.addEventListener("submit", () => {

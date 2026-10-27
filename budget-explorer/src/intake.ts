@@ -1,7 +1,7 @@
 import { FORM_COOKIE, clientIp, csrfOk, formCookie, readCookie, sha256Hex } from "./auth";
 import type { AppEnv } from "./env";
 import { isTaxesHost } from "./host";
-import { COUNTIES, countyByPath, type CountyPlace, type UsState } from "./places";
+import { COUNTIES, type CountyPlace, type UsState } from "./places";
 import { publicHtml, publicRedirect, publicText } from "./public-http";
 import { renderCountyRequest, renderReportForm, renderThanks } from "./public-page";
 
@@ -59,9 +59,11 @@ function echo(value: string, max: number): string {
   return trimmed;
 }
 
-function originOk(request: Request): boolean {
+/** Accept a same-origin post. `Origin: null` is what browsers send under a no-referrer policy, and only with `Sec-Fetch-Site: same-origin`. */
+export function originOk(request: Request): boolean {
   const expected = new URL(request.url).origin;
   const origin = request.headers.get("origin");
+  if (origin === "null") return request.headers.get("sec-fetch-site") === "same-origin";
   if (origin) return origin === expected;
   const referer = request.headers.get("referer");
   if (!referer) return false;
@@ -70,6 +72,17 @@ function originOk(request: Request): boolean {
   } catch {
     return false;
   }
+}
+
+/** Compare a typed county with a live slug. Drops the word County, case, and punctuation. */
+export function countyMatchKey(name: string): string {
+  return name.toLowerCase().replace(/\bcounty\b/g, " ").replace(/[^a-z0-9]+/g, "");
+}
+
+function matchingLiveCounty(stateSlug: string, typed: string): CountyPlace | undefined {
+  const key = countyMatchKey(typed);
+  if (!key) return undefined;
+  return COUNTIES.find((county) => county.live && county.stateSlug === stateSlug && (county.slug === key || countyMatchKey(county.name) === key));
 }
 
 function newToken(): string {
@@ -158,12 +171,12 @@ export async function handleCountyForm(request: Request, env: AppEnv, spec: Coun
     countyName = typedCounty;
     countySlug = slugifyCounty(typedCounty);
     if (!countySlug) return countyError(spec, "Enter the county name.", echo(name, 80), echo(note, 1000), echo(typedCounty, 80), 400);
-    const existing = countyByPath(spec.state.slug, countySlug);
-    if (existing?.live && existing.href) {
+    const existing = matchingLiveCounty(spec.state.slug, typedCounty);
+    if (existing?.href) {
       return publicHtml(
         renderThanks({
           title: `${existing.name} is already live`,
-          message: `${existing.name} already has a page on this site.`,
+          message: `${existing.name} is already live, open it.`,
           path: spec.action,
           backHref: existing.href,
           backLabel: `Open ${existing.name}`,
