@@ -1,7 +1,8 @@
-import type { PaymentRow, SearchFilters } from "./db";
-import { accountKey, moneyExact } from "./format";
+import { departmentRollups, fundRollups, type PaymentRow, type SearchFilters } from "./db";
+import { accountKey, moneyExact, pace } from "./format";
 import { QA_MAX_CHARS } from "./auth";
-import { QA_SYSTEM, type QaPack, type QaRecord } from "./qa";
+import { QA_SYSTEM, mentionedCodes, nameMatchesQuestion, vendorTokens, type QaPack, type QaRecord } from "./qa";
+import { isTransferDepartment } from "./overview";
 import { ORG_NAME_TOKENS, looksLikePersonName, sqlIsPersonName } from "./parser";
 
 /**
@@ -134,6 +135,10 @@ function paymentBranch(importId: number, filters: SearchFilters | null, showName
     where.push("dept_code = ?");
     binds.push(filters.dept);
   }
+  if (filters?.fund) {
+    where.push("fund_code = ?");
+    binds.push(filters.fund);
+  }
   if (filters && filters.minCents > 0) {
     where.push("amount_cents >= ?");
     binds.push(filters.minCents);
@@ -176,6 +181,10 @@ function payrollBranch(importId: number, filters: SearchFilters | null, showName
   if (filters?.dept) {
     where.push("dept_code = ?");
     binds.push(filters.dept);
+  }
+  if (filters?.fund) {
+    where.push("fund_code = ?");
+    binds.push(filters.fund);
   }
   if (filters?.from) {
     where.push("pay_date >= ?");
@@ -559,20 +568,8 @@ function lineText(row: PaymentRow): string {
   return `Payment ${row.pay_date || ""} vendor ${row.vendor_name || "unmatched"} invoice ${row.invoice || "none"} check ${row.check_number || "none"} amount ${moneyExact(row.amount_cents)} account ${account} description ${row.description || ""}`;
 }
 
-function tokens(question: string): string[] {
-  const stop = new Set([
-    "the", "and", "for", "with", "from", "that", "this", "what", "which", "how", "much", "did", "does",
-    "county", "pay", "paid", "payment", "payments", "show", "tell", "about", "were", "was", "are", "have",
-    "has", "its", "into", "over", "under", "than", "then", "them", "they", "their", "budget", "spent",
-    "spend", "year", "total", "totals", "please", "could", "would", "should", "where", "when", "who",
-  ]);
-  const words = question.toLowerCase().match(/[a-z0-9][a-z0-9&.'-]{2,}/g) || [];
-  const unique: string[] = [];
-  for (const word of words) {
-    if (stop.has(word) || unique.includes(word)) continue;
-    unique.push(word);
-  }
-  return unique.slice(0, 6);
+function blankFilters(): SearchFilters {
+  return { q: "", vendor: "", dept: "", fund: "", minCents: 0, from: "", to: "" };
 }
 
 export function qaSystem(showNames: boolean): string {
@@ -582,63 +579,223 @@ export function qaSystem(showNames: boolean): string {
   return `${QA_SYSTEM} ${payroll}`;
 }
 
+interface AccountSum {
+  rev: number;
+  ytd: number;
+  enc: number;
+  avail: number;
+  n: number;
+  keys: string[];
+}
+
+interface NamedHit {
+  code: string;
+  fund: string;
+  label: string;
+}
+
+async function sumAccounts(db: D1Database, importId: number, whereSql: string, binds: (string | number)[]): Promise<AccountSum | null> {
+  const totals = await db
+    .prepare(
+      `SELECT COALESCE(SUM(rev_cents), 0) AS rev, COALESCE(SUM(ytd_cents), 0) AS ytd,
+              COALESCE(SUM(enc_cents), 0) AS enc, COALESCE(SUM(avail_cents), 0) AS avail, COUNT(*) AS n
+       FROM accounts WHERE import_id = ? AND ${whereSql}`,
+    )
+    .bind(importId, ...binds)
+    .first<{ rev: number; ytd: number; enc: number; avail: number; n: number }>();
+  if (!totals || Number(totals.n) === 0) return null;
+  const keyRows = await db
+    .prepare(
+      `SELECT fund_code, dept_code, object_code, project_code
+       FROM accounts WHERE import_id = ? AND ${whereSql}
+       ORDER BY ytd_cents DESC`,
+    )
+    .bind(importId, ...binds)
+    .all<{ fund_code: string; dept_code: string; object_code: string; project_code: string }>();
+  return {
+    rev: Number(totals.rev),
+    ytd: Number(totals.ytd),
+    enc: Number(totals.enc),
+    avail: Number(totals.avail),
+    n: Number(totals.n),
+    keys: (keyRows.results || []).map((row) => accountKey(row.fund_code, row.dept_code, row.object_code, row.project_code)),
+  };
+}
+
+function factRecord(label: string, totals: AccountSum): QaRecord {
+  const shown = totals.keys.slice(0, 8);
+  const more = totals.keys.length > shown.length ? `, and ${totals.keys.length - shown.length} more` : "";
+  return {
+    kind: "total",
+    text: `FACT: ${label} spent ${moneyExact(totals.ytd)}. Revised budget ${moneyExact(totals.rev)}. Encumbered ${moneyExact(totals.enc)}. Available ${moneyExact(totals.avail)}. Account count ${totals.n}. Account keys: ${shown.join(", ")}${more}.`,
+  };
+}
+
+async function loadQuestionNames(db: D1Database, importId: number): Promise<{ funds: NamedHit[]; depts: NamedHit[] }> {
+  const [fundRows, deptRows, chartRows] = await Promise.all([
+    db.prepare("SELECT code, report_name FROM funds WHERE import_id = ?").bind(importId).all<{ code: string; report_name: string }>(),
+    db.prepare("SELECT code, fund_code, report_name FROM departments WHERE import_id = ?").bind(importId).all<{ code: string; fund_code: string; report_name: string }>(),
+    db.prepare("SELECT kind, code, name FROM chart_names").all<{ kind: string; code: string; name: string }>(),
+  ]);
+  const chart = new Map<string, string>();
+  for (const row of chartRows.results || []) chart.set(`${row.kind}:${row.code}`, row.name);
+  const funds = (fundRows.results || []).map((row) => ({
+    code: row.code,
+    fund: row.code,
+    label: chart.get(`fund:${row.code}`) || row.report_name || row.code,
+  }));
+  const depts = (deptRows.results || []).map((row) => ({
+    code: row.code,
+    fund: row.fund_code,
+    label: chart.get(`department:${row.code}`) || row.report_name || row.code,
+  }));
+  return { funds, depts };
+}
+
+function hitsFor(question: string, rows: NamedHit[], codes: string[]): NamedHit[] {
+  return rows.filter((row) => codes.includes(row.code) || nameMatchesQuestion(row.label, question));
+}
+
+function paddedPartySql(column: string): string {
+  return `(' ' || replace(replace(replace(replace(upper(${column}), ',', ' '), '.', ' '), '-', ' '), '&', ' ') || ' ')`;
+}
+
+/** Whole-word hits. One token must match. Two or more tokens need two hits, so extra question words do not hide a name. */
+function tokenScoreSql(column: string, tokens: string[]): { sql: string; binds: string[]; needed: number } {
+  const padded = paddedPartySql(column);
+  const safe = tokens.map((token) => token.replace(/[^A-Z0-9]/g, "")).filter((token) => token.length >= 4);
+  const sql = safe.map(() => `(CASE WHEN ${padded} LIKE ? THEN 1 ELSE 0 END)`).join(" + ");
+  return {
+    sql: sql || "0",
+    binds: safe.map((token) => `% ${token} %`),
+    needed: safe.length <= 1 ? safe.length : 2,
+  };
+}
+
+async function vendorFacts(db: D1Database, importId: number, question: string, showNames: boolean): Promise<QaRecord[]> {
+  const tokens = vendorTokens(question);
+  if (!tokens.length) return [];
+  const personSql = showNames ? "1 = 1" : `${sqlIsPersonName("vendor_name")} = 0`;
+  const score = tokenScoreSql("vendor_name", tokens);
+  if (!score.needed) return [];
+  const groups = await db
+    .prepare(
+      `SELECT MAX(vendor_name) AS vendor_name, SUM(amount_cents) AS cents, COUNT(*) AS n
+       FROM payments
+       WHERE import_id = ? AND after_cutoff = 0 AND vendor_name != '' AND ${personSql} AND (${score.sql}) >= ?
+       GROUP BY CASE WHEN vendor_number = '' THEN vendor_name ELSE vendor_number END
+       ORDER BY cents DESC
+       LIMIT 3`,
+    )
+    .bind(importId, ...score.binds, score.needed)
+    .all<{ vendor_name: string; cents: number; n: number }>();
+  const facts: QaRecord[] = [];
+  for (const group of groups.results || []) {
+    const name = (group.vendor_name || "").trim();
+    if (!name || (!showNames && looksLikePersonName(name))) continue;
+    const keys = await db
+      .prepare(
+        `SELECT DISTINCT fund_code, dept_code, object_code, project_code
+         FROM payments
+         WHERE import_id = ? AND after_cutoff = 0 AND vendor_name = ? AND ${personSql}`,
+      )
+      .bind(importId, name)
+      .all<{ fund_code: string; dept_code: string; object_code: string; project_code: string }>();
+    const keyList = (keys.results || []).map((row) => accountKey(row.fund_code, row.dept_code, row.object_code, row.project_code));
+    const shown = keyList.slice(0, 8);
+    const more = keyList.length > shown.length ? `, and ${keyList.length - shown.length} more` : "";
+    facts.push({
+      kind: "total",
+      text: `FACT: Vendor ${name} paid ${moneyExact(Number(group.cents))} across ${Number(group.n)} payments. Account count ${keyList.length}. Account keys: ${shown.join(", ")}${more}.`,
+    });
+  }
+  return facts;
+}
+
+async function titleFact(db: D1Database, importId: number, question: string): Promise<QaRecord | null> {
+  const tokens = vendorTokens(question).filter((token) => token.length >= 6);
+  if (tokens.length < 1) return null;
+  const score = tokenScoreSql("title", tokens);
+  if (!score.needed) return null;
+  const totals = await sumAccounts(db, importId, `(${score.sql}) >= ?`, [...score.binds, score.needed]);
+  if (!totals) return null;
+  return factRecord(`Accounts whose title matches ${tokens.join(", ")}`, totals);
+}
+
 export async function buildQuestionContext(db: D1Database, importId: number, question: string, showNames: boolean): Promise<QaPack> {
   const records: QaRecord[] = [];
-  const codes = question.match(/\b\d{3,8}\b/g) || [];
-  const words = tokens(question);
-  if (codes.length) {
-    const code = codes.find((item) => item.length === 8) || codes[0];
-    const accounts = await db
-      .prepare(
-        `SELECT fund_code, dept_code, object_code, project_code, title, rev_cents, ytd_cents, enc_cents
-         FROM accounts
-         WHERE import_id = ? AND (dept_code = ? OR object_code = ? OR fund_code = ? OR project_code = ?)
-         ORDER BY rev_cents DESC LIMIT 20`,
-      )
-      .bind(importId, code, code, code, code)
-      .all<{ fund_code: string; dept_code: string; object_code: string; project_code: string; title: string; rev_cents: number; ytd_cents: number; enc_cents: number }>();
-    for (const row of accounts.results || []) {
-      records.push({
-        kind: "account",
-        text: `Account ${accountKey(row.fund_code, row.dept_code, row.object_code, row.project_code)} ${row.title || "unmatched"} revised ${moneyExact(row.rev_cents)} spent ${moneyExact(row.ytd_cents)} encumbered ${moneyExact(row.enc_cents)}`,
-      });
+  const codes = mentionedCodes(question);
+  const catalog = await loadQuestionNames(db, importId);
+  const fundHits = hitsFor(question, catalog.funds, codes.funds);
+  const deptHits = hitsFor(question, catalog.depts, codes.depts);
+  const asksDepartment = /\bdepartments?\b/i.test(question) || codes.depts.length > 0;
+  let structured = false;
+
+  if (asksDepartment && deptHits.length) {
+    structured = true;
+    for (const hit of deptHits.slice(0, 3)) {
+      const totals = await sumAccounts(db, importId, "dept_code = ?", [hit.code]);
+      if (totals) records.push(factRecord(`Department ${hit.code} (${hit.label})`, totals));
+    }
+  } else if (fundHits.length) {
+    structured = true;
+    for (const hit of fundHits.slice(0, 3)) {
+      const totals = await sumAccounts(db, importId, "fund_code = ?", [hit.code]);
+      if (totals) records.push(factRecord(`Fund ${hit.code} (${hit.label})`, totals));
+    }
+  } else if (deptHits.length) {
+    structured = true;
+    for (const hit of deptHits.slice(0, 3)) {
+      const totals = await sumAccounts(db, importId, "dept_code = ?", [hit.code]);
+      if (totals) records.push(factRecord(`Department ${hit.code} (${hit.label})`, totals));
+    }
+  } else if (codes.objects.length) {
+    structured = true;
+    for (const code of codes.objects.slice(0, 3)) {
+      const totals = await sumAccounts(db, importId, "object_code = ?", [code]);
+      if (totals) records.push(factRecord(`Object ${code}`, totals));
+    }
+  } else if (/\bover\b/i.test(question) && /\bbudget\b/i.test(question)) {
+    const departments = await departmentRollups(db, importId);
+    const over = departments
+      .filter((row) => !isTransferDepartment(row.report_name) && pace(row.rev_cents, row.ytd_cents, row.enc_cents, 100) !== "green")
+      .filter((row) => row.ytd_cents + row.enc_cents > row.rev_cents)
+      .sort((a, b) => b.ytd_cents + b.enc_cents - b.rev_cents - (a.ytd_cents + a.enc_cents - a.rev_cents))
+      .slice(0, 5);
+    for (const row of over) {
+      const totals = await sumAccounts(db, importId, "dept_code = ?", [row.code]);
+      if (totals) records.push(factRecord(`Over revised budget: department ${row.code} (${row.report_name || row.code})`, totals));
+    }
+    structured = records.length > 0;
+  } else if (/\b(which|what)\s+fund\b/i.test(question) && /\b(most|largest|highest|biggest)\b/i.test(question)) {
+    const funds = await fundRollups(db, importId);
+    const top = [...funds].sort((a, b) => b.ytd_cents - a.ytd_cents)[0];
+    if (top) {
+      const totals = await sumAccounts(db, importId, "fund_code = ?", [top.code]);
+      if (totals) {
+        records.push(factRecord(`Largest fund by amount spent: fund ${top.code} (${top.report_name || top.code})`, totals));
+        structured = true;
+      }
     }
   }
-  for (const word of words.slice(0, 4)) {
-    const accounts = await db
-      .prepare(
-        `SELECT fund_code, dept_code, object_code, project_code, title, rev_cents, ytd_cents, enc_cents
-         FROM accounts WHERE import_id = ? AND title LIKE ? ORDER BY ABS(ytd_cents) DESC LIMIT 8`,
-      )
-      .bind(importId, like(word))
-      .all<{ fund_code: string; dept_code: string; object_code: string; project_code: string; title: string; rev_cents: number; ytd_cents: number; enc_cents: number }>();
-    for (const row of accounts.results || []) {
-      records.push({
-        kind: "account",
-        text: `Account ${accountKey(row.fund_code, row.dept_code, row.object_code, row.project_code)} ${row.title || "unmatched"} revised ${moneyExact(row.rev_cents)} spent ${moneyExact(row.ytd_cents)} encumbered ${moneyExact(row.enc_cents)}`,
-      });
-    }
-    const found = await searchLines(db, importId, { q: word, vendor: "", dept: "", minCents: 0, from: "", to: "" }, 0, 12, showNames);
-    for (const row of found.rows) {
-      records.push({ kind: isPayrollTotal(row.vendor_name) ? "total" : "payment", text: lineText(row) });
+
+  if (!structured) {
+    const vendors = await vendorFacts(db, importId, question, showNames);
+    records.push(...vendors);
+    if (!vendors.length) {
+      const titled = await titleFact(db, importId, question);
+      if (titled) records.push(titled);
     }
   }
+
   if (!showNames && /\b(payroll|salary|salaries|wage|wages)\b/i.test(question)) {
-    const batches = await searchLines(db, importId, { q: "", vendor: "", dept: "", minCents: 0, from: "", to: "" }, 0, 12, false);
+    const batches = await searchLines(db, importId, blankFilters(), 0, 12, false);
     for (const row of batches.rows) {
       if (!isPayrollTotal(row.vendor_name)) continue;
       records.push({ kind: "total", text: lineText(row) });
     }
   }
-  if (showNames && /\b(how much|total|sum|spent)\b/i.test(question) && words.length) {
-    const found = await searchLines(db, importId, { q: words[0], vendor: "", dept: "", minCents: 0, from: "", to: "" }, 0, 200, true);
-    if (found.total > 0) {
-      records.push({
-        kind: "total",
-        text: `Aggregate for "${words[0]}" across visible lines: ${found.total} lines, sum ${moneyExact(found.totalCents)}.`,
-      });
-    }
-  }
+
   const seen = new Set<string>();
   const unique = records.filter((record) => {
     if (seen.has(record.text)) return false;
@@ -646,7 +803,12 @@ export async function buildQuestionContext(db: D1Database, importId: number, que
     return true;
   }).slice(0, 40);
   const body = unique.map((record, index) => `[${index + 1}] ${record.text}`).join("\n");
-  const prompt = `Question: ${question.slice(0, QA_MAX_CHARS)}\n\nRecords from the imported budget file:\n${body || "(none)"}`;
+  const prompt = [
+    `Question: ${question.slice(0, QA_MAX_CHARS)}`,
+    "",
+    "FACTS computed in SQL. Copy dollar figures from FACT lines only. Do not add, subtract, multiply, divide, or round. Cite the account count and account keys from the FACT you use.",
+    body || "(no computed total)",
+  ].join("\n");
   return { records: unique, prompt };
 }
 
