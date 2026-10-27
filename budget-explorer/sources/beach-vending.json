@@ -34,7 +34,7 @@
       "note": "",
       "project": "",
       "status": "verified amount",
-      "detail": "not explained in the county budget file",
+      "detail": "The county budget file does not explain this line.",
       "sources": [
         "https://budget-waltoncountyfl.com/assets/data/revenues.csv"
       ]

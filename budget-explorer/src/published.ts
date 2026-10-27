@@ -1325,6 +1325,7 @@ function buildBeach(beach: unknown, revenue: unknown): { lines: AmountItem[]; no
 function beachDetail(line: Record<string, unknown>): string {
   const payer = str(line.payer, "").replace(/\.+$/, "");
   let detail = str(line.detail, "beach detail").trim().replace(/\.+$/, "");
+  if (/^not explained in the county budget file$/i.test(detail)) detail = "The county budget file does not explain this line";
   detail = detail.replace(/\s*General Fund account 329004$/i, "").trim().replace(/\.+$/, "");
   const account = "General Fund account 329004";
   const receipt = "This is a budget amount, not an audited receipt";

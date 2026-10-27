@@ -72,6 +72,10 @@ import { parseReport } from "./parser";
 import { safeNext } from "./safe-next";
 import { loadPublishedLedger } from "./published-db";
 import { AI_MODEL, modelText } from "./qa";
+import { isTaxesHost } from "./host";
+import { handleReport } from "./intake";
+import { CSP } from "./headers";
+import { createSite } from "./site";
 import { CLIENT_JS, CSS } from "./style";
 import { xlsxToRows } from "./xlsx";
 import {
@@ -99,19 +103,6 @@ import {
 } from "./view";
 
 const app = new Hono<{ Bindings: AppEnv; Variables: { session: SessionPayload; showNames: boolean } }>();
-
-const CSP = [
-  "default-src 'none'",
-  "script-src 'self' https://static.cloudflareinsights.com",
-  "style-src 'self' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
-  "img-src 'self' data:",
-  "connect-src 'self' https://cloudflareinsights.com",
-  "base-uri 'none'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "style-src-attr 'unsafe-inline'",
-].join("; ");
 
 app.use("*", async (c, next) => {
   await next();
@@ -148,7 +139,7 @@ app.get("/login", async (c) => {
   const token = crypto.randomUUID().replace(/-/g, "");
   c.header("Set-Cookie", formCookie(token));
   const names = await showPersonNames(c.env.DB);
-  return c.html(renderLogin("", safeNext(c.req.query("next") || "/", new URL(c.req.url).origin), token, names));
+  return c.html(renderLogin("", safeNext(c.req.query("next") || "/", new URL(c.req.url).origin), token, names, onTaxesHost(c)));
 });
 
 app.post("/login", async (c) => {
@@ -160,16 +151,16 @@ app.post("/login", async (c) => {
   if (!(await csrfOk(token, formToken || provided))) {
     const fresh = crypto.randomUUID().replace(/-/g, "");
     c.header("Set-Cookie", formCookie(fresh));
-    return c.html(renderLogin("The sign-in form expired. Try again.", "/", fresh, names), 400);
+    return c.html(renderLogin("The sign-in form expired. Try again.", "/", fresh, names, onTaxesHost(c)), 400);
   }
   if (!c.env.SITE_PASSWORD || !c.env.SESSION_SECRET) {
-    return c.html(renderLogin("The site password is not configured.", "/", "", names), 500);
+    return c.html(renderLogin("The site password is not configured.", "/", "", names, onTaxesHost(c)), 500);
   }
   const ipHash = await sha256Hex(`${c.env.SESSION_SECRET}:${clientIp(c.req.raw)}`);
   const windowStart = Math.floor(Date.now() / 1000 / LOGIN_WINDOW_SEC) * LOGIN_WINDOW_SEC;
   const prior = await attemptsFor(c.env.DB, ipHash, windowStart);
   if (!throttleDecision(prior).allowed) {
-    return c.html(renderLogin("Too many sign-in attempts. Wait a few minutes and try again.", "/", "", names), 429);
+    return c.html(renderLogin("Too many sign-in attempts. Wait a few minutes and try again.", "/", "", names, onTaxesHost(c)), 429);
   }
   const password = String(form.password || "");
   const ok = await passwordsMatch(password, c.env.SITE_PASSWORD);
@@ -177,15 +168,17 @@ app.post("/login", async (c) => {
     await storeAttempt(c.env.DB, ipHash, windowStart);
     const fresh = crypto.randomUUID().replace(/-/g, "");
     c.header("Set-Cookie", formCookie(fresh));
-    return c.html(renderLogin("That password does not match.", "/", fresh, names), 401);
+    return c.html(renderLogin("That password does not match.", "/", fresh, names, onTaxesHost(c)), 401);
   }
   const session = newSession(false);
   c.header("Set-Cookie", sessionCookie(await signSession(c.env.SESSION_SECRET, session)));
   return c.redirect(safeNext(String(form.next || "/"), new URL(c.req.url).origin), 303);
 });
 
+app.on(["GET", "HEAD", "POST"], "/report", (c) => handleReport(c.req.raw, c.env, "/report"));
+
 app.use("*", async (c, next) => {
-  if (!c.env.SESSION_SECRET) return c.html(renderLogin("The site password is not configured.", "/", "", await showPersonNames(c.env.DB)), 500);
+  if (!c.env.SESSION_SECRET) return c.html(renderLogin("The site password is not configured.", "/", "", await showPersonNames(c.env.DB), onTaxesHost(c)), 500);
   const token = readCookie(c.req.header("cookie"), "be_session");
   const session = await readSession(c.env.SESSION_SECRET, token);
   if (!session) {
@@ -734,7 +727,11 @@ app.post("/admin/import/:id/publish", async (c) => {
 
 app.notFound((c) => c.text("Not found", 404));
 
-export default app;
+function onTaxesHost(c: { req: { url: string } }): boolean {
+  return isTaxesHost(new URL(c.req.url).hostname);
+}
+
+export default createSite(app);
 
 type AppContext = Context<{ Bindings: AppEnv; Variables: { session: SessionPayload; showNames: boolean } }>;
 

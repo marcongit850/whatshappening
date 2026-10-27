@@ -2,7 +2,9 @@
 
 Private prototype for reading a Walton County year to date budget report. It is a Cloudflare Worker, separate from the placeholder site in the repository root. It does not use the county seal and it does not present itself as an official county system.
 
-The site is not indexed. Every response sends `X-Robots-Tag: noindex, nofollow, noarchive`, pages include a robots meta tag, and `robots.txt` disallows all crawlers. Every page except the sign-in screen requires the shared site password.
+The Walton County pages are not indexed. On budget.whatshappeningnetwork.com and the workers.dev host, every response sends `X-Robots-Tag: noindex, nofollow, noarchive`, pages include a robots meta tag, and `robots.txt` disallows all crawlers. Every page except the sign-in screen and `/report` requires the shared site password. `/report` is how a visitor flags a number or shares an idea. It stays `noindex`.
+
+howtheyspendmytaxes.com and www.howtheyspendmytaxes.com use this same Worker as a public front door. `/` is a state map, `/florida` lists Walton County, and the dashboard moves to `/walton` behind the same password. Search engines may index `/`, `/florida`, and the logged-out `/walton` page. County figures stay noindex. See `ARCHITECTURE.md` in this folder.
 
 ## Architecture
 
@@ -11,7 +13,7 @@ The site is not indexed. Every response sends `X-Robots-Tag: noindex, nofollow, 
 - Workers AI binding `AI`. Questions use the model id in `src/qa.ts` (`AI_MODEL`). Fund, department, object, and vendor totals are summed in SQL first. The model is told to quote those figures and not to do arithmetic. If nothing matches, it is not called. A vendor payment, the county budget, or a transfer question can be answered from SQL without the model. A question such as "spent on" a fund or department still uses the fund and department totals.
 - The overview is drawn from the published import on each request (inline SVG and CSS, no chart library). The question box on that page posts to `/ask`. Fund pages are `/funds` and `/funds/:code`. Search accepts a fund code and a date range.
 - Public totals leave out object code `591000`, money moved between county funds, and payments to other county offices are kept out of the outside-vendor chart. The admin import preview still prints the report's own totals.
-- Links are relative. An optional `PUBLIC_BASE_URL` is shown on About when it is an http(s) URL. The app does not hardcode a hostname, so the Worker can move to another custom domain later.
+- Links inside the dashboard stay root-relative. On howtheyspendmytaxes.com the Worker prefixes them with `/walton` in the HTML it sends. An optional `PUBLIC_BASE_URL` is shown on About when it is an http(s) URL. Other hosts keep the dashboard at `/`.
 - Money is stored as integer cents. The published pages read the latest import whose status is `published`. Older imports are kept.
 
 Payroll lines (payroll journals, warrant or direct deposit text, and salary or benefit object codes) are stored with the employee name and the individual amount. Folded batch totals are stored too. The admin switch "Show person names and individual pay" decides what readers see. It defaults to on. When it is off, search, drill-down, plat, CSV export, and questions show payroll only as grouped totals: a group needs at least 3 lines and a $1,000 total to appear as "Payroll (batch total)". Smaller groups are rolled into "Other payroll" when that rollup clears the same bar, and left off the line list otherwise. Person names, including Last, First names in descriptions, and individual pay are not shown. The person check is made when the row is read. Lines dated after the report's "data as of" date are stored, flagged, and left out of search, account payments, plat activity, and questions.
@@ -31,7 +33,7 @@ The session cookie is `HttpOnly`, `Secure`, `SameSite=Lax`, and expires after ab
 
 ## D1
 
-The D1 database name is `budget-explorer`. Its id is in `wrangler.jsonc`. Migration `0001_init.sql` is already applied on the remote database. Migration `0002_settings.sql` is the names switch. Migration `0003_revenue_reserves.sql` is the income and savings tables. Apply `0003` on the remote database by hand. Do not run `wrangler d1 migrations apply --remote`. Apply the local copies before seeding:
+The D1 database name is `budget-explorer`. Its id is in `wrangler.jsonc`. Migration `0001_init.sql` is already applied on the remote database. Migration `0002_settings.sql` is the names switch. Migration `0003_revenue_reserves.sql` is the income and savings tables. Migration `0004_county_requests.sql` stores county requests and notes about the data. Apply `0003` and `0004` on the remote database by hand. Do not run `wrangler d1 migrations apply --remote`. Apply the local copies before seeding:
 
 ```bash
 npx wrangler d1 migrations apply budget-explorer --local
@@ -94,7 +96,7 @@ npx wrangler secret put ADMIN_PASSWORD
 npx wrangler deploy
 ```
 
-Do not put a hostname in application code. After deploy, attach whatever custom domain you want in the Cloudflare dashboard (Workers, Settings, Domains), or add a route in `wrangler.jsonc` at that time. Set `PUBLIC_BASE_URL` only if you want About to display it. Relative links keep working if the hostname changes.
+The public hosts howtheyspendmytaxes.com and www.howtheyspendmytaxes.com are recognized in application code so the front door and the `/walton` prefix can be chosen from the request host. Every other host, including budget.whatshappeningnetwork.com and the workers.dev hostname, keeps the dashboard at `/`. After deploy, attach a custom domain in the Cloudflare dashboard (Workers, Settings, Domains). Set `PUBLIC_BASE_URL` only if you want About to display it. Dashboard links stay root-relative in the source. On the taxes host they are prefixed when the response is sent.
 
 ## Checks
 
