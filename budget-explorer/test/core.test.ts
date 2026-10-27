@@ -5,12 +5,12 @@ import { describe, expect, it } from "vitest";
 import { adminUnlockAllowed, constantTimeEqual, csrfOk, newSession, rateDecision, readSession, signSession, throttleDecision } from "../src/auth";
 import { historyStatuses, rowCountsMatch } from "../src/db";
 import { adminPasswordSet } from "../src/env";
-import { csvCell, fiscalPosition, pace } from "../src/format";
+import { csvAmount, csvCell, fiscalPosition, pace } from "../src/format";
 import { uploadAllowed } from "../src/limits";
-import { MAX_REPORT_LINE, dedupePayments, looksLikePersonName, parseReport, parseVendorRest, storedText } from "../src/parser";
+import { MAX_REPORT_LINE, MIN_PAYROLL_BATCH_LINES, dedupePayments, foldPayrollBatches, looksLikePersonName, parseReport, parseVendorRest, storedText, type ParsedPayrollBatch } from "../src/parser";
 import { safeNext } from "../src/safe-next";
 import { renderLogin, renderUnlock } from "../src/view";
-import { xlsxToRows, zipEntryAllowed } from "../src/xlsx";
+import { XLSX_MAX_COMPRESSED_BYTES, uncompressedWithinLimits, xlsxToRows, zipEntryAllowed } from "../src/xlsx";
 
 const REPORT = `Walton County
 YEAR-TO-DATE BUDGET REPORT
@@ -73,15 +73,19 @@ describe("parser", () => {
     expect(repair?.amountCents).toBe(25000);
   });
 
-  it("keeps payroll only as batches and drops names", () => {
+  it("stores payroll names and amounts and flags a one-line folded batch", () => {
     expect(result.payments.some((row) => row.objectCode === "512000")).toBe(false);
+    expect(result.payrollLines).toHaveLength(1);
+    expect(result.payrollLines[0].employeeName).toBe("JANE Q PUBLIC");
+    expect(result.payrollLines[0].amountCents).toBe(20000);
     expect(result.payrollBatches).toHaveLength(1);
     expect(result.payrollBatches[0].batchKey).toBe("combined");
     expect(result.payrollBatches[0].amountCents).toBe(20000);
+    expect(result.payrollBatches[0].belowMinimum).toBe(true);
     expect(result.foldedPayrollBatches).toBe(1);
-    expect(storedText(result)).not.toContain("JANE");
-    expect(storedText(result)).not.toContain("PUBLIC");
+    expect(storedText(result)).toContain("JANE Q PUBLIC");
     expect(storedText(result)).not.toContain("251010");
+    expect(storedText(result)).not.toContain("WARRANT");
   });
 
   it("flags lines after the report date", () => {
@@ -221,9 +225,14 @@ ACCOUNTS FOR: 001 GENERAL FUND
     expect(looksLikePersonName("ACME SUPPLY CO")).toBe(false);
     const kept = narrative.payrollBatches.find((row) => row.batchKey === "251010");
     expect(kept?.lineCount).toBe(3);
+    expect(kept?.belowMinimum).toBe(false);
     expect(narrative.payrollBatches.some((row) => row.batchKey === "999")).toBe(false);
     expect(narrative.foldedPayrollBatches).toBe(1);
-    expect(storedText(narrative)).not.toContain("ALONE");
+    const alone = narrative.payrollLines.find((row) => row.employeeName === "ALONE");
+    expect(alone?.amountCents).toBe(1000);
+    expect(narrative.payrollBatches.some((row) => row.belowMinimum)).toBe(true);
+    expect(storedText(narrative)).toContain("ALONE");
+    expect(storedText(narrative)).not.toContain("RUN=1");
     const slow = `VND 1 IN ${"A ".repeat(3000)}`;
     expect(parseVendorRest(slow)).toBeNull();
     const huge = `${"Z".repeat(MAX_REPORT_LINE + 50)} MARKERNAME`;
@@ -274,8 +283,107 @@ ACCOUNTS FOR: 001 GENERAL FUND
     expect(csvCell("\tname")).toBe("'\tname");
     expect(csvCell("\rname")).toBe("\"'\rname\"");
     expect(csvCell("office")).toBe("office");
+    expect(csvCell("=JANE")).toBe("'=JANE");
+    expect(csvCell("+JANE")).toBe("'+JANE");
+    expect(csvCell("-JANE")).toBe("'-JANE");
+    expect(csvCell("@JANE")).toBe("'@JANE");
+    expect(csvCell("\tJANE")).toBe("'\tJANE");
+    expect(csvCell("\rJANE")).toBe("\"'\rJANE\"");
+    expect(csvCell("JANE Q PUBLIC")).toBe("JANE Q PUBLIC");
+  });
+
+  it("keeps negative amounts numeric in the CSV amount column", () => {
+    expect(csvAmount(-500)).toBe("-5.00");
+    expect(csvAmount(25000)).toBe("250.00");
+    expect(csvAmount(0)).toBe("0.00");
+    expect(csvCell("-5.00")).toBe("'-5.00");
   });
 });
+
+describe("payroll fold", () => {
+  const batch = (patch: Partial<ParsedPayrollBatch>): ParsedPayrollBatch => ({
+    fund: "001",
+    dept: "00101000",
+    objectCode: "512000",
+    project: "",
+    batchKey: "a",
+    payDate: "2026-01-02",
+    amountCents: 100,
+    lineCount: 1,
+    belowMinimum: false,
+    ...patch,
+  });
+
+  it("flags folded batches that stay under the minimum and keeps their dollars", () => {
+    const folded = foldPayrollBatches([
+      batch({ batchKey: "a", payDate: "2026-01-02", lineCount: 1, amountCents: 100 }),
+      batch({ batchKey: "b", payDate: "2026-02-02", lineCount: 1, amountCents: 250 }),
+      batch({ batchKey: "big", payDate: "2026-01-02", lineCount: MIN_PAYROLL_BATCH_LINES, amountCents: 900 }),
+    ]);
+    expect(folded.batches.reduce((sum, row) => sum + row.amountCents, 0)).toBe(1250);
+    expect(folded.batches.find((row) => row.batchKey === "big")?.belowMinimum).toBe(false);
+    expect(folded.batches.filter((row) => row.belowMinimum).reduce((sum, row) => sum + row.amountCents, 0)).toBe(350);
+    for (const row of folded.batches) expect(row.lineCount >= MIN_PAYROLL_BATCH_LINES || row.belowMinimum).toBe(true);
+    const sameMonth = foldPayrollBatches([
+      batch({ batchKey: "a", lineCount: 2, amountCents: 10 }),
+      batch({ batchKey: "b", lineCount: 2, amountCents: 15 }),
+    ]);
+    expect(sameMonth.batches).toHaveLength(1);
+    expect(sameMonth.batches[0].lineCount).toBe(4);
+    expect(sameMonth.batches[0].belowMinimum).toBe(false);
+    expect(sameMonth.batches[0].amountCents).toBe(25);
+  });
+});
+
+describe("xlsx limits", () => {
+  it("rejects an oversized compressed workbook before unzipping", () => {
+    const huge = new Uint8Array(XLSX_MAX_COMPRESSED_BYTES + 1);
+    huge[0] = 0x50;
+    huge[1] = 0x4b;
+    expect(() => xlsxToRows(huge)).toThrow(/too large/i);
+  });
+
+  it("aborts when uncompressed bytes exceed the declared size", () => {
+    expect(uncompressedWithinLimits(5, 5, 5, { entry: 10, total: 20 })).toBe(true);
+    expect(uncompressedWithinLimits(6, 5, 6, { entry: 10, total: 20 })).toBe(false);
+    expect(uncompressedWithinLimits(5, 9, 21, { entry: 10, total: 20 })).toBe(false);
+    const payload = "x".repeat(80);
+    const packed = zipSync({ "xl/worksheets/sheet1.xml": strToU8(payload) });
+    const forged = forgeUncompressedSize(packed, 80, 10);
+    expect(() => xlsxToRows(forged, { entry: 100, total: 100 })).toThrow(/larger than declared/i);
+  });
+
+  it("reads a small worksheet", () => {
+    const sheet = `<?xml version="1.0"?><worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>HELLO</t></is></c></row></sheetData></worksheet>`;
+    const packed = zipSync({ "xl/worksheets/sheet1.xml": strToU8(sheet) });
+    const rows = xlsxToRows(packed);
+    expect(rows[0][0]).toBe("HELLO");
+  });
+});
+
+function forgeUncompressedSize(packed: Uint8Array, from: number, to: number): Uint8Array {
+  const copy = new Uint8Array(packed);
+  const fromBytes = uint32(from);
+  const toBytes = uint32(to);
+  let patched = 0;
+  for (let i = 0; i <= copy.length - 4; i += 1) {
+    if (copy[i] === fromBytes[0] && copy[i + 1] === fromBytes[1] && copy[i + 2] === fromBytes[2] && copy[i + 3] === fromBytes[3]) {
+      copy.set(toBytes, i);
+      patched += 1;
+    }
+  }
+  if (patched < 2) throw new Error("Could not forge the zip size fields");
+  return copy;
+}
+
+function uint32(value: number): Uint8Array {
+  const bytes = new Uint8Array(4);
+  bytes[0] = value & 255;
+  bytes[1] = (value >> 8) & 255;
+  bytes[2] = (value >> 16) & 255;
+  bytes[3] = (value >> 24) & 255;
+  return bytes;
+}
 
 describe("source text", () => {
   it("does not use em or en dashes", () => {

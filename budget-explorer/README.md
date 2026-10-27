@@ -12,7 +12,7 @@ The site is not indexed. Every response sends `X-Robots-Tag: noindex, nofollow, 
 - Links are relative. An optional `PUBLIC_BASE_URL` is shown on About when it is an http(s) URL. The app does not hardcode a hostname, so the Worker can move to another custom domain later.
 - Money is stored as integer cents. The published pages read the latest import whose status is `published`. Older imports are kept.
 
-Payroll lines (payroll journals, warrant or direct deposit text, and salary or benefit object codes) are stored only as batch totals. Names and individual pay lines are not stored. Lines dated after the report's "data as of" date are stored, flagged, and left out of search, account payments, plat activity, and questions.
+Payroll lines (payroll journals, warrant or direct deposit text, and salary or benefit object codes) are stored with the employee name and the individual amount. Folded batch totals are stored too. The admin switch "Show person names and individual pay" decides what readers see. It defaults to on. When it is off, search, drill-down, plat, CSV export, and questions show payroll as "Payroll (batch total)" and do not include person names or individual pay. Lines dated after the report's "data as of" date are stored, flagged, and left out of search, account payments, plat activity, and questions.
 
 ## Secrets
 
@@ -29,7 +29,7 @@ The session cookie is `HttpOnly`, `Secure`, `SameSite=Lax`, and expires after ab
 
 ## D1
 
-The D1 database name is `budget-explorer`. Its id is in `wrangler.jsonc`. Migration `0001_init.sql` is already applied on the remote database. Apply it locally before seeding:
+The D1 database name is `budget-explorer`. Its id is in `wrangler.jsonc`. Migration `0001_init.sql` is already applied on the remote database. Apply `0002_settings.sql` remotely before deploying the names switch. Apply both locally before seeding:
 
 ```bash
 npx wrangler d1 migrations apply budget-explorer --local
@@ -63,7 +63,7 @@ Admin, Import accepts:
 - `.csv` and `.xlsx` for a chart of accounts (fund, department, and object codes and names). The first worksheet is read from Excel files.
 - `.pdf` is rejected with an explanation. Reliable PDF text extraction is not available inside the Worker. Export the report as text and upload that file.
 
-The preview shows fund, account, and payment counts, a comparison with the printed grand total when that line is present, unmatched codes, and any account whose payment lines do not sum to year to date spending. It also warns when payroll batches under 3 lines were folded into a combined monthly total, and it lists vendor names that look like a person so someone can check them before publishing. Those payments stay in the import. Publish is refused when the stored row counts do not match the parse. Publish keeps the import and makes it the one the site reads. Draft imports stay off the plat fee history until an admin has unlocked the session. Re-importing does not delete older imports. Payment lines are keyed by fund, account, check number, and amount (journal id when the check number is blank) so overlapping snapshots can be compared without treating them as one combined ledger.
+The preview shows fund, account, and payment counts, a comparison with the printed grand total when that line is present, unmatched codes, and any account whose payment lines do not sum to year to date spending. It also warns when payroll batches under 3 lines were folded into a combined monthly total. Those folded batches are flagged and still stored. Names and individual pay are stored with the import. The admin switch controls whether they are shown, so the preview does not list person names. Publish is refused when the stored row counts do not match the parse. Publish keeps the import and makes it the one the site reads. Draft imports stay off the plat fee history until an admin has unlocked the session. Re-importing does not delete older imports. Payment lines are keyed by fund, account, check number, and amount (journal id when the check number is blank) so overlapping snapshots can be compared without treating them as one combined ledger.
 
 A full year file is large. If the Admin upload cannot finish inside Worker limits, use `scripts/seed-local.sh`.
 

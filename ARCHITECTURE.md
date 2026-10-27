@@ -23,7 +23,7 @@ Private prototype for reading a Walton County year to date budget report. It is 
 - Project directory: `budget-explorer/`
 - Domain: budget.whatshappeningnetwork.com
 - workers.dev hostname: budget-explorer.352marc.workers.dev
-- D1 database: `budget-explorer` (binding `DB`). The id is in `budget-explorer/wrangler.jsonc`. Migration `0001_init.sql` is already applied remotely.
+- D1 database: `budget-explorer` (binding `DB`). The id is in `budget-explorer/wrangler.jsonc`. Migration `0001_init.sql` is already applied remotely. Migration `0002_settings.sql` adds the names switch and payroll line storage. Apply it remotely before deploying this change.
 - Workers AI binding: `AI`. The model id is the constant `AI_MODEL` in `budget-explorer/src/qa.ts`. The model only sees rows retrieved for that question.
 - Secret names only. Do not commit values.
   - `SITE_PASSWORD` (required): shared site password
@@ -36,9 +36,11 @@ Private prototype for reading a Walton County year to date budget report. It is 
 Gotchas:
 
 - The GitHub repository is public. Do not commit county payment rows, payroll detail, or secret values.
-- Payroll is stored and shown as batch totals only. Employee names and individual pay lines are not stored. A payroll batch with fewer than 3 lines is not stored on its own. Its dollars are folded into a combined monthly total, and the import preview warns about that before publish.
+- Payroll employee names and individual pay are stored on every import. One admin switch, "Show person names and individual pay", controls whether they are shown. The default is on, from `SHOW_PERSON_NAMES_DEFAULT` in `budget-explorer/src/access.ts`. The switch lives in D1 (`settings`) and is changed only by `POST /admin/settings` after the admin unlock, with CSRF. Each change is written to `settings_log` with a timestamp. Turning it off does not require a re-import.
+- When the switch is off, `budget-explorer/src/access.ts` is the only reader for payments, payroll lines, search, drill-down, plat lines, CSV export, and question context. Hidden queries do not select employee names. Person-like vendor names are blanked in SQL. Payroll is returned as grouped totals labeled "Payroll (batch total)". The model answer and its citations are filtered again before the page is rendered. There is no JSON API for these rows.
+- A payroll batch with fewer than 3 lines is folded into a combined monthly total and flagged `below_minimum`. The folded batch is still stored, so those dollars stay reachable. Hidden mode groups the stored payroll lines by that folded batch and shows the batch total only.
 - Non-vendor detail lines keep coded fields only. Raw narrative text from those lines is not stored.
-- Vendor names that look like a person are listed on the import preview for a human check. Those payments stay in the import.
+- Vendor payments that look like a person stay in the import. The import preview does not list those names. When the switch is off, the row remains and the name is shown as "Name withheld".
 - Plat fee history shows published imports. Draft imports show there only after an admin unlock, and they remain on the admin import list.
-- An import can be published only when the stored fund, department, account, payment, and payroll row counts match the parse.
+- An import can be published only when the stored fund, department, account, payment, payroll batch, and payroll line counts match the parse.
 - Lines dated after the report date (for the current file, after 9/15/2026) are stored and flagged. Search, account payment lists, plat activity, and questions exclude them.

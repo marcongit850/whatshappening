@@ -21,6 +21,7 @@ console.log(`funds ${parsed.funds.length}`);
 console.log(`accounts ${parsed.accounts.length}`);
 console.log(`payments ${parsed.payments.length}`);
 console.log(`payroll batches ${parsed.payrollBatches.length}`);
+console.log(`payroll lines ${parsed.payrollLines.length}`);
 console.log(`after report date ${parsed.afterCutoffCount}`);
 console.log(`recon mismatches ${parsed.reconMismatches.length}`);
 console.log(`original ${(orig / 100).toFixed(2)}`);
@@ -51,13 +52,13 @@ const statements: string[] = [];
 const createdAt = new Date().toISOString();
 statements.push(`INSERT INTO imports (
   created_at, data_as_of, filename, status, fund_count, department_count, account_count,
-  payment_count, payroll_batch_count, after_cutoff_count, recon_mismatch_count,
+  payment_count, payroll_batch_count, payroll_line_count, after_cutoff_count, recon_mismatch_count,
   orig_cents, adj_cents, rev_cents, ytd_cents, enc_cents, avail_cents,
   printed_orig_cents, printed_rev_cents, printed_ytd_cents, published_at
 ) VALUES (
   ${q(createdAt)}, ${q(parsed.dataAsOf)}, ${q("local-report.txt")}, 'published',
   ${parsed.funds.length}, ${parsed.departments.length}, ${parsed.accounts.length},
-  ${parsed.payments.length}, ${parsed.payrollBatches.length}, ${parsed.afterCutoffCount}, ${parsed.reconMismatches.length},
+  ${parsed.payments.length}, ${parsed.payrollBatches.length}, ${parsed.payrollLines.length}, ${parsed.afterCutoffCount}, ${parsed.reconMismatches.length},
   ${orig}, ${sum(parsed.accounts.map((row) => row.adjCents))}, ${rev}, ${ytd},
   ${sum(parsed.accounts.map((row) => row.encCents))}, ${sum(parsed.accounts.map((row) => row.availCents))},
   ${parsed.printed ? parsed.printed.origCents : "NULL"}, ${parsed.printed ? parsed.printed.revCents : "NULL"}, ${parsed.printed ? parsed.printed.ytdCents : "NULL"},
@@ -85,17 +86,26 @@ for (const account of parsed.accounts) {
 for (const row of parsed.payments) {
   statements.push(`INSERT INTO payments (
     import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
-    amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key
+    amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key, is_person_name
   ) VALUES (
     ${importId}, ${q(row.fund)}, ${q(row.dept)}, ${q(row.objectCode)}, ${q(row.project)}, ${q(row.journal)}, ${q(row.payDate)}, ${q(row.source)},
-    ${row.amountCents}, ${q(row.vendorNumber)}, ${q(row.vendorName)}, ${q(row.invoice)}, ${q(row.checkNumber)}, ${q(row.description)}, ${row.afterCutoff ? 1 : 0}, ${q(row.dedupeKey)}
+    ${row.amountCents}, ${q(row.vendorNumber)}, ${q(row.vendorName)}, ${q(row.invoice)}, ${q(row.checkNumber)}, ${q(row.description)}, ${row.afterCutoff ? 1 : 0}, ${q(row.dedupeKey)}, ${row.isPersonName ? 1 : 0}
   );`);
 }
 for (const batch of parsed.payrollBatches) {
   statements.push(`INSERT INTO payroll_batches (
-    import_id, fund_code, dept_code, object_code, project_code, batch_key, pay_date, amount_cents, line_count
+    import_id, fund_code, dept_code, object_code, project_code, batch_key, pay_date, amount_cents, line_count, below_minimum
   ) VALUES (
-    ${importId}, ${q(batch.fund)}, ${q(batch.dept)}, ${q(batch.objectCode)}, ${q(batch.project)}, ${q(batch.batchKey)}, ${q(batch.payDate)}, ${batch.amountCents}, ${batch.lineCount}
+    ${importId}, ${q(batch.fund)}, ${q(batch.dept)}, ${q(batch.objectCode)}, ${q(batch.project)}, ${q(batch.batchKey)}, ${q(batch.payDate)}, ${batch.amountCents}, ${batch.lineCount}, ${batch.belowMinimum ? 1 : 0}
+  );`);
+}
+for (const line of parsed.payrollLines) {
+  statements.push(`INSERT INTO payroll_lines (
+    import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
+    amount_cents, employee_name, batch_key, after_cutoff, dedupe_key, description
+  ) VALUES (
+    ${importId}, ${q(line.fund)}, ${q(line.dept)}, ${q(line.objectCode)}, ${q(line.project)}, ${q(line.journal)}, ${q(line.payDate)}, ${q(line.source)},
+    ${line.amountCents}, ${q(line.employeeName)}, ${q(line.batchKey)}, ${line.afterCutoff ? 1 : 0}, ${q(line.dedupeKey)}, ${q(line.description)}
   );`);
 }
 
@@ -114,6 +124,7 @@ const dbFile = findLocalDb(projectRoot);
 const sqlPath = join(outDir, "seed.sql");
 const reset = [
   "DELETE FROM payments;",
+  "DELETE FROM payroll_lines;",
   "DELETE FROM payroll_batches;",
   "DELETE FROM accounts;",
   "DELETE FROM departments;",

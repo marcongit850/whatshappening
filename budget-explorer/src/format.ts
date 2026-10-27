@@ -35,12 +35,21 @@ export function moneyExact(cents: number): string {
   return money(cents, 2);
 }
 
-/** CSV cell that cannot be read as a spreadsheet formula. */
+/** CSV text cell that cannot be read as a spreadsheet formula. Name cells use this. */
 export function csvCell(value: unknown): string {
   let text = String(value ?? "");
   if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
   return text;
+}
+
+/** CSV amount. A real negative stays a number. Do not pass amounts through csvCell. */
+export function csvAmount(cents: number): string {
+  if (!Number.isFinite(cents)) return "";
+  const negative = cents < 0;
+  const abs = Math.abs(Math.trunc(cents));
+  const text = `${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+  return negative ? `-${text}` : text;
 }
 
 /** Compact axis label. Full figures stay on the cards and in the tables. */
