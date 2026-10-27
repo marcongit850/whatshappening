@@ -13,3 +13,5 @@ test
 node_modules
 dist
 **/.DS_Store
+budget-explorer
+**/seed.sql

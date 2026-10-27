@@ -1,0 +1,5 @@
+SITE_PASSWORD=replace-me
+SESSION_SECRET=replace-me-with-a-long-random-string
+ADMIN_PASSWORD=replace-me
+# Optional. Not used for links. Leave empty to stay host-agnostic.
+# PUBLIC_BASE_URL=

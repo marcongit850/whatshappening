@@ -1,0 +1,26 @@
+{
+  // Budget Explorer. Separate Worker from the placeholder site.
+  // D1 database budget-explorer. Migration 0001_init.sql is already applied remotely.
+  "name": "budget-explorer",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-27",
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "budget-explorer",
+      "database_id": "06dfc109-c0e5-4ce1-a87f-e7f1b4b2ef50"
+    }
+  ],
+  "vars": {
+    "PUBLIC_BASE_URL": ""
+  }
+}
