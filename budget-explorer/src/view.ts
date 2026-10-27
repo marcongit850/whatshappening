@@ -120,7 +120,6 @@ ${error ? `<p class="warning">${esc(error)}</p>` : ""}
 <input type="hidden" name="next" value="${esc(next)}">
 <input type="hidden" name="form_token" value="${esc(formToken)}">
 <div><label for="password">Site password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
-<div><label for="admin_password">Admin password, if one is configured</label><input id="admin_password" name="admin_password" type="password" autocomplete="off"></div>
 <button class="btn" type="submit">Continue</button>
 </form>
 </section></div>`,
@@ -622,6 +621,7 @@ export function renderPreview(opts: {
   unmatchedDepts: { code: string; report_name: string }[];
   unmatchedObjects: { code: string; title: string }[];
   overlap: number | null;
+  personNames: string[];
   csrf: string;
   error: string;
 }): string {
@@ -640,6 +640,8 @@ export function renderPreview(opts: {
 </tr>`,
     )
     .join("");
+  const foldedWarning = opts.row.note && opts.row.note.startsWith("Folded ") ? opts.row.note : "";
+  const people = opts.personNames.slice(0, 80).map((name) => `<li>${esc(name)}</li>`).join("");
   const deptList = opts.unmatchedDepts
     .slice(0, 40)
     .map((dept) => `<li><span class="mono">${esc(dept.code)}</span> ${esc(dept.report_name || "unmatched")}</li>`)
@@ -665,6 +667,12 @@ ${
     : ""
 }
 ${opts.overlap != null ? `<p class="hint">${opts.overlap.toLocaleString("en-US")} payment lines share a check key with the previously published import. Publishing this snapshot does not add those lines on top of the older one. The site reads only the latest published import.</p>` : ""}
+${foldedWarning ? `<p class="warning">${esc(foldedWarning)} Review this before publishing.</p>` : ""}
+${
+  people
+    ? `<h2>Names to review</h2><p class="warning">${opts.personNames.length.toLocaleString("en-US")} vendor names look like a person. The payments stay in this import. Check the list before you publish.</p><ul>${people}</ul>`
+    : ""
+}
 ${
   opts.row.status !== "published"
     ? `<form method="post" action="/admin/import/${opts.row.id}/publish"><input type="hidden" name="csrf" value="${esc(opts.csrf)}"><button class="btn gold" type="submit">Publish this import</button></form>`
@@ -693,6 +701,16 @@ export function renderMessage(title: string, message: string, csrf: string, data
 export function renderEmpty(csrf: string, admin: boolean): string {
   const body = `<h1>No budget published yet</h1><p class="lede">An administrator needs to import a year to date report and publish it.</p>${admin ? `<p><a class="btn" href="/admin">Go to import</a></p>` : ""}`;
   return page({ title: "Budget Explorer", active: "overview", body, admin, csrf });
+}
+
+export function renderAdminDisabled(csrf: string): string {
+  return page({
+    title: "Admin is off. Budget Explorer",
+    active: "",
+    csrf,
+    admin: false,
+    body: `<h1>Admin is off</h1><p class="lede">Admin tools stay off until ADMIN_PASSWORD is set on the Worker.</p>`,
+  });
 }
 
 export function renderUnlock(csrf: string, error: string): string {

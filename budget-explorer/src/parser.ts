@@ -68,7 +68,11 @@ export interface ParseResult {
   printed: { origCents: number; adjCents: number; revCents: number; ytdCents: number; encCents: number; availCents: number } | null;
   afterCutoffCount: number;
   reconMismatches: ParsedAccount[];
+  foldedPayrollBatches: number;
 }
+
+export const MAX_REPORT_LINE = 4000;
+const MIN_PAYROLL_BATCH_LINES = 3;
 
 export function isPayrollObject(code: string): boolean {
   return /^(51[1-5]\d{3}|52[1-5]\d{3})$/.test(code);
@@ -110,27 +114,56 @@ interface VendorParts {
   checkNumber: string;
 }
 
+function gapSplit(value: string): { left: string; right: string } | null {
+  let index = -1;
+  for (let i = 0; i < value.length - 1; i += 1) {
+    const char = value[i];
+    if ((char === " " || char === "\t") && (value[i + 1] === " " || value[i + 1] === "\t")) {
+      index = i;
+      break;
+    }
+  }
+  if (index <= 0) return null;
+  const left = value.slice(0, index).trim();
+  const right = value.slice(index).trim();
+  if (!left || !right) return null;
+  return { left, right };
+}
+
+function trailingCheck(value: string): { check: string; rest: string } | null {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === " ") end -= 1;
+  let start = end;
+  while (start > 0 && value[start - 1] >= "0" && value[start - 1] <= "9") start -= 1;
+  const length = end - start;
+  if (length < 6 || length > 9) return null;
+  if (start > 0 && value[start - 1] !== " " && value[start - 1] !== "\t") return null;
+  return { check: value.slice(start, end), rest: value.slice(0, start).trim() };
+}
+
 export function parseVendorRest(rest: string): VendorParts | null {
-  const match = /^VND\s+(\d+)\s+(?:IN|DOC)\s+([\s\S]*)$/.exec(rest.trim());
+  const trimmed = rest.trim();
+  if (!trimmed || trimmed.length > 1000) return null;
+  const match = /^VND\s+(\d+)\s+(?:IN|DOC)\s+(\S[\s\S]*)$/.exec(trimmed);
   if (!match) return null;
   const vendorNumber = match[1];
   let tail = match[2].trim();
   let checkNumber = "";
-  const check = /\s+(\d{6,9})\s*$/.exec(tail);
+  const check = trailingCheck(tail);
   if (check) {
-    checkNumber = check[1];
-    tail = tail.slice(0, check.index).trim();
+    checkNumber = check.check;
+    tail = check.rest;
   }
   let invoice = "";
   let body = tail;
-  const split = /^(.*?)(?:\s{2,})([\s\S]+)$/.exec(tail);
+  const split = gapSplit(tail);
   if (split) {
-    invoice = split[1].trim();
-    body = split[2].trim();
+    invoice = split.left;
+    body = split.right;
   } else {
-    const parts = tail.split(/\s+/, 2);
-    invoice = parts[0] || "";
-    body = tail.slice(invoice.length).trim();
+    const space = tail.indexOf(" ");
+    invoice = space > 0 ? tail.slice(0, space) : tail;
+    body = space > 0 ? tail.slice(space).trim() : "";
   }
   if (/^\d{6,9}$/.test(body) && !checkNumber) {
     checkNumber = body;
@@ -138,15 +171,64 @@ export function parseVendorRest(rest: string): VendorParts | null {
   }
   let vendorName = body;
   let description = "";
-  const named = /^(.*?)(?:\s{2,})([\s\S]+)$/.exec(body);
-  if (named && named[2].trim()) {
-    vendorName = named[1].trim();
-    description = named[2].trim();
+  const named = gapSplit(body);
+  if (named) {
+    vendorName = named.left;
+    description = named.right;
   } else if (body.length > 20) {
     vendorName = body.slice(0, 20).trim();
     description = body.slice(20).trim();
   }
   return { vendorNumber, invoice, vendorName, description, checkNumber };
+}
+
+const ORG_WORD = /\b(INC|LLC|LLP|CORP|CO|LTD|COUNTY|CITY|BANK|DEPT|OFFICE|SUPPLY|SERVICE|SERVICES|ASSOC|ASSN|PLLC|GROUP|FUND|STATE|AUTHORITY|DISTRICT|SCHOOL|HOSPITAL|CLINIC|RENTALS|CENTERS|COMPANY|UNIVERSITY|UNIV)\b/;
+
+/** A vendor string that looks like a person's name. Company words are left alone. */
+export function looksLikePersonName(name: string): boolean {
+  const trimmed = name.trim().replace(/\s+/g, " ");
+  if (trimmed.length < 5 || trimmed.length > 40) return false;
+  if (/\d|&|\//.test(trimmed)) return false;
+  if (ORG_WORD.test(trimmed)) return false;
+  if (/^[A-Z][A-Z'.-]*,\s+[A-Z][A-Z'.-]*(?:\s+[A-Z][A-Z'.-]*)?$/.test(trimmed)) return true;
+  return /^[A-Z][A-Z'.-]*(?:\s+[A-Z][A-Z'.-]*){1,2}$/.test(trimmed);
+}
+
+export function foldedPayrollNote(count: number): string {
+  return `Folded ${count} payroll batches with fewer than 3 lines into a combined monthly total. They are not stored individually.`;
+}
+
+export function foldPayrollBatches(batches: ParsedPayrollBatch[]): { batches: ParsedPayrollBatch[]; foldedCount: number } {
+  const kept: ParsedPayrollBatch[] = [];
+  const folded = new Map<string, ParsedPayrollBatch>();
+  let foldedCount = 0;
+  for (const batch of batches) {
+    if (batch.lineCount >= MIN_PAYROLL_BATCH_LINES) {
+      kept.push(batch);
+      continue;
+    }
+    foldedCount += 1;
+    const month = batch.payDate.slice(0, 7);
+    const payDate = month.length === 7 ? `${month}-01` : "";
+    const key = [batch.fund, batch.dept, batch.objectCode, batch.project, payDate].join("|");
+    const existing = folded.get(key);
+    if (existing) {
+      existing.amountCents += batch.amountCents;
+      existing.lineCount += batch.lineCount;
+    } else {
+      folded.set(key, {
+        fund: batch.fund,
+        dept: batch.dept,
+        objectCode: batch.objectCode,
+        project: batch.project,
+        batchKey: "combined",
+        payDate,
+        amountCents: batch.amountCents,
+        lineCount: batch.lineCount,
+      });
+    }
+  }
+  return { batches: [...kept, ...folded.values()], foldedCount };
 }
 
 function batchKeyFrom(rest: string, journal: string): string {
@@ -183,6 +265,7 @@ export function parseReport(text: string): ParseResult {
   };
 
   for (const raw of lines) {
+    if (raw.length > MAX_REPORT_LINE) continue;
     const line = raw.replace(/\f/g, "");
     if (!line.trim()) continue;
     const trimmed = line.trim();
@@ -320,14 +403,15 @@ export function parseReport(text: string): ParseResult {
         vendorName: vendor?.vendorName || "",
         invoice: vendor?.invoice || "",
         checkNumber,
-        description: (vendor?.description || rest).slice(0, 120),
+        description: vendor ? vendor.description.slice(0, 120) : "",
         afterCutoff,
         dedupeKey: dedupeKey(account.fund, account.dept, account.objectCode, account.project, checkNumber, amountCents, detail[1]),
       });
     }
   }
 
-  const payrollList = [...payroll.values()];
+  const folded = foldPayrollBatches([...payroll.values()]);
+  const payrollList = folded.batches;
   const sums = new Map<string, number>();
   for (const payment of payments) {
     const key = `${payment.dept}|${payment.objectCode}|${payment.project}`;
@@ -357,6 +441,7 @@ export function parseReport(text: string): ParseResult {
     printed,
     afterCutoffCount: payments.filter((payment) => payment.afterCutoff).length,
     reconMismatches: accountList.filter((account) => account.reconDiffCents !== 0),
+    foldedPayrollBatches: folded.foldedCount,
   };
 }
 

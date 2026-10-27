@@ -1,5 +1,5 @@
 import type { ChartNames } from "./csv";
-import type { ParseResult, ParsedPayment } from "./parser";
+import { foldedPayrollNote, type ParseResult, type ParsedPayment } from "./parser";
 
 export interface ImportRow {
   id: number;
@@ -76,6 +76,29 @@ export interface PaymentRow {
   description: string | null;
   after_cutoff: number;
   dedupe_key: string;
+}
+
+export interface ImportRowCounts {
+  funds: number;
+  departments: number;
+  accounts: number;
+  payments: number;
+  payrollBatches: number;
+}
+
+export function rowCountsMatch(expected: ImportRowCounts, actual: ImportRowCounts): boolean {
+  return (
+    expected.funds === actual.funds &&
+    expected.departments === actual.departments &&
+    expected.accounts === actual.accounts &&
+    expected.payments === actual.payments &&
+    expected.payrollBatches === actual.payrollBatches
+  );
+}
+
+export function historyStatuses(adminUnlocked: boolean): string[] {
+  if (adminUnlocked) return ["published", "draft"];
+  return ["published"];
 }
 
 export interface NameMaps {
@@ -181,6 +204,16 @@ export async function saveImport(db: D1Database, result: ParseResult, filename: 
       .bind(importId, batch.fund, batch.dept, batch.objectCode, batch.project, batch.batchKey, batch.payDate, batch.amountCents, batch.lineCount),
   );
   await runChunked(db, payrollStmts);
+  const stored = await getImport(db, importId);
+  const actual = await storedCounts(db, importId);
+  const expected = countsFromImport(stored);
+  if (!stored || !expected || !rowCountsMatch(expected, actual)) {
+    await markFailed(db, importId, "Stored rows do not match the parsed file.");
+    throw new Error("Stored rows do not match the parsed file.");
+  }
+  if (result.foldedPayrollBatches > 0) {
+    await db.prepare("UPDATE imports SET note = ? WHERE id = ?").bind(foldedPayrollNote(result.foldedPayrollBatches), importId).run();
+  }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Import failed";
     await markFailed(db, importId, message);
@@ -225,8 +258,38 @@ export async function insertPayments(db: D1Database, importId: number, payments:
 }
 
 export async function publishImport(db: D1Database, importId: number): Promise<void> {
+  const stored = await getImport(db, importId);
+  const expected = countsFromImport(stored);
+  if (!stored || stored.status === "failed" || !expected) throw new Error("That import cannot be published.");
+  const actual = await storedCounts(db, importId);
+  if (!rowCountsMatch(expected, actual)) {
+    await markFailed(db, importId, "Stored rows do not match the parsed file.");
+    throw new Error("Stored rows do not match the parsed file.");
+  }
   const stamp = new Date().toISOString();
-  await db.prepare("UPDATE imports SET status = 'published', published_at = ? WHERE id = ?").bind(stamp, importId).run();
+  await db.prepare("UPDATE imports SET status = 'published', published_at = ? WHERE id = ? AND status != 'failed'").bind(stamp, importId).run();
+}
+
+function countsFromImport(row: ImportRow | null): ImportRowCounts | null {
+  if (!row) return null;
+  return {
+    funds: row.fund_count,
+    departments: row.department_count,
+    accounts: row.account_count,
+    payments: row.payment_count,
+    payrollBatches: row.payroll_batch_count,
+  };
+}
+
+async function storedCounts(db: D1Database, importId: number): Promise<ImportRowCounts> {
+  const count = async (sql: string) => Number((await db.prepare(sql).bind(importId).first<{ n: number }>())?.n || 0);
+  return {
+    funds: await count("SELECT COUNT(*) AS n FROM funds WHERE import_id = ?"),
+    departments: await count("SELECT COUNT(*) AS n FROM departments WHERE import_id = ?"),
+    accounts: await count("SELECT COUNT(*) AS n FROM accounts WHERE import_id = ?"),
+    payments: await count("SELECT COUNT(*) AS n FROM payments WHERE import_id = ?"),
+    payrollBatches: await count("SELECT COUNT(*) AS n FROM payroll_batches WHERE import_id = ?"),
+  };
 }
 
 export async function markFailed(db: D1Database, importId: number, note: string): Promise<void> {
@@ -483,7 +546,9 @@ export interface PlatSnapshot {
   accounts: number;
 }
 
-export async function platHistory(db: D1Database, fund: string, dept: string): Promise<PlatSnapshot[]> {
+export async function platHistory(db: D1Database, fund: string, dept: string, adminUnlocked: boolean): Promise<PlatSnapshot[]> {
+  const statuses = historyStatuses(adminUnlocked);
+  const marks = statuses.map(() => "?").join(", ");
   const rows = await db
     .prepare(
       `SELECT i.id, i.created_at, i.published_at, i.data_as_of, i.status, i.filename,
@@ -495,13 +560,21 @@ export async function platHistory(db: D1Database, fund: string, dept: string): P
               COUNT(a.dept_code) AS accounts
        FROM imports i
        LEFT JOIN accounts a ON a.import_id = i.id AND a.fund_code = ? AND a.dept_code = ?
-       WHERE i.status != 'failed'
+       WHERE i.status IN (${marks})
        GROUP BY i.id
        ORDER BY i.id`,
     )
-    .bind(fund, dept)
+    .bind(fund, dept, ...statuses)
     .all<PlatSnapshot>();
   return rows.results || [];
+}
+
+export async function vendorNamesForImport(db: D1Database, importId: number): Promise<string[]> {
+  const rows = await db
+    .prepare("SELECT DISTINCT vendor_name AS name FROM payments WHERE import_id = ? AND vendor_name != '' ORDER BY vendor_name")
+    .bind(importId)
+    .all<{ name: string }>();
+  return (rows.results || []).map((row) => row.name);
 }
 
 export async function overlapCount(db: D1Database, importId: number, priorId: number): Promise<number> {

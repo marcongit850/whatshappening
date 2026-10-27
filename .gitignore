@@ -4,6 +4,8 @@
 node_modules
 dist
 budget-explorer/data/
+seed.sql
+**/seed.sql
 budget-explorer/.dev.vars
 budget-explorer/.wrangler
 budget-explorer/node_modules

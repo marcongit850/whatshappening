@@ -4,6 +4,7 @@ import {
   FORM_COOKIE,
   LOGIN_WINDOW_SEC,
   QA_MAX_CHARS,
+  adminUnlockAllowed,
   clearSessionCookie,
   clientIp,
   csrfOk,
@@ -37,6 +38,7 @@ import {
   paymentPage,
   platHistory,
   publishImport,
+  vendorNamesForImport,
   qaHits,
   reconAccounts,
   recordLoginAttempt as storeAttempt,
@@ -47,14 +49,17 @@ import {
   type SearchFilters,
 } from "./db";
 import { adminPasswordSet, publicBase, type AppEnv } from "./env";
-import { fiscalPosition, fyMonthIndex, isoDate } from "./format";
-import { parseReport } from "./parser";
+import { csvCell, fiscalPosition, fyMonthIndex, isoDate } from "./format";
+import { uploadAllowed } from "./limits";
+import { looksLikePersonName, parseReport } from "./parser";
+import { safeNext } from "./safe-next";
 import { AI_MODEL, QA_SYSTEM, modelText, retrieveContext } from "./qa";
 import { CLIENT_JS, CSS } from "./style";
 import { xlsxToRows } from "./xlsx";
 import {
   renderAbout,
   renderAccount,
+  renderAdminDisabled,
   renderAdminHome,
   renderAsk,
   renderDepartment,
@@ -120,7 +125,7 @@ app.get("/favicon.svg", (c) => {
 app.get("/login", async (c) => {
   const token = crypto.randomUUID().replace(/-/g, "");
   c.header("Set-Cookie", formCookie(token));
-  return c.html(renderLogin("", safeNext(c.req.query("next") || "/"), token));
+  return c.html(renderLogin("", safeNext(c.req.query("next") || "/", new URL(c.req.url).origin), token));
 });
 
 app.post("/login", async (c) => {
@@ -150,13 +155,9 @@ app.post("/login", async (c) => {
     c.header("Set-Cookie", formCookie(fresh));
     return c.html(renderLogin("That password does not match.", "/", fresh), 401);
   }
-  let admin = !adminPasswordSet(c.env);
-  if (adminPasswordSet(c.env)) {
-    admin = await passwordsMatch(String(form.admin_password || ""), c.env.ADMIN_PASSWORD);
-  }
-  const session = newSession(admin);
+  const session = newSession(false);
   c.header("Set-Cookie", sessionCookie(await signSession(c.env.SESSION_SECRET, session)));
-  return c.redirect(safeNext(String(form.next || "/")), 303);
+  return c.redirect(safeNext(String(form.next || "/"), new URL(c.req.url).origin), 303);
 });
 
 app.use("*", async (c, next) => {
@@ -164,7 +165,7 @@ app.use("*", async (c, next) => {
   const token = readCookie(c.req.header("cookie"), "be_session");
   const session = await readSession(c.env.SESSION_SECRET, token);
   if (!session) {
-    const nextUrl = safeNext(c.req.path || "/");
+    const nextUrl = safeNext(c.req.path || "/", new URL(c.req.url).origin);
     return c.redirect(`/login?next=${encodeURIComponent(nextUrl)}`, 303);
   }
   c.set("session", session);
@@ -182,7 +183,7 @@ app.post("/logout", async (c) => {
 app.get("/", async (c) => {
   const current = await latestPublished(c.env.DB);
   const session = c.get("session");
-  if (!current) return c.html(renderEmpty(session.csrf, session.admin || !adminPasswordSet(c.env)));
+  if (!current) return c.html(renderEmpty(session.csrf, isAdmin(c)));
   const [departments, names, funds, months] = await Promise.all([
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
@@ -388,7 +389,7 @@ app.get("/sheriff", async (c) => {
 
 app.get("/plat", async (c) => {
   const session = c.get("session");
-  const history = await platHistory(c.env.DB, "114", "11444000");
+  const history = await platHistory(c.env.DB, "114", "11444000", session.admin && adminPasswordSet(c.env));
   const current = await latestPublished(c.env.DB);
   const requested = Number(c.req.query("import") || 0);
   const selected = history.find((item) => item.id === requested) || [...history].reverse().find((item) => item.status === "published") || history[history.length - 1];
@@ -422,17 +423,31 @@ app.get("/admin/history", async (c) => {
 });
 
 app.get("/admin/unlock", async (c) => {
-  if (!adminPasswordSet(c.env) || c.get("session").admin) return c.redirect("/admin", 303);
+  if (!adminPasswordSet(c.env)) return c.html(renderAdminDisabled(c.get("session").csrf), 404);
+  if (c.get("session").admin) return c.redirect("/admin", 303);
   return c.html(renderUnlock(c.get("session").csrf, ""));
 });
 
 app.post("/admin/unlock", async (c) => {
   const session = c.get("session");
+  if (!adminPasswordSet(c.env)) return c.html(renderAdminDisabled(session.csrf), 404);
   const form = await c.req.parseBody();
   if (!(await csrfOk(session.csrf, String(form.csrf || "")))) return c.text("Invalid form token", 403);
-  if (!adminPasswordSet(c.env)) return c.redirect("/admin", 303);
+  const ipHash = await sha256Hex(`${c.env.SESSION_SECRET}:admin:${clientIp(c.req.raw)}`);
+  const windowStart = Math.floor(Date.now() / 1000 / LOGIN_WINDOW_SEC) * LOGIN_WINDOW_SEC;
+  const [priorIp, priorGlobal] = await Promise.all([
+    attemptsFor(c.env.DB, ipHash, windowStart),
+    attemptsFor(c.env.DB, "admin-global", windowStart),
+  ]);
+  if (!adminUnlockAllowed(priorIp, priorGlobal)) {
+    return c.html(renderUnlock(session.csrf, "Too many admin attempts. Wait a few minutes and try again."), 429);
+  }
   const ok = await passwordsMatch(String(form.admin_password || ""), c.env.ADMIN_PASSWORD);
-  if (!ok) return c.html(renderUnlock(session.csrf, "That admin password does not match."), 401);
+  if (!ok) {
+    await storeAttempt(c.env.DB, ipHash, windowStart);
+    await storeAttempt(c.env.DB, "admin-global", windowStart);
+    return c.html(renderUnlock(session.csrf, "That admin password does not match."), 401);
+  }
   const upgraded = { ...session, admin: true };
   c.header("Set-Cookie", sessionCookie(await signSession(c.env.SESSION_SECRET || "", upgraded)));
   return c.redirect("/admin", 303);
@@ -442,6 +457,9 @@ app.post("/admin/import", async (c) => {
   const blocked = await guardAdmin(c);
   if (blocked) return blocked;
   const session = c.get("session");
+  if (!uploadAllowed(c.req.header("content-length"))) {
+    return c.html(renderMessage("Import", "That upload is missing a size or is larger than 20 MB.", session.csrf), 413);
+  }
   const form = await c.req.parseBody();
   if (!(await csrfOk(session.csrf, String(form.csrf || "")))) return c.text("Invalid form token", 403);
   const file = form.file;
@@ -471,16 +489,24 @@ app.post("/admin/chart", async (c) => {
   const blocked = await guardAdmin(c);
   if (blocked) return blocked;
   const session = c.get("session");
+  if (!uploadAllowed(c.req.header("content-length"))) {
+    return c.html(renderMessage("Chart", "That upload is missing a size or is larger than 20 MB.", session.csrf), 413);
+  }
   const form = await c.req.parseBody();
   if (!(await csrfOk(session.csrf, String(form.csrf || "")))) return c.text("Invalid form token", 403);
   const file = form.file;
   if (!(file instanceof File)) return c.html(renderMessage("Chart", "Choose a CSV or Excel file.", session.csrf), 400);
-  const loaded = await interpretFile(file);
-  if (loaded.kind !== "chart" || !loaded.chart) {
-    return c.html(renderMessage("Chart", "That file does not look like a chart of accounts. Expected columns include fund, department, or object codes and names.", session.csrf), 400);
+  if (file.size > 20_000_000) return c.html(renderMessage("Chart", "That file is larger than 20 MB.", session.csrf), 400);
+  try {
+    const loaded = await interpretFile(file);
+    if (loaded.kind !== "chart" || !loaded.chart) {
+      return c.html(renderMessage("Chart", "That file does not look like a chart of accounts. Expected columns include fund, department, or object codes and names.", session.csrf), 400);
+    }
+    const count = await saveChart(c.env.DB, loaded.chart);
+    return c.html(renderMessage("Chart updated", `Saved ${count} chart names.`, session.csrf));
+  } catch {
+    return c.html(renderMessage("Chart", "That spreadsheet could not be read. Use a small CSV or Excel file.", session.csrf), 400);
   }
-  const count = await saveChart(c.env.DB, loaded.chart);
-  return c.html(renderMessage("Chart updated", `Saved ${count} chart names.`, session.csrf));
 });
 
 app.get("/admin/import/:id", async (c) => {
@@ -494,7 +520,10 @@ app.get("/admin/import/:id", async (c) => {
     unmatchedCodes(c.env.DB, id),
     latestPublished(c.env.DB),
   ]);
-  const overlap = prior && prior.id !== id ? await overlapCount(c.env.DB, id, prior.id) : null;
+  const [overlap, names] = await Promise.all([
+    prior && prior.id !== id ? overlapCount(c.env.DB, id, prior.id) : Promise.resolve(null),
+    vendorNamesForImport(c.env.DB, id),
+  ]);
   return c.html(
     renderPreview({
       row,
@@ -502,6 +531,7 @@ app.get("/admin/import/:id", async (c) => {
       unmatchedDepts: unmatched.departments,
       unmatchedObjects: unmatched.objects,
       overlap,
+      personNames: names.filter(looksLikePersonName),
       csrf: c.get("session").csrf,
       error: "",
     }),
@@ -517,7 +547,11 @@ app.post("/admin/import/:id/publish", async (c) => {
   const id = Number(c.req.param("id"));
   const row = await getImport(c.env.DB, id);
   if (!row || row.status === "failed") return c.html(renderMessage("Publish", "That import cannot be published.", session.csrf), 400);
-  await publishImport(c.env.DB, id);
+  try {
+    await publishImport(c.env.DB, id);
+  } catch {
+    return c.html(renderMessage("Publish", "That import cannot be published because its stored rows do not match the parsed file.", session.csrf), 400);
+  }
   return c.redirect("/", 303);
 });
 
@@ -528,10 +562,11 @@ export default app;
 type AppContext = Context<{ Bindings: AppEnv; Variables: { session: SessionPayload } }>;
 
 function isAdmin(c: AppContext): boolean {
-  return c.get("session").admin || !adminPasswordSet(c.env);
+  return adminPasswordSet(c.env) && c.get("session").admin;
 }
 
 async function guardAdmin(c: AppContext): Promise<Response | null> {
+  if (!adminPasswordSet(c.env)) return c.html(renderAdminDisabled(c.get("session").csrf), 404);
   if (isAdmin(c)) return null;
   return c.html(renderUnlock(c.get("session").csrf, ""));
 }
@@ -540,11 +575,6 @@ async function requirePublished(c: AppContext): Promise<Response | import("./db"
   const current = await latestPublished(c.env.DB);
   if (!current) return c.html(renderEmpty(c.get("session").csrf, isAdmin(c)));
   return current;
-}
-
-function safeNext(value: string): string {
-  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/login")) return "/";
-  return value.slice(0, 200);
 }
 
 function pageNumber(value: string | undefined): number {
@@ -575,12 +605,6 @@ function foldMonths(rows: { ym: string; cents: number }[], asOf: string | null):
     if (index != null) buckets[index] += row.cents;
   }
   return buckets;
-}
-
-function csvCell(value: unknown): string {
-  const text = String(value ?? "");
-  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-  return text;
 }
 
 async function interpretFile(file: File): Promise<{ kind: "pdf" | "chart" | "report" | "reject"; text?: string; chart?: ReturnType<typeof chartFromRows> }> {

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chartFromCsv } from "../src/csv.ts";
@@ -43,7 +44,7 @@ if (parsed.printed?.ytdCents === 49472701353) {
 }
 
 const root = dirname(fileURLToPath(import.meta.url));
-const outDir = join(root, "..", "data", "seed");
+const outDir = join(tmpdir(), "budget-explorer-seed");
 mkdirSync(outDir, { recursive: true });
 
 const statements: string[] = [];

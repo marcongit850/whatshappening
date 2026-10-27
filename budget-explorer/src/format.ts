@@ -35,6 +35,14 @@ export function moneyExact(cents: number): string {
   return money(cents, 2);
 }
 
+/** CSV cell that cannot be read as a spreadsheet formula. */
+export function csvCell(value: unknown): string {
+  let text = String(value ?? "");
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
 /** Compact axis label. Full figures stay on the cards and in the tables. */
 export function moneyShort(cents: number): string {
   const sign = cents < 0 ? "-" : "";

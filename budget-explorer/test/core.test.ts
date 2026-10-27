@@ -1,17 +1,16 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import {
-  constantTimeEqual,
-  csrfOk,
-  newSession,
-  rateDecision,
-  readSession,
-  signSession,
-  throttleDecision,
-} from "../src/auth";
-import { fiscalPosition, pace } from "../src/format";
-import { dedupePayments, parseReport, storedText } from "../src/parser";
+import { adminUnlockAllowed, constantTimeEqual, csrfOk, newSession, rateDecision, readSession, signSession, throttleDecision } from "../src/auth";
+import { historyStatuses, rowCountsMatch } from "../src/db";
+import { adminPasswordSet } from "../src/env";
+import { csvCell, fiscalPosition, pace } from "../src/format";
+import { uploadAllowed } from "../src/limits";
+import { MAX_REPORT_LINE, dedupePayments, looksLikePersonName, parseReport, parseVendorRest, storedText } from "../src/parser";
+import { safeNext } from "../src/safe-next";
+import { renderLogin, renderUnlock } from "../src/view";
+import { xlsxToRows, zipEntryAllowed } from "../src/xlsx";
 
 const REPORT = `Walton County
 YEAR-TO-DATE BUDGET REPORT
@@ -77,10 +76,12 @@ describe("parser", () => {
   it("keeps payroll only as batches and drops names", () => {
     expect(result.payments.some((row) => row.objectCode === "512000")).toBe(false);
     expect(result.payrollBatches).toHaveLength(1);
-    expect(result.payrollBatches[0].batchKey).toBe("251010");
+    expect(result.payrollBatches[0].batchKey).toBe("combined");
     expect(result.payrollBatches[0].amountCents).toBe(20000);
+    expect(result.foldedPayrollBatches).toBe(1);
     expect(storedText(result)).not.toContain("JANE");
     expect(storedText(result)).not.toContain("PUBLIC");
+    expect(storedText(result)).not.toContain("251010");
   });
 
   it("flags lines after the report date", () => {
@@ -164,6 +165,115 @@ describe("auth and limits", () => {
     expect(rateDecision(11, 10).allowed).toBe(true);
     expect(rateDecision(12, 10)).toEqual({ allowed: false, reason: "hour" });
     expect(rateDecision(1, 40)).toEqual({ allowed: false, reason: "day" });
+  });
+});
+
+describe("security fixes", () => {
+  const origin = "https://budget.example";
+
+  it("keeps seed files out of a root placeholder deploy", () => {
+    const repo = join(import.meta.dirname, "..", "..");
+    const assets = readFileSync(join(repo, ".assetsignore"), "utf8");
+    const git = readFileSync(join(repo, ".gitignore"), "utf8");
+    const seed = readFileSync(join(import.meta.dirname, "..", "scripts", "seed-local.ts"), "utf8");
+    expect(assets).toMatch(/^budget-explorer$/m);
+    expect(assets).toMatch(/seed\.sql/);
+    expect(git).toMatch(/budget-explorer\/data\//);
+    expect(git).toMatch(/seed\.sql/);
+    expect(seed).toContain("tmpdir");
+    expect(seed.includes('data", "seed"')).toBe(false);
+  });
+
+  it("requires an admin password and throttles unlock failures per IP and globally", () => {
+    expect(adminPasswordSet({ ADMIN_PASSWORD: "  " })).toBe(false);
+    expect(adminPasswordSet({ ADMIN_PASSWORD: "secret" })).toBe(true);
+    expect(renderLogin("", "/", "token")).not.toContain("admin_password");
+    expect(renderUnlock("token", "")).toContain('name="admin_password"');
+    expect(adminUnlockAllowed(7, 0)).toBe(true);
+    expect(adminUnlockAllowed(8, 0)).toBe(false);
+    expect(adminUnlockAllowed(0, 8)).toBe(false);
+  });
+
+  it("stores coded payment fields, folds tiny payroll batches, and flags person-like vendors", () => {
+    const narrative = parseReport(`Report generated: 09/15/2026
+ACCOUNTS FOR: 001 GENERAL FUND
+00101000 SAMPLE DEPARTMENT
+00101000 546000                    OTHER
+                    10.00                    0.00             10.00             10.00              0.00             0.00          100.0%
+  2026/04/000400 12/02/2025 GEN                      10.00 NARRATIVE ABOUT JANE DOE PRIVATE
+00101000 531000                    CONTRACT
+                    20.00                    0.00             20.00             20.00              0.00             0.00          100.0%
+  2026/04/000401 12/03/2025 API                      20.00 VND 000777 IN INV-P        JANE Q PUBLIC        NOTE              500000777
+00101000 512000                    REGULAR SALARIES & WAGES
+                    30.00                    0.00             30.00             30.00              0.00             0.00          100.0%
+  2026/01/000441 10/10/2025 PRJ                      10.00 REF 251010 WARRANT=251010      RUN=1 REGULAR
+  2026/01/000442 10/10/2025 PRJ                      10.00 REF 251010 WARRANT=251010      RUN=1 REGULAR
+  2026/01/000443 10/10/2025 PRJ                      10.00 REF 251010 WARRANT=251010      RUN=1 REGULAR
+  2026/01/000444 10/11/2025 PRJ                      10.00 REF 999 WARRANT=999      RUN=1 REGULAR ALONE
+`);
+    const memo = narrative.payments.find((row) => row.source === "GEN");
+    expect(memo?.description).toBe("");
+    expect(storedText(narrative)).not.toContain("NARRATIVE");
+    expect(storedText(narrative)).not.toContain("JANE DOE");
+    const person = narrative.payments.find((row) => row.invoice === "INV-P");
+    expect(person?.vendorName).toBe("JANE Q PUBLIC");
+    expect(looksLikePersonName(person?.vendorName || "")).toBe(true);
+    expect(looksLikePersonName("ACME SUPPLY CO")).toBe(false);
+    const kept = narrative.payrollBatches.find((row) => row.batchKey === "251010");
+    expect(kept?.lineCount).toBe(3);
+    expect(narrative.payrollBatches.some((row) => row.batchKey === "999")).toBe(false);
+    expect(narrative.foldedPayrollBatches).toBe(1);
+    expect(storedText(narrative)).not.toContain("ALONE");
+    const slow = `VND 1 IN ${"A ".repeat(3000)}`;
+    expect(parseVendorRest(slow)).toBeNull();
+    const huge = `${"Z".repeat(MAX_REPORT_LINE + 50)} MARKERNAME`;
+    expect(storedText(parseReport(`${huge}\n`))).not.toContain("MARKERNAME");
+  });
+
+  it("shows draft plat history only to an unlocked admin", () => {
+    expect(historyStatuses(false)).toEqual(["published"]);
+    expect(historyStatuses(true)).toEqual(["published", "draft"]);
+    expect(historyStatuses(true)).not.toContain("failed");
+  });
+
+  it("rejects open redirects", () => {
+    expect(safeNext("/departments", origin)).toBe("/departments");
+    expect(safeNext("//evil.com", origin)).toBe("/");
+    expect(safeNext("/\\evil.com", origin)).toBe("/");
+    expect(safeNext("https://evil.com", origin)).toBe("/");
+    expect(safeNext("/%0d%0aSet-Cookie:x", origin)).toBe("/");
+    expect(safeNext("javascript:alert(1)", origin)).toBe("/");
+    expect(safeNext("https://budget.example/search?q=1", origin)).toBe("/search?q=1");
+  });
+
+  it("caps uploads, spreadsheet expansion, line length, and publish counts", () => {
+    expect(uploadAllowed(undefined)).toBe(false);
+    expect(uploadAllowed("20000001")).toBe(false);
+    expect(uploadAllowed("20")).toBe(true);
+    expect(zipEntryAllowed({ size: 5, originalSize: 5 }, 0, { entry: 10, total: 20 }).ok).toBe(true);
+    expect(zipEntryAllowed({ size: 4, originalSize: 50 }, 0, { entry: 10, total: 100 }).ok).toBe(false);
+    expect(zipEntryAllowed({ size: 5, originalSize: 5 }, 18, { entry: 10, total: 20 }).ok).toBe(false);
+    const packed = zipSync({ "xl/worksheets/sheet1.xml": strToU8("x".repeat(80)) });
+    expect(() => xlsxToRows(packed, { entry: 10, total: 100 })).toThrow(/too large/i);
+    expect(MAX_REPORT_LINE).toBeGreaterThan(1000);
+    expect(rowCountsMatch(
+      { funds: 1, departments: 1, accounts: 1, payments: 2, payrollBatches: 0 },
+      { funds: 1, departments: 1, accounts: 1, payments: 2, payrollBatches: 0 },
+    )).toBe(true);
+    expect(rowCountsMatch(
+      { funds: 1, departments: 1, accounts: 1, payments: 2, payrollBatches: 0 },
+      { funds: 1, departments: 1, accounts: 1, payments: 1, payrollBatches: 0 },
+    )).toBe(false);
+  });
+
+  it("neutralizes spreadsheet formulas in CSV cells", () => {
+    expect(csvCell("=cmd")).toBe("'=cmd");
+    expect(csvCell("+1")).toBe("'+1");
+    expect(csvCell("-1")).toBe("'-1");
+    expect(csvCell("@sum")).toBe("'@sum");
+    expect(csvCell("\tname")).toBe("'\tname");
+    expect(csvCell("\rname")).toBe("\"'\rname\"");
+    expect(csvCell("office")).toBe("office");
   });
 });
 

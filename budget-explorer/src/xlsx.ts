@@ -1,5 +1,25 @@
 import { strFromU8, unzipSync } from "fflate";
 
+export const XLSX_MAX_ENTRY_BYTES = 2_000_000;
+export const XLSX_MAX_TOTAL_BYTES = 8_000_000;
+
+export interface ZipLimits {
+  entry: number;
+  total: number;
+}
+
+export function zipEntryAllowed(
+  entry: { size: number; originalSize: number },
+  totalSoFar: number,
+  limits: ZipLimits,
+): { ok: boolean; total: number } {
+  const next = totalSoFar + Math.max(entry.size, entry.originalSize, 0);
+  if (entry.size > limits.entry || entry.originalSize > limits.entry || next > limits.total) {
+    return { ok: false, total: next };
+  }
+  return { ok: true, total: next };
+}
+
 function decodeXml(value: string): string {
   return value
     .replace(/&lt;/g, "<")
@@ -16,8 +36,16 @@ function columnIndex(letters: string): number {
   return index - 1;
 }
 
-export function xlsxToRows(buffer: Uint8Array): string[][] {
-  const files = unzipSync(buffer);
+export function xlsxToRows(buffer: Uint8Array, limits: ZipLimits = { entry: XLSX_MAX_ENTRY_BYTES, total: XLSX_MAX_TOTAL_BYTES }): string[][] {
+  let total = 0;
+  const files = unzipSync(buffer, {
+    filter(file) {
+      const decision = zipEntryAllowed(file, total, limits);
+      total = decision.total;
+      if (!decision.ok) throw new Error("Spreadsheet entry is too large.");
+      return file.name === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet\d+\.xml$/.test(file.name);
+    },
+  });
   const strings: string[] = [];
   const shared = files["xl/sharedStrings.xml"];
   if (shared) {

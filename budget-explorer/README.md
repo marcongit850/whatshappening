@@ -22,10 +22,10 @@ Set these with `wrangler secret put` for a deployed Worker, and in `.dev.vars` f
 | --- | --- | --- |
 | `SITE_PASSWORD` | yes | Shared password for the site |
 | `SESSION_SECRET` | yes | HMAC key for the session cookie |
-| `ADMIN_PASSWORD` | no | When set, Admin pages ask for this in addition to the site password |
+| `ADMIN_PASSWORD` | yes | Required for Admin. If it is unset, every admin route stays off |
 | `PUBLIC_BASE_URL` | no | Optional public base URL. Leave empty to stay host-agnostic |
 
-The session cookie is `HttpOnly`, `Secure`, `SameSite=Lax`, and expires after about 30 days. Passwords are compared with a hash so the check does not return early. Sign-in attempts are throttled. Questions are limited per signed-in visitor, per hour and per day.
+The session cookie is `HttpOnly`, `Secure`, `SameSite=Lax`, and expires after about 30 days. Passwords are compared with a hash so the check does not return early. Sign-in attempts are throttled. Admin unlock failures use the same limit, once per IP and once for all visitors together. The admin password field is only on `/admin/unlock`. Questions are limited per signed-in visitor, per hour and per day. If `ADMIN_PASSWORD` is unset, admin routes respond that admin is off.
 
 ## D1
 
@@ -51,7 +51,7 @@ chmod +x scripts/seed-local.sh
 npx wrangler dev
 ```
 
-The seed script parses the text report, checks parsed totals against the printed grand total, and tries to fetch the public chart of accounts CSVs. If those files are unreachable, department and object codes stay unmatched until you upload a chart on the Admin page. After migrations, sqlite3 loads the rows into the local D1 file wrangler created, in one transaction.
+The seed script parses the text report, checks parsed totals against the printed grand total, and tries to fetch the public chart of accounts CSVs. If those files are unreachable, department and object codes stay unmatched until you upload a chart on the Admin page. After migrations, sqlite3 loads the rows into the local D1 file wrangler created. The generated SQL is written in the operating system temp directory, outside this repository.
 
 `npm run dev` serves the Worker locally. Sign in with `SITE_PASSWORD`.
 
@@ -63,7 +63,7 @@ Admin, Import accepts:
 - `.csv` and `.xlsx` for a chart of accounts (fund, department, and object codes and names). The first worksheet is read from Excel files.
 - `.pdf` is rejected with an explanation. Reliable PDF text extraction is not available inside the Worker. Export the report as text and upload that file.
 
-The preview shows fund, account, and payment counts, a comparison with the printed grand total when that line is present, unmatched codes, and any account whose payment lines do not sum to year to date spending. Publish keeps the import and makes it the one the site reads. Re-importing does not delete older imports. Payment lines are keyed by fund, account, check number, and amount (journal id when the check number is blank) so overlapping snapshots can be compared without treating them as one combined ledger.
+The preview shows fund, account, and payment counts, a comparison with the printed grand total when that line is present, unmatched codes, and any account whose payment lines do not sum to year to date spending. It also warns when payroll batches under 3 lines were folded into a combined monthly total, and it lists vendor names that look like a person so someone can check them before publishing. Those payments stay in the import. Publish is refused when the stored row counts do not match the parse. Publish keeps the import and makes it the one the site reads. Draft imports stay off the plat fee history until an admin has unlocked the session. Re-importing does not delete older imports. Payment lines are keyed by fund, account, check number, and amount (journal id when the check number is blank) so overlapping snapshots can be compared without treating them as one combined ledger.
 
 A full year file is large. If the Admin upload cannot finish inside Worker limits, use `scripts/seed-local.sh`.
 

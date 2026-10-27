@@ -122,6 +122,11 @@ export function throttleDecision(attemptsAlready: number, limit = LOGIN_LIMIT): 
   return { allowed: attemptsAlready < limit };
 }
 
+/** Admin unlock failures are limited per IP and again for every visitor together. */
+export function adminUnlockAllowed(ipAttempts: number, globalAttempts: number): boolean {
+  return throttleDecision(ipAttempts).allowed && throttleDecision(globalAttempts).allowed;
+}
+
 export function rateDecision(
   hourHits: number,
   dayHits: number,
