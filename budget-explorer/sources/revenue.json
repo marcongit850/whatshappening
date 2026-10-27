@@ -1,0 +1,1396 @@
+{
+ "generated": "2026-10-27 America/Chicago",
+ "jurisdiction": "Walton County, Florida (Board of County Commissioners and the funds in the county's audited ACFR). Walton County, Georgia sources were not used.",
+ "bottom_line": {
+  "fy2025_actual_total_received": {
+   "amount": 354590863,
+   "status": "verified",
+   "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+   "pages": "PDF p.47 (Total Governmental Funds, Total revenue)"
+  },
+  "fy2025_actual_expenditures": {
+   "amount": 288352767,
+   "status": "verified",
+   "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+   "pages": "PDF p.47"
+  },
+  "fy2025_transfers_in_between_funds": {
+   "amount": 129645785,
+   "status": "verified; not new money",
+   "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+   "pages": "PDF p.47"
+  },
+  "fy2026_adopted_total_budget": {
+   "amount": 327948088,
+   "status": "verified (Final hearing minutes 9/22/2025: 'less the 350 for the forest road study 327948088')",
+   "source": "https://walton.civicweb.net/document/511445/"
+  },
+  "fy2027_adopted_total_budget": {
+   "amount": 345223508,
+   "status": "verified (Resolution adopting final budget, 9/28/2026)",
+   "source": "https://walton.civicweb.net/document/538552/",
+   "pages": "Resolution page 2 of 2"
+  }
+ },
+ "fy2025_actual_by_fund_and_source": {
+  "basis": "Governmental funds, modified accrual, audited. Revenues only; transfers shown separately.",
+  "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+  "pages": "PDF p.46 (General, County Transportation, Fine and Forfeiture) and p.47 (Tourist Development, Solid Waste Landfill, Capital Projects, Nonmajor, Total); budget-to-actual by fund pp.49-55; nonmajor detail pp.134-139",
+  "status": "verified",
+  "funds": [
+   "General",
+   "County Transportation",
+   "Fine and Forfeiture (Sheriff funding)",
+   "Tourist Development",
+   "Solid Waste Landfill",
+   "Capital Projects",
+   "Nonmajor governmental",
+   "Total governmental funds"
+  ],
+  "revenue": {
+   "Taxes": [
+    148142218,
+    4825582,
+    1270901,
+    60328571,
+    41566141,
+    0,
+    1714783,
+    257848196
+   ],
+   "Licenses and permits": [
+    3177439,
+    20,
+    0,
+    0,
+    77367,
+    0,
+    4156539,
+    7411365
+   ],
+   "Intergovernmental": [
+    30123084,
+    5396321,
+    7091712,
+    31735,
+    93750,
+    1221319,
+    5370069,
+    49327990
+   ],
+   "Charges for services": [
+    9860830,
+    69730,
+    2829186,
+    201106,
+    719336,
+    0,
+    1863831,
+    15544019
+   ],
+   "Fines and forfeitures": [
+    287597,
+    0,
+    60659,
+    0,
+    0,
+    0,
+    712584,
+    1060840
+   ],
+   "Investment earnings": [
+    3492738,
+    1452755,
+    2288457,
+    4722609,
+    1231027,
+    874537,
+    543669,
+    14605792
+   ],
+   "Miscellaneous": [
+    5971482,
+    588436,
+    660146,
+    41797,
+    47136,
+    0,
+    1483664,
+    8792661
+   ],
+   "Total revenue": [
+    201055388,
+    12332844,
+    14201061,
+    65325818,
+    43734757,
+    2095856,
+    15845139,
+    354590863
+   ]
+  },
+  "shares_of_total_pct": {
+   "Taxes": 72.7,
+   "Licenses and permits": 2.1,
+   "Intergovernmental": 13.9,
+   "Charges for services": 4.4,
+   "Fines and forfeitures": 0.3,
+   "Investment earnings": 4.1,
+   "Miscellaneous": 2.5,
+   "Total revenue": 100.0
+  },
+  "other_financing": {
+   "Transfers in": [
+    2516385,
+    17072837,
+    97840178,
+    0,
+    0,
+    12216385,
+    0,
+    129645785
+   ],
+   "Transfers out": [
+    112148541,
+    0,
+    0,
+    0,
+    17489222,
+    0,
+    8022,
+    129645785
+   ],
+   "Proceeds from sale of equipment": [
+    99698,
+    665025,
+    120420,
+    77610,
+    105000,
+    65000,
+    24000,
+    1156753
+   ],
+   "Issuance of debt": [
+    0,
+    0,
+    1176891,
+    0,
+    0,
+    0,
+    0,
+    1176891
+   ],
+   "Fund balance, beginning of year": [
+    64092062,
+    37284327,
+    33412246,
+    148123621,
+    43533265,
+    24629257,
+    19187811,
+    370262589
+   ],
+   "Fund balance, end of year": [
+    81910494,
+    41124267,
+    49765273,
+    166535869,
+    50601216,
+    26965592,
+    21931618,
+    438834329
+   ]
+  },
+  "fund_notes": {
+   "General": "Taxes are almost all ad valorem (property) tax; original budget for taxes 145,540,010 vs ad valorem budget table (inference).",
+   "Fine and Forfeiture (Sheriff funding)": "This is the fund that pays the Sheriff (budget fund 107). It receives 97.8M of transfers from the General Fund, not tax money directly (PDF p.46, p.30). Its 1.27M of 'taxes' is not itemized (inference: Fire Rescue MSBU assessments).",
+   "Tourist Development": "Taxes = local option tourist development (bed) tax, 60,328,571 (PDF p.47; MD&A p.12 says 60.33M)",
+   "Solid Waste Landfill": "Taxes = the one-cent small county discretionary sales surtax, 41,566,141 (PDF p.64 fund description, p.30)",
+   "Nonmajor governmental": "Taxes 1,714,783 = N. Walton Mosquito Control District property tax (PDF p.135); permits 4,156,539 = Building Department (PDF p.135)",
+   "County Transportation": "Taxes = local option and voted fuel taxes (PDF p.64)"
+  }
+ },
+ "fy2025_plain_language_by_source": {
+  "basis": "Same 354,590,863 total, with taxes split using the accrual-basis Statement of Activities (PDF p.41). The accrual statement reports about 25,455,311 more in taxes than the fund statement because it counts the state-shared half-cent sales tax and shared fuel taxes as taxes; the same amount is removed from 'grants and other state/federal money' (inferred reclassification). Property tax figure is accrual basis, so it can differ slightly from the fund basis (General Fund taxes 148,142,218 + mosquito 1,714,783 + others).",
+  "status_summary": "Dollar totals verified; the reclassification between 'grants' and the sales/gas tax lines is INFERRED.",
+  "items": [
+   {
+    "source": "Property taxes (ad valorem)",
+    "amount": 150773390,
+    "pct": 42.5,
+    "status": "verified number (Statement of Activities, accrual basis, PDF p.41)",
+    "pages": "ACFR PDF p.41"
+   },
+   {
+    "source": "Tourist development (bed) tax",
+    "amount": 60328571,
+    "pct": 17.0,
+    "status": "verified (also equals Tourist Development fund taxes, PDF p.47)",
+    "pages": "ACFR PDF pp.41, 47"
+   },
+   {
+    "source": "Sales taxes (1-cent county surtax + state half-cent share)",
+    "amount": 59816458,
+    "pct": 16.9,
+    "status": "total verified; split inferred: surtax 41,566,141 is verified in Solid Waste fund (PDF p.47), remainder 18,250,317 is presumed half-cent share",
+    "pages": "ACFR PDF pp.41, 47"
+   },
+   {
+    "source": "Gas taxes (local option + state shared fuel taxes)",
+    "amount": 7808986,
+    "pct": 2.2,
+    "status": "verified number; split not published in ACFR",
+    "pages": "ACFR PDF p.41"
+   },
+   {
+    "source": "Other taxes",
+    "amount": 4576102,
+    "pct": 1.3,
+    "status": "verified number; not itemized in ACFR (communications services tax and similar presumed, not confirmed)",
+    "pages": "ACFR PDF p.41"
+   },
+   {
+    "source": "Grants and other state/federal money (intergovernmental, excluding the tax-like items above)",
+    "amount": 23872679,
+    "pct": 6.7,
+    "status": "INFERRED: fund-statement intergovernmental 49,327,990 minus the 25,455,311 that the accrual statement reports as sales/gas/other taxes",
+    "pages": "ACFR PDF pp.41, 47"
+   },
+   {
+    "source": "Fees and charges for services",
+    "amount": 15544019,
+    "pct": 4.4,
+    "status": "verified (fund basis)",
+    "pages": "ACFR PDF p.47"
+   },
+   {
+    "source": "Permits and licenses",
+    "amount": 7411365,
+    "pct": 2.1,
+    "status": "verified (fund basis; 4,156,539 is Building Department, PDF p.135)",
+    "pages": "ACFR PDF pp.47, 135"
+   },
+   {
+    "source": "Fines and forfeitures",
+    "amount": 1060840,
+    "pct": 0.3,
+    "status": "verified",
+    "pages": "ACFR PDF p.47"
+   },
+   {
+    "source": "Interest earned (investment earnings)",
+    "amount": 14605792,
+    "pct": 4.1,
+    "status": "verified",
+    "pages": "ACFR PDF p.47"
+   },
+   {
+    "source": "Other / miscellaneous",
+    "amount": 8792661,
+    "pct": 2.5,
+    "status": "verified",
+    "pages": "ACFR PDF p.47"
+   }
+  ],
+  "total": 354590863
+ },
+ "fy2025_government_wide_general_revenue": {
+  "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+  "pages": "PDF pp.40-41 (printed pp.27-28)",
+  "status": "verified",
+  "items": {
+   "Property taxes": 150773390,
+   "Gasoline taxes": 7808986,
+   "Sales tax": 59816458,
+   "Tourist development tax": 60328571,
+   "Other taxes": 4576102,
+   "Investment earnings": 14601992,
+   "Miscellaneous": 8798901,
+   "Gain on disposition of equipment": 855931
+  },
+  "program_revenue": {
+   "charges_for_services": 24182408,
+   "operating_grants_and_contributions": 13259441,
+   "capital_grants_and_contributions": 10447054
+  }
+ },
+ "fy2026_budget_by_source": {
+  "basis": "FY2026 TENTATIVE budget (Sept 8, 2025 public hearing), the last revenue-by-source table published before the final hearing. Final adopted total is 327,948,088, about 347,000 lower. At the final hearing the Board cut the county millage from 3.575 to 3.519 (about 2.5M less ad valorem) and replaced it with cash carried forward and other revenue; line-by-line final numbers sit in the county's OpenGov budget book (JavaScript only, no download).",
+  "source": "https://walton.civicweb.net/document/503742/",
+  "pages": "Budget-in-Brief table 'Sources of County Funds' (document pages 11-12 of 12)",
+  "final_total_source": "https://walton.civicweb.net/document/511445/",
+  "tentative_total": 328295088,
+  "final_total": 327948088,
+  "status": "table verified; category grouping is ours",
+  "lines": [
+   {
+    "name": "Ad Valorem Taxes",
+    "fy2025_final_budget": 146881903,
+    "fy2026_tentative": 159532787
+   },
+   {
+    "name": "Tourist Development Taxes",
+    "fy2025_final_budget": 54658613,
+    "fy2026_tentative": 50843000
+   },
+   {
+    "name": "Local Discretionary Sales Surtax",
+    "fy2025_final_budget": 36335000,
+    "fy2026_tentative": 39688937
+   },
+   {
+    "name": "Local Option Fuel Tax",
+    "fy2025_final_budget": 4530681,
+    "fy2026_tentative": 4842033
+   },
+   {
+    "name": "Local Government Half-Cent Sales Tax",
+    "fy2025_final_budget": 16544862,
+    "fy2026_tentative": 17000000
+   },
+   {
+    "name": "State Fuel Taxes",
+    "fy2025_final_budget": 2994009,
+    "fy2026_tentative": 3253000
+   },
+   {
+    "name": "State Revenue Share Proceeds",
+    "fy2025_final_budget": 3948103,
+    "fy2026_tentative": 3300000
+   },
+   {
+    "name": "Section 8 Housing Choice Voucher Program",
+    "fy2025_final_budget": 3078364,
+    "fy2026_tentative": 3082896
+   },
+   {
+    "name": "Intergovernmental Revenue",
+    "fy2025_final_budget": 2508200,
+    "fy2026_tentative": 2714590
+   },
+   {
+    "name": "Planning Fees",
+    "fy2025_final_budget": 2676000,
+    "fy2026_tentative": 2821000
+   },
+   {
+    "name": "Eagle Springs Golf and Recreation",
+    "fy2025_final_budget": 1603000,
+    "fy2026_tentative": 1548000
+   },
+   {
+    "name": "Ambulance Fees",
+    "fy2025_final_budget": 2500000,
+    "fy2026_tentative": 3000000
+   },
+   {
+    "name": "Fire Rescue MSBU",
+    "fy2025_final_budget": 1140000,
+    "fy2026_tentative": 1300000
+   },
+   {
+    "name": "Charges for Services",
+    "fy2025_final_budget": 5593161,
+    "fy2026_tentative": 5572809
+   },
+   {
+    "name": "Permits, Fees, and Special Assessments",
+    "fy2025_final_budget": 5906796,
+    "fy2026_tentative": 3242560
+   },
+   {
+    "name": "Other Sources",
+    "fy2025_final_budget": 8305000,
+    "fy2026_tentative": 11369480
+   },
+   {
+    "name": "Miscellaneous Revenue",
+    "fy2025_final_budget": 10826314,
+    "fy2026_tentative": 14883369
+   },
+   {
+    "name": "Judgements, Fines and Forefeits",
+    "fy2025_final_budget": 378500,
+    "fy2026_tentative": 300627
+   }
+  ],
+  "by_category": [
+   {
+    "category": "Property taxes",
+    "fy2026_tentative": 159532787,
+    "fy2026_pct": 48.6,
+    "fy2025_final_budget": 146881903,
+    "lines": [
+     "Ad Valorem Taxes"
+    ]
+   },
+   {
+    "category": "Tourist development (bed) tax",
+    "fy2026_tentative": 50843000,
+    "fy2026_pct": 15.5,
+    "fy2025_final_budget": 54658613,
+    "lines": [
+     "Tourist Development Taxes"
+    ]
+   },
+   {
+    "category": "Sales taxes",
+    "fy2026_tentative": 56688937,
+    "fy2026_pct": 17.3,
+    "fy2025_final_budget": 52879862,
+    "lines": [
+     "Local Discretionary Sales Surtax",
+     "Local Government Half-Cent Sales Tax"
+    ]
+   },
+   {
+    "category": "Gas taxes",
+    "fy2026_tentative": 8095033,
+    "fy2026_pct": 2.5,
+    "fy2025_final_budget": 7524690,
+    "lines": [
+     "Local Option Fuel Tax",
+     "State Fuel Taxes"
+    ]
+   },
+   {
+    "category": "State shared money and grants",
+    "fy2026_tentative": 9097486,
+    "fy2026_pct": 2.8,
+    "fy2025_final_budget": 9534667,
+    "lines": [
+     "State Revenue Share Proceeds",
+     "Section 8 Housing Choice Voucher Program",
+     "Intergovernmental Revenue"
+    ]
+   },
+   {
+    "category": "Fees and charges for services",
+    "fy2026_tentative": 14241809,
+    "fy2026_pct": 4.3,
+    "fy2025_final_budget": 13512161,
+    "lines": [
+     "Planning Fees",
+     "Eagle Springs Golf and Recreation",
+     "Ambulance Fees",
+     "Fire Rescue MSBU",
+     "Charges for Services"
+    ]
+   },
+   {
+    "category": "Permits and special assessments",
+    "fy2026_tentative": 3242560,
+    "fy2026_pct": 1.0,
+    "fy2025_final_budget": 5906796,
+    "lines": [
+     "Permits, Fees, and Special Assessments"
+    ]
+   },
+   {
+    "category": "Fines and forfeits",
+    "fy2026_tentative": 300627,
+    "fy2026_pct": 0.1,
+    "fy2025_final_budget": 378500,
+    "lines": [
+     "Judgements, Fines and Forefeits"
+    ]
+   },
+   {
+    "category": "Interest and other miscellaneous",
+    "fy2026_tentative": 14883369,
+    "fy2026_pct": 4.5,
+    "fy2025_final_budget": 10826314,
+    "lines": [
+     "Miscellaneous Revenue"
+    ]
+   },
+   {
+    "category": "Balance brought forward and other sources",
+    "fy2026_tentative": 11369480,
+    "fy2026_pct": 3.5,
+    "fy2025_final_budget": 8305000,
+    "lines": [
+     "Other Sources"
+    ]
+   }
+  ],
+  "notes": [
+   "The budget total excludes transfers between funds and the Self-Insurance (health) fund; that is why it is about 328M and not 511M.",
+   "Millage: 3.575 tentative, 3.519 final (FY2026). FY2025 was 3.600. Certified taxable value 42.5B (FY2025) to about 46.5B (FY2026).",
+   "Ad valorem is budgeted at 95 percent of the levy (Summary of Revenues, OpenGov book)."
+  ]
+ },
+ "fy2027_adopted_by_source": {
+  "basis": "FY2027 line-item revenue file published by the county (the 'FY 2027 Tentative Budget' site). The sum, after removing interfund transfers in (381000) and the Self-Insurance fund 503, equals the adopted 345,223,508 to the dollar, so the file matches the adopted budget.",
+  "source": "https://budget-waltoncountyfl.com/assets/data/revenues.csv",
+  "adoption": "https://walton.civicweb.net/document/538552/",
+  "status": "verified (reconciles to resolution)",
+  "reconciliation": {
+   "file_total_all_lines": 511814439,
+   "less_transfers_in_381000": 143663984,
+   "less_fund_503_self_insurance": 22926947,
+   "equals_adopted_budget": 345223508,
+   "adopted_per_resolution": 345223508
+  },
+  "millage": {
+   "county": 3.25,
+   "north_walton_mosquito": 0.441,
+   "aggregate": 3.2806,
+   "taxable_value_county": 49098663848,
+   "taxable_value_mosquito_district": 3405982908,
+   "source": "https://walton.civicweb.net/document/538552/"
+  },
+  "by_category": [
+   {
+    "category": "Property taxes",
+    "fy2027_adopted": 153019062,
+    "pct": 44.3
+   },
+   {
+    "category": "Tourist development (bed) tax",
+    "fy2027_adopted": 58965950,
+    "pct": 17.1
+   },
+   {
+    "category": "Sales taxes",
+    "fy2027_adopted": 56768997,
+    "pct": 16.4
+   },
+   {
+    "category": "Balance brought forward and other sources",
+    "fy2027_adopted": 25309776,
+    "pct": 7.3
+   },
+   {
+    "category": "Fees and charges for services",
+    "fy2027_adopted": 15216133,
+    "pct": 4.4
+   },
+   {
+    "category": "State shared money and grants",
+    "fy2027_adopted": 9301978,
+    "pct": 2.7
+   },
+   {
+    "category": "Other miscellaneous",
+    "fy2027_adopted": 9084336,
+    "pct": 2.6
+   },
+   {
+    "category": "Gas taxes",
+    "fy2027_adopted": 8063212,
+    "pct": 2.3
+   },
+   {
+    "category": "Interest earned",
+    "fy2027_adopted": 5456564,
+    "pct": 1.6
+   },
+   {
+    "category": "Permits and special assessments",
+    "fy2027_adopted": 3400000,
+    "pct": 1.0
+   },
+   {
+    "category": "Communications services tax",
+    "fy2027_adopted": 350000,
+    "pct": 0.1
+   },
+   {
+    "category": "Fines and forfeits",
+    "fy2027_adopted": 287500,
+    "pct": 0.1
+   }
+  ],
+  "by_fund": [
+   {
+    "fund": "001",
+    "name": "General Fund",
+    "amount": 204279098
+   },
+   {
+    "fund": "111",
+    "name": "Tourist Development Fund",
+    "amount": 58965950
+   },
+   {
+    "fund": "112",
+    "name": "Solid Waste Fund",
+    "amount": 40701564
+   },
+   {
+    "fund": "101",
+    "name": "Transportation Fund",
+    "amount": 15668118
+   },
+   {
+    "fund": "107",
+    "name": "Sheriff Fund",
+    "amount": 15651972
+   },
+   {
+    "fund": "103",
+    "name": "Building Fund",
+    "amount": 4000000
+   },
+   {
+    "fund": "110",
+    "name": "Housing & Urban Development Fund",
+    "amount": 3057056
+   },
+   {
+    "fund": "105",
+    "name": "Mosquito Control Fund",
+    "amount": 1426937
+   },
+   {
+    "fund": "114",
+    "name": "Recreation Plat Fee Fund",
+    "amount": 600000
+   },
+   {
+    "fund": "109",
+    "name": "E911 Fund",
+    "amount": 460000
+   },
+   {
+    "fund": "115",
+    "name": "Sidewalk Fund",
+    "amount": 300000
+   },
+   {
+    "fund": "106",
+    "name": "Mosquito Control State Aid Fund",
+    "amount": 69588
+   },
+   {
+    "fund": "102",
+    "name": "MSBU Fund",
+    "amount": 43225
+   }
+  ],
+  "lines": [
+   {
+    "code": "311000",
+    "name": "Ad Valorem Taxes",
+    "category": "Property taxes",
+    "amount": 153019062
+   },
+   {
+    "code": "312600",
+    "name": "Discretionary Sales Surtax",
+    "category": "Sales taxes",
+    "amount": 40000000
+   },
+   {
+    "code": "312120",
+    "name": "Tourist Development Tax",
+    "category": "Tourist development (bed) tax",
+    "amount": 23529650
+   },
+   {
+    "code": "389000",
+    "name": "Nonoperating Balance Brought Forward",
+    "category": "Balance brought forward and other sources",
+    "amount": 21259176
+   },
+   {
+    "code": "335180",
+    "name": "Local Government 1/2 Cent Sales Tax",
+    "category": "Sales taxes",
+    "amount": 16768997
+   },
+   {
+    "code": "312130",
+    "name": "Tourist Development Tax",
+    "category": "Tourist development (bed) tax",
+    "amount": 11693600
+   },
+   {
+    "code": "312150",
+    "name": "Tourist Development Tax",
+    "category": "Tourist development (bed) tax",
+    "amount": 11693600
+   },
+   {
+    "code": "312160",
+    "name": "Tourist Development Tax",
+    "category": "Tourist development (bed) tax",
+    "amount": 11693600
+   },
+   {
+    "code": "361100",
+    "name": "Interest",
+    "category": "Interest earned",
+    "amount": 4501564
+   },
+   {
+    "code": "369901",
+    "name": "Indirect Administrative Fees",
+    "category": "Other miscellaneous",
+    "amount": 4112604
+   },
+   {
+    "code": "386700",
+    "name": "Surplus Budget Tax Collector",
+    "category": "Balance brought forward and other sources",
+    "amount": 4050600
+   },
+   {
+    "code": "312410",
+    "name": "Local Option Fuel Tax",
+    "category": "Gas taxes",
+    "amount": 4010212
+   },
+   {
+    "code": "335121",
+    "name": "State Revenue Share Proceeds",
+    "category": "State shared money and grants",
+    "amount": 3726334
+   },
+   {
+    "code": "342300",
+    "name": "Housing Prisoners Revenue",
+    "category": "Fees and charges for services",
+    "amount": 3500000
+   },
+   {
+    "code": "331500",
+    "name": "Federal Grant (Economic Environment)",
+    "category": "State shared money and grants",
+    "amount": 3057056
+   },
+   {
+    "code": "342600",
+    "name": "Ambulance Fees",
+    "category": "Fees and charges for services",
+    "amount": 3000000
+   },
+   {
+    "code": "369903",
+    "name": "TDC Public Safety Reimbursements",
+    "category": "Other miscellaneous",
+    "amount": 2244645
+   },
+   {
+    "code": "341205",
+    "name": "Short-Term Rental Certificate Fee",
+    "category": "Fees and charges for services",
+    "amount": 2200000
+   },
+   {
+    "code": "329004",
+    "name": "Beach Vending Permits",
+    "category": "Permits and special assessments",
+    "amount": 1880000
+   },
+   {
+    "code": "335422",
+    "name": "Constitutional Fuel Tax",
+    "category": "Gas taxes",
+    "amount": 1750000
+   },
+   {
+    "code": "343410",
+    "name": "MSBU Fees",
+    "category": "Fees and charges for services",
+    "amount": 1443225
+   },
+   {
+    "code": "337200",
+    "name": "Resource Officer",
+    "category": "State shared money and grants",
+    "amount": 1370000
+   },
+   {
+    "code": "341201",
+    "name": "Planning Fees",
+    "category": "Fees and charges for services",
+    "amount": 1200000
+   },
+   {
+    "code": "335421",
+    "name": "County Fuel Tax",
+    "category": "Gas taxes",
+    "amount": 1000000
+   },
+   {
+    "code": "369900",
+    "name": "Miscellaneous Revenue",
+    "category": "Other miscellaneous",
+    "amount": 954887
+   },
+   {
+    "code": "364001",
+    "name": "Surplus Equipment Sales",
+    "category": "Other miscellaneous",
+    "amount": 876000
+   },
+   {
+    "code": "312300",
+    "name": "9th Cent Voted Fuel Tax",
+    "category": "Gas taxes",
+    "amount": 800000
+   },
+   {
+    "code": "329009",
+    "name": "Beach Bonfire Permits",
+    "category": "Permits and special assessments",
+    "amount": 750000
+   },
+   {
+    "code": "369902",
+    "name": "Recreation Plat Fees",
+    "category": "Other miscellaneous",
+    "amount": 600000
+   },
+   {
+    "code": "343400",
+    "name": "Landfill Fees",
+    "category": "Fees and charges for services",
+    "amount": 560000
+   },
+   {
+    "code": "347201",
+    "name": "Membership Fees",
+    "category": "Fees and charges for services",
+    "amount": 550000
+   },
+   {
+    "code": "361108",
+    "name": "Interest (Sheriff)",
+    "category": "Interest earned",
+    "amount": 500000
+   },
+   {
+    "code": "335420",
+    "name": "Municipal Fuel Tax",
+    "category": "Gas taxes",
+    "amount": 500000
+   },
+   {
+    "code": "347202",
+    "name": "Green Fees",
+    "category": "Fees and charges for services",
+    "amount": 430000
+   },
+   {
+    "code": "335222",
+    "name": "E911 Communications/Wireless",
+    "category": "State shared money and grants",
+    "amount": 380000
+   },
+   {
+    "code": "312170",
+    "name": "Tourist Development Tax",
+    "category": "Tourist development (bed) tax",
+    "amount": 355500
+   },
+   {
+    "code": "329003",
+    "name": "Special Events Permits",
+    "category": "Permits and special assessments",
+    "amount": 350000
+   },
+   {
+    "code": "315001",
+    "name": "Telecommunication and Local Communication Tax",
+    "category": "Communications services tax",
+    "amount": 350000
+   },
+   {
+    "code": "347203",
+    "name": "Cart Fees",
+    "category": "Fees and charges for services",
+    "amount": 330000
+   },
+   {
+    "code": "347205",
+    "name": "Grill Food Revenue",
+    "category": "Fees and charges for services",
+    "amount": 295000
+   },
+   {
+    "code": "341203",
+    "name": "Lien Searches",
+    "category": "Fees and charges for services",
+    "amount": 250000
+   },
+   {
+    "code": "361111",
+    "name": "Constitutional Officer Interest",
+    "category": "Interest earned",
+    "amount": 250000
+   },
+   {
+    "code": "335160",
+    "name": "Racing Tax",
+    "category": "State shared money and grants",
+    "amount": 224000
+   },
+   {
+    "code": "348880",
+    "name": "Probation Fees",
+    "category": "Fees and charges for services",
+    "amount": 215000
+   },
+   {
+    "code": "361105",
+    "name": "Investments (Florida Local Government Investment Trust)",
+    "category": "Interest earned",
+    "amount": 200000
+   },
+   {
+    "code": "329005",
+    "name": "Beach Dog Permits",
+    "category": "Permits and special assessments",
+    "amount": 190000
+   },
+   {
+    "code": "354003",
+    "name": "Ordinance Fine (Parking)",
+    "category": "Fines and forfeits",
+    "amount": 190000
+   },
+   {
+    "code": "341160",
+    "name": "$2 Recording Fee",
+    "category": "Fees and charges for services",
+    "amount": 185436
+   },
+   {
+    "code": "348144",
+    "name": "Court Facilities Trust Fund Fee",
+    "category": "Fees and charges for services",
+    "amount": 150000
+   },
+   {
+    "code": "342900",
+    "name": "Code Enforcement Fees",
+    "category": "Fees and charges for services",
+    "amount": 150000
+   },
+   {
+    "code": "347206",
+    "name": "Grill Beverage Revenue",
+    "category": "Fees and charges for services",
+    "amount": 135000
+   },
+   {
+    "code": "347200",
+    "name": "Program & Sports Fees",
+    "category": "Fees and charges for services",
+    "amount": 135000
+   },
+   {
+    "code": "329002",
+    "name": "Beach Vehicle Permits",
+    "category": "Permits and special assessments",
+    "amount": 120000
+   },
+   {
+    "code": "341202",
+    "name": "Development Order Inspection",
+    "category": "Fees and charges for services",
+    "amount": 120000
+   },
+   {
+    "code": "335700",
+    "name": "Florida Boating Improvement Program Allocation",
+    "category": "State shared money and grants",
+    "amount": 100000
+   },
+   {
+    "code": "336000",
+    "name": "State Payment in Lieu of Tax",
+    "category": "State shared money and grants",
+    "amount": 100000
+   },
+   {
+    "code": "369910",
+    "name": "Sidewalk Fees",
+    "category": "Other miscellaneous",
+    "amount": 100000
+   },
+   {
+    "code": "343500",
+    "name": "Sewer and Wastewater Fees",
+    "category": "Fees and charges for services",
+    "amount": 85000
+   },
+   {
+    "code": "335221",
+    "name": "E911 Communications/Non-Wireless",
+    "category": "State shared money and grants",
+    "amount": 80000
+   },
+   {
+    "code": "329001",
+    "name": "E-911 Utility Permits",
+    "category": "Permits and special assessments",
+    "amount": 80000
+   },
+   {
+    "code": "335150",
+    "name": "Alcoholic Beverage Licenses",
+    "category": "State shared money and grants",
+    "amount": 80000
+   },
+   {
+    "code": "334610",
+    "name": "State Grant (Health)",
+    "category": "State shared money and grants",
+    "amount": 69588
+   },
+   {
+    "code": "362003",
+    "name": "Morrison Springs Entry Fee",
+    "category": "Other miscellaneous",
+    "amount": 65000
+   },
+   {
+    "code": "359000",
+    "name": "Civil Process Fees",
+    "category": "Fines and forfeits",
+    "amount": 60000
+   },
+   {
+    "code": "342901",
+    "name": "Prisoner Work Detail",
+    "category": "Fees and charges for services",
+    "amount": 58972
+   },
+   {
+    "code": "347208",
+    "name": "Pro Shop Sales",
+    "category": "Fees and charges for services",
+    "amount": 50000
+   },
+   {
+    "code": "362000",
+    "name": "Park Rental Fee",
+    "category": "Other miscellaneous",
+    "amount": 45000
+   },
+   {
+    "code": "335130",
+    "name": "Insurance Agents LLC",
+    "category": "State shared money and grants",
+    "amount": 40000
+   },
+   {
+    "code": "335140",
+    "name": "Mobile Home Licenses",
+    "category": "State shared money and grants",
+    "amount": 40000
+   },
+   {
+    "code": "365000",
+    "name": "Scrap Sales",
+    "category": "Other miscellaneous",
+    "amount": 40000
+   },
+   {
+    "code": "362001",
+    "name": "Office Rental",
+    "category": "Other miscellaneous",
+    "amount": 28200
+   },
+   {
+    "code": "335120",
+    "name": "State Shared Cigarette Tax",
+    "category": "State shared money and grants",
+    "amount": 25000
+   },
+   {
+    "code": "354001",
+    "name": "Ordinance Fine (Beach Activities)",
+    "category": "Fines and forfeits",
+    "amount": 25000
+   },
+   {
+    "code": "324004",
+    "name": "E-911 Plat Fee",
+    "category": "Permits and special assessments",
+    "amount": 22000
+   },
+   {
+    "code": "348140",
+    "name": "Additional Court Cost (Law Library)",
+    "category": "Fees and charges for services",
+    "amount": 20000
+   },
+   {
+    "code": "348141",
+    "name": "Additional Court Cost (Juvenile Justice)",
+    "category": "Fees and charges for services",
+    "amount": 20000
+   },
+   {
+    "code": "348142",
+    "name": "Additional Court Cost (Legal Aid)",
+    "category": "Fees and charges for services",
+    "amount": 20000
+   },
+   {
+    "code": "348143",
+    "name": "Additional Court Cost (Innovative Programs)",
+    "category": "Fees and charges for services",
+    "amount": 20000
+   },
+   {
+    "code": "347210",
+    "name": "Golf Course Non-Taxable",
+    "category": "Fees and charges for services",
+    "amount": 20000
+   },
+   {
+    "code": "346400",
+    "name": "Animal Shelter Fees",
+    "category": "Fees and charges for services",
+    "amount": 18000
+   },
+   {
+    "code": "347100",
+    "name": "Library Fines & Fees",
+    "category": "Fees and charges for services",
+    "amount": 18000
+   },
+   {
+    "code": "369300",
+    "name": "Refund of Prior Year Expenditures",
+    "category": "Other miscellaneous",
+    "amount": 15000
+   },
+   {
+    "code": "342902",
+    "name": "Cremation Fees",
+    "category": "Fees and charges for services",
+    "amount": 15000
+   },
+   {
+    "code": "354002",
+    "name": "Ordinance Fine (Handicap Parking)",
+    "category": "Fines and forfeits",
+    "amount": 10000
+   },
+   {
+    "code": "347204",
+    "name": "Pro Shop Sales",
+    "category": "Fees and charges for services",
+    "amount": 10000
+   },
+   {
+    "code": "347209",
+    "name": "Restaurant Non-Taxable",
+    "category": "Fees and charges for services",
+    "amount": 10000
+   },
+   {
+    "code": "335210",
+    "name": "Supplemental Fire Support",
+    "category": "State shared money and grants",
+    "amount": 10000
+   },
+   {
+    "code": "329007",
+    "name": "Coastal Armoring Fees",
+    "category": "Permits and special assessments",
+    "amount": 8000
+   },
+   {
+    "code": "361106",
+    "name": "Investments (SBA Florida Prime)",
+    "category": "Interest earned",
+    "amount": 5000
+   },
+   {
+    "code": "362002",
+    "name": "Library Rentals",
+    "category": "Other miscellaneous",
+    "amount": 3000
+   },
+   {
+    "code": "335490",
+    "name": "Motor Fuel Use Tax",
+    "category": "Gas taxes",
+    "amount": 3000
+   },
+   {
+    "code": "341302",
+    "name": "Copies and Public Records Request",
+    "category": "Fees and charges for services",
+    "amount": 2500
+   },
+   {
+    "code": "354000",
+    "name": "Ordinance Fine (Animal Control)",
+    "category": "Fines and forfeits",
+    "amount": 2500
+   }
+  ]
+ },
+ "tourist_tax_collections": {
+  "source": "https://www.waltoncountyfltourism.com/userfiles/FY26_TDT_Collections_Report_-_AUG26_collected_in_SEP26.pdf",
+  "status": "verified (county Clerk monthly report), converted to total by us",
+  "fy2025_acfr_actual": 60328571,
+  "fy2026_budget_tentative": 50843000,
+  "fy2026_collections_oct_through_aug": {
+   "south_walton_at_2pct_base": 24694247.25,
+   "north_walton_at_2pct_base": 214815.83,
+   "computed_total_all_rates": 62057842,
+   "method": "Report shows collections 'at 2%' for South; full 5% = 2.5x (verified by August: 2,525,546.65 x 2.5 = 6,313,866.62). North full 3% = 1.5x (17,709.27 x 1.5 = 26,563.90)."
+  },
+  "fy2025_same_period_computed_total": 56689540,
+  "note": "Report for September 2026 (received in October) not yet posted (404 on 10/27/2026). Rates: 5% south of Choctawhatchee Bay, 3% north."
+ },
+ "ten_year_trend": {
+  "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2024%20walton%20county.pdf",
+  "pages": "PDF p.179 (General Governmental Revenues by Source, printed p.143) and p.185 (Changes in Fund Balance)",
+  "years": [
+   2015,
+   2016,
+   2017,
+   2018,
+   2019,
+   2020,
+   2021,
+   2022,
+   2023,
+   2024
+  ],
+  "series": {
+   "Taxes": [
+    95226101,
+    97267784,
+    103247809,
+    112732328,
+    123768397,
+    132891357,
+    178187283,
+    198059623,
+    216360009,
+    237982187
+   ],
+   "Licenses and permits": [
+    2530020,
+    2886510,
+    2892531,
+    3219599,
+    3812551,
+    3898144,
+    12459971,
+    12971616,
+    12633647,
+    6863498
+   ],
+   "Intergovernmental": [
+    35584050,
+    25099737,
+    28867271,
+    26994452,
+    28507600,
+    37829260,
+    55461629,
+    51568524,
+    41187600,
+    47211515
+   ],
+   "Charges for services": [
+    7136458,
+    9267053,
+    10113664,
+    12399911,
+    13599020,
+    12941500,
+    13891758,
+    14823600,
+    14878593,
+    14185202
+   ],
+   "Fines and forfeitures": [
+    653554,
+    641313,
+    645055,
+    633030,
+    627491,
+    582762,
+    797380,
+    1078004,
+    1224687,
+    1187898
+   ],
+   "Investment earnings": [
+    595162,
+    1129858,
+    593657,
+    502255,
+    3565307,
+    2844554,
+    631680,
+    -3089494,
+    9886499,
+    16265526
+   ],
+   "Miscellaneous": [
+    16578493,
+    9604217,
+    8967058,
+    6024140,
+    10633906,
+    7137299,
+    9677769,
+    9353759,
+    13698992,
+    13540439
+   ],
+   "Total": [
+    158303838,
+    145896472,
+    155327045,
+    162505715,
+    184514272,
+    198124876,
+    271107470,
+    284765632,
+    309870027,
+    337236265
+   ]
+  },
+  "note": "Source rows for 2015 and 2017 as printed in the Last Ten Fiscal Years table differ slightly from the by-source schedule (2015 total 151,076,181 vs 158,303,838; 2017 intergov 29,405,601 vs 28,867,271); the by-source schedule numbers are shown here. Use 2020 onward for charts.",
+  "fy2025_total": 354590863
+ },
+ "property_tax_base": {
+  "fy2025_taxable_value": 42478430955,
+  "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2024%20walton%20county.pdf",
+  "pages": "PDF p.203 (tax roll 2024)",
+  "fy2026_certified_taxable_value_approx": 46500000000,
+  "fy2026_source": "https://walton.civicweb.net/document/503742/",
+  "fy2027_taxable_value": 49098663848,
+  "fy2027_source": "https://walton.civicweb.net/document/538552/",
+  "millage": {
+   "FY2025": 3.6,
+   "FY2026_tentative": 3.575,
+   "FY2026_final": 3.519,
+   "FY2027_final": 3.25
+  },
+  "millage_sources": [
+   "ACFR FY2025 PDF p.34 (3.6000 FY2025, 3.5190 FY2026)",
+   "https://walton.civicweb.net/document/511445/",
+   "https://walton.civicweb.net/document/538552/"
+  ]
+ },
+ "not_revenue_but_asked": {
+  "transfers_in": {
+   "fy2025": 129645785,
+   "note": "Internal moves between county funds; shown separately and left out of the 'where money comes from' view. Largest: 97,840,178 into the Fine and Forfeiture (Sheriff) fund and 17,072,837 into Transportation (PDF pp.46-47). FY2027 budget file has 143,663,984 of transfers in (code 381000).",
+   "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf"
+  },
+  "fund_balance_brought_forward": {
+   "fy2025_all_governmental_funds_beginning": 370262589,
+   "fy2027_budgeted_balance_forward_and_surplus": 25309776,
+   "note": "Savings carried from earlier years. It is not income; the page should show it separately.",
+   "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf"
+  }
+ }
+}

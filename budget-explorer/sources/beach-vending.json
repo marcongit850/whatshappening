@@ -1,0 +1,52 @@
+{
+  "generated": "2026-10-27",
+  "jurisdiction": "Walton County, Florida",
+  "fiscal_year": 2027,
+  "basis": "budget",
+  "account": "329004",
+  "account_name": "Beach Vending Permits",
+  "fund_code": "001",
+  "fund_name": "General Fund",
+  "source": "https://budget-waltoncountyfl.com/assets/data/revenues.csv",
+  "lines": [
+    {
+      "key": "managed-beach-vendor",
+      "label": "Managed Beach Vendor concession",
+      "amount": 1530000,
+      "payer": "Coastal Parasail, Inc.",
+      "department": "Board of County Commissioners",
+      "note": "Managed Beach Vendor Revenue",
+      "project": "10647",
+      "status": "verified",
+      "detail": "A flat fee for the exclusive right to rent beach chairs, umbrellas, and footstools at county beach accesses. General Fund account 329004.",
+      "sources": [
+        "https://budget-waltoncountyfl.com/assets/data/revenues.csv",
+        "https://walton.civicweb.net/document/479846/",
+        "https://walton.civicweb.net/document/485859/"
+      ]
+    },
+    {
+      "key": "other-beach-vending",
+      "label": "Other beach vending permits",
+      "amount": 350000,
+      "payer": "",
+      "department": "Code Compliance",
+      "note": "",
+      "project": "",
+      "status": "verified amount",
+      "detail": "not explained in the county budget file",
+      "sources": [
+        "https://budget-waltoncountyfl.com/assets/data/revenues.csv"
+      ]
+    }
+  ],
+  "fy2025_budget_amendment": {
+    "amount": 1530000,
+    "status": "verified budget amendment; the audit does not print account 329004",
+    "detail": "In August 2025 the Board amended the FY2025 budget to recognize $1,530,000 from the Managed Vendor Program. The FY2025 audit does not show that account on its own, so this is not an audited receipt.",
+    "sources": [
+      "https://walton.civicweb.net/document/500025/",
+      "https://walton.civicweb.net/document/500781/"
+    ]
+  }
+}

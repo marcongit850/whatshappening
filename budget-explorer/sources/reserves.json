@@ -1,0 +1,522 @@
+{
+ "generated": "2026-10-27 America/Chicago",
+ "jurisdiction": "Walton County, Florida (Board of County Commissioners governmental funds, audited ACFR for fiscal year ended 9/30/2025). Not Walton County, Georgia.",
+ "date_of_balances": "2025-09-30",
+ "headline": {
+  "total_fund_balances_all_governmental_funds": {
+   "amount": 438834329,
+   "status": "verified",
+   "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+   "pages": "PDF pp.42-43 (Balance Sheet, Governmental Funds); classification note PDF pp.98-100 (printed pp.82-84)"
+  },
+  "change_from_fy2024": {
+   "amount": 68571740,
+   "fy2024": 370262589,
+   "status": "verified; equals Net change in fund balances 68,571,740 (PDF p.47)"
+  },
+  "how_to_read": "Fund balance is savings held in each fund. It is not all free cash: most of it is legally restricted or already set aside by the Board for specific purposes. Only the 'unassigned' General Fund slice is free for any purpose.",
+  "free_to_spend_any_purpose_unassigned": {
+   "amount": 58393573,
+   "pct_of_total": 13.3,
+   "status": "verified"
+  },
+  "mostly_tourist_tax": {
+   "amount": 166535869,
+   "pct_of_total": 37.9,
+   "note": "Tourist Development fund balance can only be used for tourism-related purposes under state law (ACFR PDF p.30)."
+  }
+ },
+ "fy2025_by_fund_and_classification": {
+  "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+  "pages": "PDF pp.42-43 balance sheet; PDF pp.98-100 note 2 (purposes)",
+  "status": "verified",
+  "funds": [
+   "General",
+   "County Transportation",
+   "Fine and Forfeiture (funds the Sheriff; budget fund 107)",
+   "Tourist Development",
+   "Solid Waste Landfill",
+   "Capital Projects",
+   "Nonmajor governmental",
+   "Total"
+  ],
+  "classification": {
+   "Nonspendable": [
+    1907207,
+    337049,
+    0,
+    173557,
+    1500,
+    0,
+    0,
+    2419313
+   ],
+   "Restricted": [
+    496780,
+    40787218,
+    49765273,
+    0,
+    4907174,
+    0,
+    4609648,
+    100566093
+   ],
+   "Committed": [
+    4890000,
+    0,
+    0,
+    130594205,
+    0,
+    0,
+    12681069,
+    148165274
+   ],
+   "Assigned": [
+    16222934,
+    0,
+    0,
+    35768107,
+    45692542,
+    26965592,
+    4640901,
+    129290076
+   ],
+   "Unassigned": [
+    58393573,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    58393573
+   ],
+   "Total fund balance": [
+    81910494,
+    41124267,
+    49765273,
+    166535869,
+    50601216,
+    26965592,
+    21931618,
+    438834329
+   ]
+  },
+  "share_of_total_pct_by_class": {
+   "Nonspendable": 0.6,
+   "Restricted": 22.9,
+   "Committed": 33.8,
+   "Assigned": 29.5,
+   "Unassigned": 13.3,
+   "Total fund balance": 100.0
+  },
+  "purposes_by_fund": {
+   "General": {
+    "Nonspendable": "Inventory 130,779; prepaids 65,534; loan receivable 1,710,894",
+    "Restricted": "Court technology 429,769; court innovations 67,011",
+    "Committed": "Self funding 2,890,000; NW Doctor's Hospital LO 2,000,000",
+    "Assigned": "2026 budget appropriations 16,222,934",
+    "Unassigned": "58,393,573 (spendable, no strings)"
+   },
+   "County Transportation": {
+    "Nonspendable": "Inventory 337,049",
+    "Restricted": "Road and bridge 40,787,218"
+   },
+   "Fine and Forfeiture (funds the Sheriff; budget fund 107)": {
+    "Restricted": "Public safety 49,765,273"
+   },
+   "Tourist Development": {
+    "Nonspendable": "Inventory 173,557",
+    "Committed": "Beach renourishment 76,900,374; new product development 22,726,632; North Walton 871,281; high impact 30,095,918",
+    "Assigned": "2026 budget appropriations 35,768,107"
+   },
+   "Solid Waste Landfill": {
+    "Nonspendable": "Prepaids 1,500",
+    "Restricted": "Closure costs 4,907,174",
+    "Assigned": "Landfill operations and capital projects 45,692,542"
+   },
+   "Capital Projects": {
+    "Assigned": "Capital projects and improvements 26,965,592"
+   },
+   "Nonmajor governmental": {
+    "Restricted": "Debt service 52,841; HUD 93,502; mosquito control 1,621,059; court technology 390,766; public records modernization 720,610; abandoned property 11,896; traffic and parking enforcement 401,928; suspense 14,636; Title IV-D 278,803; inmate canteen 545,567; law enforcement 478,040",
+    "Committed": "Building department 10,720,790; preservation 1,111,100; sidewalk 849,179",
+    "Assigned": "Public safety 223,763; culture and recreation 4,417,138"
+   }
+  },
+  "cash_and_investments_total_sept30_2025": {
+   "cash_and_equivalents": 387623698,
+   "investments": 64853011,
+   "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+   "pages": "PDF p.43",
+   "note": "Total governmental funds, unrestricted lines only."
+  }
+ },
+ "fy2024_by_fund_and_classification": {
+  "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2024%20walton%20county.pdf",
+  "pages": "PDF pp.43-44 balance sheet; PDF pp.98-100 note 2",
+  "status": "verified",
+  "funds": [
+   "General",
+   "County Transportation",
+   "Fine and Forfeiture (funds the Sheriff; budget fund 107)",
+   "Tourist Development",
+   "Solid Waste Landfill",
+   "Capital Projects",
+   "Nonmajor governmental",
+   "Total"
+  ],
+  "classification": {
+   "Nonspendable": [
+    1902451,
+    390041,
+    0,
+    262302,
+    1350,
+    0,
+    3562,
+    2559706
+   ],
+   "Restricted": [
+    659524,
+    36894286,
+    33412246,
+    0,
+    4131017,
+    0,
+    3802977,
+    78900050
+   ],
+   "Committed": [
+    2890000,
+    0,
+    0,
+    107437528,
+    0,
+    0,
+    10813390,
+    121140918
+   ],
+   "Assigned": [
+    8438292,
+    0,
+    0,
+    40423791,
+    39400898,
+    24629257,
+    4567882,
+    117460120
+   ],
+   "Unassigned": [
+    50201795,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    50201795
+   ],
+   "Total fund balance": [
+    64092062,
+    37284327,
+    33412246,
+    148123621,
+    43533265,
+    24629257,
+    19187811,
+    370262589
+   ]
+  },
+  "change_fy2024_to_fy2025_by_fund": {
+   "General": 17818432,
+   "County Transportation": 3839940,
+   "Fine and Forfeiture (funds the Sheriff; budget fund 107)": 16353027,
+   "Tourist Development": 18412248,
+   "Solid Waste Landfill": 7067951,
+   "Capital Projects": 2336335,
+   "Nonmajor governmental": 2743807,
+   "Total": 68571740
+  },
+  "matches_fy2025_beginning_balance": "verified (FY2025 ACFR PDF p.47 beginning balances equal these totals)"
+ },
+ "trend_ten_year": {
+  "years": [
+   2015,
+   2016,
+   2017,
+   2018,
+   2019,
+   2020,
+   2021,
+   2022,
+   2023,
+   2024,
+   2025
+  ],
+  "general_fund_total": [
+   21883492,
+   23350661,
+   22674854,
+   23368821,
+   24486117,
+   31243932,
+   35427507,
+   42462946,
+   49860981,
+   64092062,
+   81910494
+  ],
+  "general_fund_unassigned": [
+   15603519,
+   16610115,
+   15671532,
+   17691674,
+   16404867,
+   26870472,
+   26464599,
+   34412592,
+   41219781,
+   50201795,
+   58393573
+  ],
+  "all_governmental_funds_total": [
+   120031595,
+   121732204,
+   119926405,
+   127502814,
+   134337487,
+   156066908,
+   209508427,
+   263462304,
+   316979793,
+   370262589,
+   438834329
+  ],
+  "all_other_funds_total": [
+   98148103,
+   98381543,
+   97251551,
+   104133993,
+   109851370,
+   124822976,
+   174080920,
+   220999358,
+   267118812,
+   306170527,
+   356923835
+  ],
+  "source_2015_2024": "https://www.flauditor.gov/pages/county_efile%20rpts/2024%20walton%20county.pdf",
+  "pages_2015_2024": "PDF p.183 (Fund Balances of Governmental Funds, Last Ten Fiscal Years, printed p.145)",
+  "source_2025": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+  "pages_2025": "PDF pp.42-43",
+  "status": "verified"
+ },
+ "per_fund_year_end_series_from_county_budget_file": {
+  "source": "https://budget-waltoncountyfl.com/assets/data/fund-balances.csv",
+  "note": "County's FY2027 budget book table; 2019-2025 are year-end audited balances (2024 and 2025 match the ACFR). The file's '2026' rows just repeat 2025 and are NOT a forecast, so ignore them.",
+  "series": {
+   "001 General Fund": {
+    "2019": 24486117.0,
+    "2020": 31243932.0,
+    "2021": 35427507.0,
+    "2023": 49860891.0,
+    "2024": 64092062.0,
+    "2022": 42462946.0,
+    "2025": 81910494.0
+   },
+   "101 Transportation Fund": {
+    "2019": 17323517.0,
+    "2020": 18627845.0,
+    "2021": 25169123.0,
+    "2022": 26469849.0,
+    "2023": 32436024.0,
+    "2024": 37284327.0,
+    "2025": 41124267.0
+   },
+   "107 Sheriff Fund": {
+    "2019": 4335745.0,
+    "2020": 5375591.0,
+    "2021": 6617517.0,
+    "2022": 13411845.0,
+    "2023": 22041708.0,
+    "2024": 33412246.0,
+    "2025": 49765273.0
+   },
+   "111 Tourist Development Fund": {
+    "2019": 49824657.0,
+    "2020": 60559812.0,
+    "2021": 84963196.0,
+    "2022": 110288168.0,
+    "2023": 129289303.0,
+    "2024": 148123621.0,
+    "2025": 166535869.0
+   },
+   "112 Solid Waste Fund": {
+    "2019": 10005111.0,
+    "2020": 10005111.0,
+    "2021": 18857416.0,
+    "2022": 29280523.0,
+    "2023": 37548787.0,
+    "2024": 43533265.0,
+    "2025": 50601216.0
+   },
+   "300 Capital Projects Fund": {
+    "2019": 16848022.0,
+    "2020": 17445251.0,
+    "2021": 22549319.0,
+    "2022": 23274380.0,
+    "2023": 24202434.0,
+    "2024": 24629257.0,
+    "2025": 26965592.0
+   },
+   "103 Building Fund": {
+    "2019": 2376428.0,
+    "2020": 4667595.0,
+    "2021": 7807083.0,
+    "2022": 11307870.0,
+    "2023": 13594429.0,
+    "2024": 9197991.0,
+    "2025": 10720790.0
+   },
+   "105 Mosquito Control Fund": {
+    "2019": 435020.0,
+    "2020": 438057.0,
+    "2021": 464751.0,
+    "2022": 531400.0,
+    "2023": 468056.0,
+    "2024": 941432.0,
+    "2025": 1621059.0
+   },
+   "109 E911 Fund": {
+    "2019": 49583.0,
+    "2020": 85843.0,
+    "2021": 302662.0,
+    "2022": 127539.0,
+    "2023": 169075.0,
+    "2024": 202697.0,
+    "2025": 223763.0
+   },
+   "110 Housing & Urban Development Fund": {
+    "2019": 151069.0,
+    "2020": 148245.0,
+    "2021": 203374.0,
+    "2022": 48625.0,
+    "2023": 44808.0,
+    "2024": 12752.0,
+    "2025": 93502.0
+   },
+   "113 Preservation Fund": {
+    "2019": 3937492.0,
+    "2020": 3748079.0,
+    "2021": 2111604.0,
+    "2022": 1005930.0,
+    "2023": 1003212.0,
+    "2024": 1037568.0,
+    "2025": 1111100.0
+   },
+   "114 Recreation Plat Fee Fund": {
+    "2019": 1099694.0,
+    "2020": 864621.0,
+    "2021": 1568996.0,
+    "2022": 1683726.0,
+    "2023": 2616744.0,
+    "2024": 4365185.0,
+    "2025": 4417138.0
+   },
+   "115 Sidewalk Fund": {
+    "2019": 240910.0,
+    "2020": 289394.0,
+    "2021": 458137.0,
+    "2022": 382257.0,
+    "2023": 500504.0,
+    "2024": 581393.0,
+    "2025": 849179.0
+   }
+  }
+ },
+ "policy": {
+  "name": "Walton County Fund Balance Policy (Board Resolution 2012-59, effective for fiscal years ending on or after 9/30/2012)",
+  "source": "https://www.mywaltonfl.gov/DocumentCenter/View/9811/Fund-Balance-Policy-Resolution",
+  "status": "verified (read the resolution text)",
+  "rules": [
+   "Applies to the General Fund only. Targeted minimum unrestricted fund balance (committed + assigned + unassigned) equals two (2) months of the current year's budgeted operating expenditures and transfers out for the fund. This follows the GFOA recommended minimum of two months.",
+   "Reserve for Contingency (also called the Emergency Reserve) is committed fund balance. Once established, money can come out only by a supermajority vote of the Board and three findings: the expense cannot be delayed, no other source of funds exists, and it was unanticipated. The dollar level is set by the Board under Florida statutes (the resolution does not state a number).",
+   "Cash Balance Brought Forward is assigned fund balance, used to cover differences between budgeted revenues and expenditures.",
+   "If the minimum is not met, the County may not budget unassigned fund balance to balance the budget without Board approval.",
+   "Spending order: restricted first, then committed, then assigned, then unassigned."
+  ],
+  "compliance_fy2025": {
+   "unrestricted_general_fund_balance_committed_assigned_unassigned": 79506507,
+   "general_fund_expenditures_plus_transfers_out_actual": 185853039,
+   "two_months_of_that": 30975506,
+   "months_of_cushion": 5.1,
+   "status": "INFERRED calculation (policy says 'budgeted'; actuals used here). ACFR MD&A (PDF p.29) separately reports unassigned fund balance as 79.2 percent of 2025 expenditures (73.7M) and total fund balance 111.1 percent.",
+   "fy2025_general_fund_budget_all_in": 189306344,
+   "two_months_of_budget": 31551057,
+   "budget_source": "https://walton.civicweb.net/document/503742/"
+  },
+  "fy2026_target_two_months": {
+   "general_fund_tentative_budget": 204494466,
+   "two_months": 34082411,
+   "status": "INFERRED (tentative budget from 9/8/2025 public budget statement https://walton.civicweb.net/document/503742/)"
+  },
+  "other_mentions": [
+   "ACFR MD&A (PDF p.12): since FY2021 the county reports an increase of 31,917,513 in General Fund unassigned reserves and 81,572,670 in administrative and committed tourist development tax reserves (quoted from the report).",
+   "ACFR MD&A (PDF p.13): about 46M of tourist tax reserve money has been used to buy beach access/parking property since 2021, and a 60M to 70M beach renourishment project (Seagrove, Blue Mountain, Inlet, Dune Allen; 12.9 miles) is expected to be paid from tourist tax and any federal/state funds.",
+   "No separate written minimum reserve policy was found for the Tourist Development, Solid Waste, Transportation or Capital Projects funds (searched the ACFR notes and the county's Financial Policies page https://stories.opengov.com/countyofwaltonfl/published/GGoc5o7sB). Their balances are restricted or assigned by purpose instead."
+  ]
+ },
+ "sheriff": {
+  "note": "The ACFR fund that pays the Sheriff is the Fine and Forfeiture fund: 49,765,273 restricted for public safety at 9/30/2025 (PDF p.42). The Sheriff's own separate books show no General Fund balance (everything is owed back to the BCC: 'Due to BCC' 35,418,491) and 1,452,067 restricted for law enforcement in nonmajor funds (Sheriff statements, PDF p.365, printed p.300).",
+  "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+  "status": "verified"
+ },
+ "fy2026_and_fy2027_budgeted_reserves": {
+  "bcc_reserve_for_contingencies_fy2026": {
+   "original_budget": 500000,
+   "revised_budget": 307000,
+   "ytd_spent": 0,
+   "source": "eal/financial-question/report.txt, the county's 9/15/2026 year-to-date budget report, account 00101001 599000 OTHER USES/CONTINGENCY (revised after a 193,000 transfer out)",
+   "status": "verified"
+  },
+  "other_general_fund_contingency_fy2026": {
+   "property_appraiser_original": 117539,
+   "property_appraiser_ytd": 11057.43,
+   "supervisor_of_elections": 25000,
+   "source": "same report",
+   "status": "verified"
+  },
+  "contingency_fy2027_adopted": {
+   "bcc": 400000,
+   "property_appraiser": 133372,
+   "supervisor_of_elections": 25000,
+   "source": "https://budget-waltoncountyfl.com/assets/data/expenditures.csv (account 599000)",
+   "status": "verified (file reconciles to adopted total)"
+  },
+  "balance_brought_forward_fy2027": {
+   "total_excluding_surplus": 21259176,
+   "by_fund": {
+    "001 General": 8047270,
+    "101 Transportation": 4881906,
+    "103 Building": 4000000,
+    "107 Sheriff (F&F)": 4130000,
+    "115 Sidewalk": 200000
+   },
+   "plus_surplus_budget_tax_collector_001": 4050600,
+   "source": "https://budget-waltoncountyfl.com/assets/data/revenues.csv code 389000 and 386700",
+   "status": "verified. This is how much savings the adopted FY2027 budget plans to spend; it is small next to 438.8M in balances."
+  },
+  "fy2026_other_sources_tentative": {
+   "amount": 11369480,
+   "note": "Balance brought forward and other sources in the FY2026 tentative budget summary (not split further)",
+   "source": "https://walton.civicweb.net/document/503742/"
+  },
+  "no_published_fy2026_year_end_balance": "The FY2026 audit (year ended 9/30/2026) is not due until spring 2027. Until then the latest actual balance is 9/30/2025."
+ },
+ "gaps_and_cautions": [
+  "Balances are as of 9/30/2025, more than a year old. FY2026 spending from savings (Res 2025-82 carryforward, land purchases) means 9/30/2026 balances will be lower than shown; an estimate is not published.",
+  "Fund balance is not the same as cash on hand: it includes receivables and is net of liabilities.",
+  "Fine and Forfeiture fund is the Sheriff-funding fund; do not label it 'Sheriff reserves' without the explanation above."
+ ]
+}

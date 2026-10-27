@@ -20,7 +20,9 @@ import {
   pace,
   pct,
 } from "./format";
+import { fundSavings, incomeCard, reservesDocument, reservesEmpty, revenueDocument, revenueEmpty } from "./money-pages";
 import { FUND_COLORS, axisPercent, fundSlices, isCountyOfficeVendor, isTransferDepartment, lookPicks, paceDepartments, type SpendRow } from "./overview";
+import type { AmountItem, PublishedLedger, ReserveFund } from "./published";
 import { mergeVendorSpend, titleCaseVendor, type VendorLabel } from "./vendors";
 
 export interface ShellOpts {
@@ -37,6 +39,8 @@ export interface ShellOpts {
 
 const NAV = [
   ["overview", "/", "Overview"],
+  ["revenue", "/revenue", "Revenue"],
+  ["reserves", "/reserves", "Reserves"],
   ["funds", "/funds", "Funds"],
   ["departments", "/departments", "Departments"],
   ["search", "/search", "Payments"],
@@ -45,6 +49,9 @@ const NAV = [
   ["sheriff", "/sheriff", "Sheriff"],
   ["about", "/about", "About the data"],
 ];
+
+/** Pages a signed-in visitor can open. Tests and crawls should use this list. */
+export const PUBLIC_PATHS = NAV.map((item) => item[1]);
 
 export function page(opts: ShellOpts): string {
   const asOf = opts.dataAsOf ? displayDate(opts.dataAsOf) : "the latest published import";
@@ -268,6 +275,7 @@ export function renderOverview(opts: {
   csrf: string;
   isAdmin: boolean;
   showNames: boolean;
+  income?: { items: AmountItem[]; totalCents: number } | null;
 }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const facts = opts.facts;
@@ -322,7 +330,7 @@ ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 <a class="card kpi k4" href="/departments?sort=avail"><div class="l">${esc(leftLabel(facts.current, facts.spent).title)}</div><div class="n">${esc(kpiLeftValue(facts.current, facts.spent))}</div><div class="s">Budget limit after mid-year changes ${esc(moneyCompact(facts.current))}</div></a>
 </section>
 ${countCard(facts)}
-<section class="grid2">
+<section class="grid2 spend-row">
 <div class="card">
 <div class="eyebrow">By fund</div>
 <h2>Where the money is, fund by fund</h2>
@@ -336,6 +344,7 @@ ${fundBars(slices)}
 <p class="cap">Each fund's share of the ${esc(moneyCompact(facts.spent))} spent so far. Money moved between funds is not in this chart.</p>
 ${shareDonut(slices, facts.spent)}
 </div>
+${incomeCard(opts.income?.items ?? null, opts.income?.totalCents ?? 0)}
 </section>
 ${paceSection(paced, opts, fiscal.elapsedPct, facts.transfer, deptLabels)}
 <section class="grid2b">
@@ -819,6 +828,8 @@ export function renderFund(opts: {
   names: NameMaps;
   displayName: (raw: string) => VendorLabel;
   capitalByDept?: Map<string, CapitalLine[]>;
+  reserve?: ReserveFund | null;
+  reserveAsOf?: string;
   csrf: string;
   isAdmin: boolean;
   showNames: boolean;
@@ -851,6 +862,7 @@ export function renderFund(opts: {
   const body = `<p class="crumb"><a href="/">Overview</a> / <a href="/funds">Funds</a> / ${esc(opts.fund.code)}</p>
 <h1>${esc(named.primary)}</h1>
 <p class="lede">Fund ${esc(opts.fund.code)}. <a href="/search?fund=${esc(opts.fund.code)}">Payments in this fund</a></p>
+${opts.reserve ? fundSavings(opts.reserve, opts.reserveAsOf || "") : ""}
 ${budgetHead(net, fiscal.elapsedPct)}
 ${overNote}
 ${whereMoneyWent({
@@ -1167,6 +1179,46 @@ ${
   return page({ title: "Ask a question. Budget Explorer", active: "ask", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
 }
 
+export function renderRevenue(opts: {
+  ledger: PublishedLedger | null;
+  fundCodes: string[];
+  dataAsOf?: string | null;
+  csrf: string;
+  isAdmin: boolean;
+  showNames: boolean;
+}): string {
+  const body = opts.ledger ? revenueDocument(opts.ledger, new Set(opts.fundCodes)) : revenueEmpty();
+  return page({
+    title: "Income. Budget Explorer",
+    active: "revenue",
+    body,
+    dataAsOf: opts.dataAsOf,
+    admin: opts.isAdmin,
+    csrf: opts.csrf,
+    showNames: opts.showNames,
+  });
+}
+
+export function renderReserves(opts: {
+  ledger: PublishedLedger | null;
+  fundCodes: string[];
+  dataAsOf?: string | null;
+  csrf: string;
+  isAdmin: boolean;
+  showNames: boolean;
+}): string {
+  const body = opts.ledger ? reservesDocument(opts.ledger, new Set(opts.fundCodes)) : reservesEmpty();
+  return page({
+    title: "Savings. Budget Explorer",
+    active: "reserves",
+    body,
+    dataAsOf: opts.dataAsOf,
+    admin: opts.isAdmin,
+    csrf: opts.csrf,
+    showNames: opts.showNames,
+  });
+}
+
 export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolean, baseUrl = "", showNames = true): string {
   const body = `
 <h1>About the data</h1>
@@ -1174,6 +1226,7 @@ export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolea
 <section class="panel">
 <h2>Source</h2>
 <p>Figures come from a year to date budget report produced by the Walton County Clerk and Comptroller, imported by an administrator. The published snapshot is what the pages read. Older imports are kept.</p>
+<p><a href="/revenue">Income</a> and <a href="/reserves">savings</a> are separate. They come from the audited financial report and the adopted budget files, not from the year to date payment report. Transfers between county funds are not treated as income.</p>
 <p>Department and object names come from a chart of accounts when one has been imported. Until then, a code is marked unmatched. Every figure is keyed by fund, department, object, and project codes.</p>
 <p>${showNames ? "Payroll lines keep employee names and individual pay. An administrator can hide both without importing the file again." : "Person names and individual pay are hidden. Payroll is shown as batch totals. The names and amounts stay in the database."} Payment lines dated after the report date are stored, flagged, and left out of search, department payments, and questions.</p>
 <p>Status compares spent plus encumbered with the share of the fiscal year that has passed. The fiscal year starts on October 1.</p>

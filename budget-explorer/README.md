@@ -31,11 +31,26 @@ The session cookie is `HttpOnly`, `Secure`, `SameSite=Lax`, and expires after ab
 
 ## D1
 
-The D1 database name is `budget-explorer`. Its id is in `wrangler.jsonc`. Migration `0001_init.sql` is already applied on the remote database. Apply `0002_settings.sql` remotely before deploying the names switch. Apply both locally before seeding:
+The D1 database name is `budget-explorer`. Its id is in `wrangler.jsonc`. Migration `0001_init.sql` is already applied on the remote database. Migration `0002_settings.sql` is the names switch. Migration `0003_revenue_reserves.sql` is the income and savings tables. Apply `0003` on the remote database by hand. Do not run `wrangler d1 migrations apply --remote`. Apply the local copies before seeding:
 
 ```bash
 npx wrangler d1 migrations apply budget-explorer --local
 ```
+
+Income and savings totals live in `sources/`. They are published aggregates with source URLs, not payment rows. After `0003` is on the database:
+
+```bash
+npx tsx scripts/import-published.ts
+npx tsx scripts/import-published.ts --apply
+```
+
+`--apply` loads the generated SQL into the local D1 file. The SQL file is written in the system temp directory. To check a later budget CSV with the same account-code rules:
+
+```bash
+npx tsx scripts/import-published.ts --budget-csv /path/to/revenues.csv --adopted-total 345223508 --exclude-fund 503
+```
+
+The import stops if a source list does not add to its published total, or if a budget line has no category rule.
 
 ## Local data
 
