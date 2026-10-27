@@ -48,6 +48,7 @@ function openDb(): { raw: DatabaseSync; db: D1Database } {
   const root = join(import.meta.dirname, "..", "migrations");
   raw.exec(readFileSync(join(root, "0001_init.sql"), "utf8"));
   raw.exec(readFileSync(join(root, "0002_settings.sql"), "utf8"));
+  raw.exec(readFileSync(join(root, "0003_revenue_reserves.sql"), "utf8"));
   const db = {
     prepare(sql: string) {
       const stmt = raw.prepare(sql);

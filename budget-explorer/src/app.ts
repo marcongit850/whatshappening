@@ -70,6 +70,7 @@ import { csvAmount, csvCell, displayDate, isoDate } from "./format";
 import { uploadAllowed } from "./limits";
 import { parseReport } from "./parser";
 import { safeNext } from "./safe-next";
+import { loadPublishedLedger } from "./published-db";
 import { AI_MODEL, modelText } from "./qa";
 import { CLIENT_JS, CSS } from "./style";
 import { xlsxToRows } from "./xlsx";
@@ -89,6 +90,8 @@ import {
   renderOverview,
   renderPlat,
   renderPreview,
+  renderReserves,
+  renderRevenue,
   renderSearch,
   renderSheriff,
   renderUnlock,
@@ -208,7 +211,7 @@ app.get("/", async (c) => {
   if (!current) return c.html(renderEmpty(session.csrf, isAdmin(c), c.get("showNames")));
   const showNames = c.get("showNames");
   const asOf = current.data_as_of || "";
-  const [departments, names, funds, rollups, months, vendors, officeCents, landMonths, landDepts, platMonths, facts, vendorNames] = await Promise.all([
+  const [departments, names, funds, rollups, months, vendors, officeCents, landMonths, landDepts, platMonths, facts, vendorNames, ledger] = await Promise.all([
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
@@ -221,6 +224,7 @@ app.get("/", async (c) => {
     monthlyParts(c.env.DB, current.id, asOf, "114"),
     loadBudgetFacts(c.env.DB, current.id),
     loadVendorNames(c.env.DB, current.id),
+    loadPublishedLedger(c.env.DB),
   ]);
   return c.html(
     renderOverview({
@@ -240,6 +244,43 @@ app.get("/", async (c) => {
       csrf: session.csrf,
       isAdmin: isAdmin(c),
       showNames,
+      income: ledger ? { items: ledger.income, totalCents: ledger.incomeTotalCents } : null,
+    }),
+  );
+});
+
+app.get("/revenue", async (c) => {
+  const current = await latestPublished(c.env.DB);
+  const [ledger, funds] = await Promise.all([
+    loadPublishedLedger(c.env.DB),
+    current ? fundRollups(c.env.DB, current.id) : Promise.resolve([]),
+  ]);
+  return c.html(
+    renderRevenue({
+      ledger,
+      fundCodes: funds.map((fund) => fund.code),
+      dataAsOf: current?.data_as_of,
+      csrf: c.get("session").csrf,
+      isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
+    }),
+  );
+});
+
+app.get("/reserves", async (c) => {
+  const current = await latestPublished(c.env.DB);
+  const [ledger, funds] = await Promise.all([
+    loadPublishedLedger(c.env.DB),
+    current ? fundRollups(c.env.DB, current.id) : Promise.resolve([]),
+  ]);
+  return c.html(
+    renderReserves({
+      ledger,
+      fundCodes: funds.map((fund) => fund.code),
+      dataAsOf: current?.data_as_of,
+      csrf: c.get("session").csrf,
+      isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
     }),
   );
 });
@@ -266,7 +307,7 @@ app.get("/funds/:code", async (c) => {
   const code = c.req.param("code");
   if (!/^\d{3}$/.test(code)) return c.text("Not found", 404);
   const showNames = c.get("showNames");
-  const [funds, departments, names, categories, accounts, vendors, vendorNames, payments, officeCents, capitalByDept] = await Promise.all([
+  const [funds, departments, names, categories, accounts, vendors, vendorNames, payments, officeCents, capitalByDept, ledger] = await Promise.all([
     fundRollups(c.env.DB, current.id),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
@@ -277,6 +318,7 @@ app.get("/funds/:code", async (c) => {
     loadLargestPayments(c.env.DB, current.id, { showNames, fund: code }),
     loadOfficePaymentCents(c.env.DB, current.id, { fund: code }),
     loadCapitalAccounts(c.env.DB, current.id, code),
+    loadPublishedLedger(c.env.DB),
   ]);
   const fund = funds.find((item) => item.code === code);
   if (!fund) return c.text("Fund not found", 404);
@@ -292,6 +334,8 @@ app.get("/funds/:code", async (c) => {
       officeCents,
       names,
       capitalByDept,
+      reserve: ledger?.reserves.funds.find((item) => item.fundCode === code) || null,
+      reserveAsOf: ledger?.reserves.asOf,
       displayName: buildVendorIndex(vendorNames),
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
