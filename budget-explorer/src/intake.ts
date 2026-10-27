@@ -1,4 +1,4 @@
-import { FORM_COOKIE, clientIp, csrfOk, formCookie, readCookie, sha256Hex } from "./auth";
+import { FORM_COOKIE, csrfOk, formCookie, readCookie, sha256Hex } from "./auth";
 import type { AppEnv } from "./env";
 import { isTaxesHost } from "./host";
 import { COUNTIES, type CountyPlace, type UsState } from "./places";
@@ -6,6 +6,11 @@ import { publicHtml, publicRedirect, publicText } from "./public-http";
 import { renderCountyRequest, renderReportForm, renderThanks } from "./public-page";
 
 export const INTAKE_HOUR_LIMIT = 5;
+export const INTAKE_GLOBAL_HOUR_LIMIT = 200;
+export const INTAKE_GLOBAL_DAY_LIMIT = 1_000;
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COUNTY_NAME = /^[A-Za-z0-9][A-Za-z0-9 .'-]{1,70}$/;
@@ -94,9 +99,82 @@ function withCookie(response: Response, value: string): Response {
   return response;
 }
 
-async function visitorHash(env: AppEnv, request: Request, kind: string): Promise<string | null> {
-  if (!env.SESSION_SECRET) return null;
-  return sha256Hex(`${env.SESSION_SECRET}:${kind}:${clientIp(request)}`);
+/**
+ * Public forms trust only CF-Connecting-IP, which Cloudflare sets.
+ * There is no X-Forwarded-For fallback and no stand-in address.
+ * Tests inject this header. A missing or unusable value is a 503.
+ */
+export function readConnectingIp(request: Request): string | null {
+  const value = request.headers.get("cf-connecting-ip");
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 200 || /[\u0000-\u001F\u007F,\s]/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function canonicalIPv4(value: string): string | null {
+  const parts = value.split(".");
+  if (parts.length !== 4) return null;
+  const nums: number[] = [];
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const n = Number(part);
+    if (!Number.isInteger(n) || n > 255) return null;
+    nums.push(n);
+  }
+  return nums.join(".");
+}
+
+/** Eight 16-bit groups, or null when the text is not an IPv6 address. */
+function parseIPv6(value: string): number[] | null {
+  let input = value;
+  const lastColon = input.lastIndexOf(":");
+  if (lastColon >= 0 && input.slice(lastColon + 1).includes(".")) {
+    const v4 = canonicalIPv4(input.slice(lastColon + 1));
+    if (!v4) return null;
+    const [a, b, c, d] = v4.split(".").map(Number);
+    const hi = ((a << 8) | b).toString(16);
+    const lo = ((c << 8) | d).toString(16);
+    input = `${input.slice(0, lastColon + 1)}${hi}:${lo}`;
+  }
+  const halves = input.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 ? (halves[1] ? halves[1].split(":") : []) : [];
+  if (halves.length === 1 && head.length !== 8) return null;
+  const missing = 8 - head.length - tail.length;
+  if (missing < 0 || (halves.length === 2 && missing === 0)) return null;
+  const groups = [...head, ...Array.from({ length: Math.max(missing, 0) }, () => "0"), ...tail];
+  if (groups.length !== 8) return null;
+  const nums: number[] = [];
+  for (const group of groups) {
+    if (!/^[0-9a-f]{1,4}$/.test(group)) return null;
+    nums.push(Number.parseInt(group, 16));
+  }
+  return nums;
+}
+
+function ipv4FromMapped(groups: number[]): string | null {
+  const mapped = groups.slice(0, 5).every((part) => part === 0) && groups[5] === 0xffff;
+  if (!mapped) return null;
+  const hi = groups[6];
+  const lo = groups[7];
+  return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+}
+
+/** Full IPv4 address, or the IPv6 /64 prefix. Null when the text is not an IP address. */
+export function intakeNetworkKey(ip: string): string | null {
+  const trimmed = ip.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  if (!trimmed || trimmed.length > 80 || /[\s%]/.test(trimmed)) return null;
+  if (!trimmed.includes(":")) {
+    const v4 = canonicalIPv4(trimmed);
+    return v4 ? `4:${v4}` : null;
+  }
+  const groups = parseIPv6(trimmed);
+  if (!groups) return null;
+  const mapped = ipv4FromMapped(groups);
+  if (mapped) return `4:${mapped}`;
+  return `6:${groups.slice(0, 4).map((part) => part.toString(16)).join(":")}`;
 }
 
 async function recentCount(db: D1Database, table: "county_requests" | "data_reports", hash: string): Promise<number> {
@@ -106,6 +184,100 @@ async function recentCount(db: D1Database, table: "county_requests" | "data_repo
     .bind(hash, since)
     .first<{ n: number }>();
   return Number(row?.n || 0);
+}
+
+async function countFormsSince(db: D1Database, since: string): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM county_requests WHERE created_at >= ?) +
+         (SELECT COUNT(*) FROM data_reports WHERE created_at >= ?) AS n`,
+    )
+    .bind(since, since)
+    .first<{ n: number }>();
+  return Number(row?.n || 0);
+}
+
+async function globalCapHit(db: D1Database): Promise<boolean> {
+  const now = Date.now();
+  const hour = await countFormsSince(db, new Date(now - HOUR_MS).toISOString());
+  if (hour >= INTAKE_GLOBAL_HOUR_LIMIT) return true;
+  const day = await countFormsSince(db, new Date(now - DAY_MS).toISOString());
+  return day >= INTAKE_GLOBAL_DAY_LIMIT;
+}
+
+function holdPage(opts: { title: string; message: string; path: string; backHref: string; backLabel: string }): Response {
+  return publicHtml(
+    renderThanks({
+      title: opts.title,
+      message: opts.message,
+      path: opts.path,
+      backHref: opts.backHref,
+      backLabel: opts.backLabel,
+      eyebrow: "Please wait",
+      closeNote: null,
+    }),
+    503,
+    false,
+  );
+}
+
+type SubmissionPage = { path: string; backHref: string; backLabel: string };
+
+function requireNetwork(request: Request, page: SubmissionPage): { ok: true; key: string } | { ok: false; response: Response } {
+  const key = intakeNetworkKey(readConnectingIp(request) || "");
+  if (!key) {
+    return {
+      ok: false,
+      response: holdPage({
+        title: "Form unavailable",
+        message: "This form is not available right now. Please try again later.",
+        ...page,
+      }),
+    };
+  }
+  return { ok: true, key };
+}
+
+async function allowSubmission(
+  env: AppEnv,
+  kind: "county" | "report",
+  table: "county_requests" | "data_reports",
+  key: string,
+  page: SubmissionPage,
+  tooMany: () => Response,
+): Promise<{ ok: true; hash: string } | { ok: false; response: Response }> {
+  if (!env.SESSION_SECRET) {
+    return {
+      ok: false,
+      response: publicHtml(
+        renderThanks({
+          title: "Form unavailable",
+          message: "This form is not available right now.",
+          path: page.path,
+          backHref: page.backHref,
+          backLabel: page.backLabel,
+          eyebrow: "Please wait",
+          closeNote: null,
+        }),
+        500,
+        false,
+      ),
+    };
+  }
+  const hash = await sha256Hex(`${env.SESSION_SECRET}:${kind}:${key}`);
+  if (await globalCapHit(env.DB)) {
+    return {
+      ok: false,
+      response: holdPage({
+        title: "Please try again later",
+        message: "We have had a lot of notes in a short time. Please wait and send yours again later.",
+        ...page,
+      }),
+    };
+  }
+  if ((await recentCount(env.DB, table, hash)) >= INTAKE_HOUR_LIMIT) return { ok: false, response: tooMany() };
+  return { ok: true, hash };
 }
 
 function tooLarge(request: Request): boolean {
@@ -153,6 +325,9 @@ export async function handleCountyForm(request: Request, env: AppEnv, spec: Coun
   if (!(await csrfOk(expected, provided))) {
     return countyError(spec, "That form expired. Reload the page and try again.", "", "", "", 400);
   }
+  const page = { path: spec.action, backHref: spec.action, backLabel: "Back to the form" };
+  const network = requireNetwork(request, page);
+  if (!network.ok) return network.response;
 
   const name = field(form, "name", 80);
   const email = field(form, "email", 120);
@@ -180,6 +355,8 @@ export async function handleCountyForm(request: Request, env: AppEnv, spec: Coun
           path: spec.action,
           backHref: existing.href,
           backLabel: `Open ${existing.name}`,
+          eyebrow: "Already live",
+          closeNote: null,
         }),
         200,
         false,
@@ -187,12 +364,12 @@ export async function handleCountyForm(request: Request, env: AppEnv, spec: Coun
     }
   }
 
-  const hash = await visitorHash(env, request, "county");
-  if (!hash) return countyError(spec, "This form is not available right now.", echo(name, 80), echo(note, 1000), echo(typedCounty, 80), 500);
   try {
-    if ((await recentCount(env.DB, "county_requests", hash)) >= INTAKE_HOUR_LIMIT) {
-      return countyError(spec, "Too many requests from this network. Please wait an hour and try again.", echo(name, 80), echo(note, 1000), echo(typedCounty, 80), 429);
-    }
+    const gate = await allowSubmission(env, "county", "county_requests", network.key, page, () =>
+      countyError(spec, "Too many requests from this network. Please wait an hour and try again.", echo(name, 80), echo(note, 1000), echo(typedCounty, 80), 429),
+    );
+    if (!gate.ok) return gate.response;
+    const hash = gate.hash;
     await env.DB.prepare(
       `INSERT INTO county_requests (created_at, state_name, state_slug, county_name, county_slug, requester_name, requester_email, note, ip_hash)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -289,6 +466,9 @@ export async function handleReport(request: Request, env: AppEnv, action: string
   const provided = field(form, "form_token", 80);
   const expected = readCookie(request.headers.get("cookie") || undefined, FORM_COOKIE);
   if (!(await csrfOk(expected, provided))) return reportError(action, "That form expired. Reload the page and try again.", posted, 400);
+  const page = { path: action, backHref: action, backLabel: "Back to the form" };
+  const network = requireNetwork(request, page);
+  if (!network.ok) return network.response;
   if (!kind) return reportError(action, "Choose what this is about.", posted, 400);
   if (email && !EMAIL.test(email)) return reportError(action, "The email address does not look complete. You can leave it blank.", posted, 400);
 
@@ -299,14 +479,14 @@ export async function handleReport(request: Request, env: AppEnv, action: string
   }
   if (kind === "idea" && idea.length < 2) return reportError(action, "Write your idea. You do not need to name a page.", posted, 400);
 
-  const hash = await visitorHash(env, request, "report");
-  if (!hash) return reportError(action, "This form is not available right now.", posted, 500);
   const subject = kind === "idea" ? idea : pageRef;
   const fix = kind === "idea" ? "" : correction;
   try {
-    if ((await recentCount(env.DB, "data_reports", hash)) >= INTAKE_HOUR_LIMIT) {
-      return reportError(action, "Too many notes from this network. Please wait an hour and try again.", posted, 429);
-    }
+    const gate = await allowSubmission(env, "report", "data_reports", network.key, page, () =>
+      reportError(action, "Too many notes from this network. Please wait an hour and try again.", posted, 429),
+    );
+    if (!gate.ok) return gate.response;
+    const hash = gate.hash;
     await env.DB.prepare(
       `INSERT INTO data_reports (created_at, kind, county_name, subject, correction, source_note, requester_name, requester_email, ip_hash)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,

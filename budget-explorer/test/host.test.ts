@@ -3,9 +3,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import app from "../src/app";
-import { newSession, signSession } from "../src/auth";
+import { newSession, sha256Hex, signSession } from "../src/auth";
 import { DASHBOARD_PREFIXES, isDashboardPath, isTaxesHost, prefixHtml, prefixLocation, prefixPath, robotsTxt, sitemapXml } from "../src/host";
-import { INTAKE_HOUR_LIMIT } from "../src/intake";
+import { INTAKE_GLOBAL_DAY_LIMIT, INTAKE_GLOBAL_HOUR_LIMIT, INTAKE_HOUR_LIMIT, intakeNetworkKey } from "../src/intake";
+import { safeRedirectLocation, unsafeRequestPath } from "../src/redirect-path";
 import { COUNTIES } from "../src/places";
 import { US_STATES } from "../src/states";
 import { PUBLIC_PATHS } from "../src/view";
@@ -97,6 +98,9 @@ describe("host routing helpers", () => {
     );
     expect(prefixLocation("/login?next=%2Ffunds%2F001")).toBe("/walton/login?next=%2Fwalton%2Ffunds%2F001");
     expect(prefixLocation("/walton")).toBe("/walton");
+    expect(prefixLocation("//evil.com")).toBe("/walton");
+    expect(prefixLocation("/\\evil.com")).toBe("/walton");
+    expect(prefixLocation("/login?next=%2F%2Fevil.com")).toBe("/walton/login?next=%2Fwalton");
     expect(US_STATES).toHaveLength(50);
     expect(new Set(US_STATES.map((state) => state.abbr)).size).toBe(50);
     expect(new Set(US_STATES.map((state) => `${state.col},${state.row}`)).size).toBe(50);
@@ -119,6 +123,12 @@ describe("taxes host public door", () => {
     expect(html).toContain('tabindex="-1"');
     expect(html).toContain("Florida is live");
     expect(html).toContain("Pick a state. Then pick a county.");
+    expect(html).toContain("No state matches that name");
+    expect(html).toContain('data-state-empty hidden');
+    expect(html).toContain('class="body-copy"');
+    const css = await (await app.request(`${TAXES}/assets/app.css`, {}, dbEnv)).text();
+    expect(css).toContain(".door-section .body-copy { font-size: 22px;");
+    expect(css).toContain(".state-empty { font-size: 22px;");
     expect(html).toContain("<svg");
     expect(html).toContain('href="/florida"');
     expect(html).toContain("Coming soon");
@@ -305,18 +315,19 @@ function postForm(
   dbEnv: ReturnType<typeof envFor>,
   cookie: string,
   fields: Record<string, string>,
-  ip = "203.0.113.44",
+  ip: string | null = "203.0.113.44",
   extra: Record<string, string> = {},
 ) {
+  const headers: Record<string, string> = {
+    cookie,
+    origin: new URL(url).origin,
+    "content-type": "application/x-www-form-urlencoded",
+  };
+  if (ip) headers["cf-connecting-ip"] = ip;
+  Object.assign(headers, extra);
   return app.request(url, {
     method: "POST",
-    headers: {
-      cookie,
-      origin: new URL(url).origin,
-      "content-type": "application/x-www-form-urlencoded",
-      "cf-connecting-ip": ip,
-      ...extra,
-    },
+    headers,
     body: new URLSearchParams(fields),
   }, dbEnv);
 }
@@ -365,6 +376,8 @@ describe("county catalog and request form", () => {
     const thanksHtml = await thanks.text();
     expect(thanks.status).toBe(200);
     expect(thanksHtml).toContain("Thank you. We saved your request.");
+    expect(thanksHtml).toContain(">Received<");
+    expect(thanksHtml).toContain("You can close this page.");
     expect(thanksHtml).not.toContain(ASKER);
     expect(thanksHtml).not.toMatch(/\u2014|\u2013/);
     const row = await dbEnv.DB.prepare("SELECT state_slug, county_name, county_slug, requester_email, note, ip_hash FROM county_requests").first<{
@@ -378,6 +391,8 @@ describe("county catalog and request form", () => {
     expect(row).toMatchObject({ state_slug: "florida", county_name: "Sample County", county_slug: "sample-county", requester_email: ASKER, note: "Please add it" });
     expect(row?.ip_hash).toMatch(/^[a-f0-9]{64}$/);
     expect(row?.ip_hash).not.toContain("203.0.113.44");
+    expect(intakeNetworkKey("203.0.113.44")).toBe("4:203.0.113.44");
+    expect(row?.ip_hash).toBe(await sha256Hex(`session-secret:county:${intakeNetworkKey("203.0.113.44")}`));
 
     const expired = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, {
       form_token: "nope",
@@ -482,6 +497,9 @@ describe("county catalog and request form", () => {
     const html = await posted.text();
     expect(posted.status).toBe(200);
     expect(html).toContain("Walton County is already live, open it.");
+    expect(html).toContain(">Already live<");
+    expect(html).not.toContain(">Received<");
+    expect(html).not.toContain("You can close this page");
     expect(html).toContain('href="/walton"');
     expect(html).not.toContain(ASKER);
     const again = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, {
@@ -549,6 +567,8 @@ describe("report a problem or share an idea", () => {
     expect(taxes.response.headers.get("X-Robots-Tag")).toContain("noindex");
     expect(taxes.html).toContain('content="noindex, nofollow"');
     expect(taxes.html).toContain("What is this about?");
+    expect(taxes.html).toContain("Required. Choose the county this note is about.");
+    expect(taxes.html).toContain('<select id="county" name="county" required>');
     expect(taxes.html).toContain("We never publish your email.");
     expect(taxes.html).not.toContain("Large type. Nothing here is published with your email.");
     expect(taxes.html).toContain("Something looks wrong");
@@ -715,5 +735,256 @@ describe("report a problem or share an idea", () => {
     expect(limited.status).toBe(429);
     expect(limitedHtml).toContain("Too many notes");
     expect(limitedHtml).not.toContain(ASKER);
+  });
+});
+
+function locationIsOpen(location: string | null): boolean {
+  if (!location) return false;
+  const trimmed = location.trim();
+  if (trimmed.startsWith("//") || trimmed.startsWith("\\") || trimmed.startsWith("/\\")) return true;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return true;
+  let decoded = trimmed;
+  for (let pass = 0; pass < 3; pass += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      return true;
+    }
+  }
+  return decoded.startsWith("//") || decoded.startsWith("\\") || decoded.startsWith("/\\") || decoded.includes("\\");
+}
+
+describe("public redirect hardening", () => {
+  it("collapses protocol-relative locations and 404s slash tricks", async () => {
+    expect(unsafeRequestPath("//evil.com/")).toBe(true);
+    expect(unsafeRequestPath("/\\evil.com/")).toBe(true);
+    expect(unsafeRequestPath("///evil.com/")).toBe(true);
+    expect(unsafeRequestPath("/%2f%2fevil.com")).toBe(true);
+    expect(unsafeRequestPath("/%2F%2Fevil.com/")).toBe(true);
+    expect(unsafeRequestPath("/%5Cevil.com")).toBe(true);
+    expect(unsafeRequestPath("/%5cevil.com/")).toBe(true);
+    expect(unsafeRequestPath("%252f%252fevil.com")).toBe(true);
+    expect(unsafeRequestPath("/florida/")).toBe(false);
+    expect(safeRedirectLocation("//evil.com")).toBe("/evil.com");
+    expect(safeRedirectLocation("/\\evil.com")).toBe("/evil.com");
+    expect(safeRedirectLocation("///evil.com")).toBe("/evil.com");
+    expect(safeRedirectLocation("/%2f%2fevil.com")).toBe("/evil.com");
+    expect(safeRedirectLocation("/%5Cevil.com")).toBe("/evil.com");
+    expect(safeRedirectLocation("/florida/")).toBe("/florida/");
+    expect(safeRedirectLocation("/report?thanks=idea")).toBe("/report?thanks=idea");
+
+    const dbEnv = envFor(openDb());
+    const attacks = [
+      "//evil.com/",
+      "/\\evil.com/",
+      "///evil.com/",
+      "/%2f%2fevil.com",
+      "/%2f%2fevil.com/",
+      "/%5Cevil.com",
+      "/%5Cevil.com/",
+      "/%2F%2Fevil.com/",
+    ];
+    for (const path of attacks) {
+      const response = await app.request(`${TAXES}${path}`, {}, dbEnv);
+      const location = response.headers.get("Location");
+      expect(locationIsOpen(location), `${path} -> ${location}`).toBe(false);
+      expect(response.status, path).toBe(404);
+      expect(location, path).toBeNull();
+      if (response.status === 404 && !path.startsWith("/\\")) {
+        expect(await response.text(), path).toContain("That page is not here");
+      }
+    }
+
+    const florida = await app.request(`${TAXES}/florida/`, {}, dbEnv);
+    expect(florida.status).toBe(301);
+    expect(florida.headers.get("Location")).toBe("/florida");
+    const search = await app.request(`${TAXES}/search/?fund=114`, {}, dbEnv);
+    expect(search.status).toBe(301);
+    expect(search.headers.get("Location")).toBe("/walton/search?fund=114");
+    const login = await (await app.request(`${BUDGET}/login?next=%2F%2Fevil.com`, {}, dbEnv)).text();
+    expect(login).not.toContain("evil.com");
+  });
+});
+
+describe("intake network and global caps", () => {
+  const fields = {
+    name: "Ada",
+    email: ASKER,
+    county_name: "Sample County",
+    note: "",
+    company_website: "",
+  };
+
+  it("groups an IPv6 /64 and keeps full IPv4 addresses apart", () => {
+    const prefix = "2001:db8:85a3:8d3::1";
+    expect(intakeNetworkKey(prefix)).toBe("6:2001:db8:85a3:8d3");
+    expect(intakeNetworkKey("2001:0db8:85a3:08d3:ffff:ffff:ffff:ffff")).toBe(intakeNetworkKey(prefix));
+    expect(intakeNetworkKey("2001:DB8:85A3:8D3:0:0:0:2")).toBe(intakeNetworkKey(prefix));
+    expect(intakeNetworkKey("2001:db8:85a3:8d4::1")).not.toBe(intakeNetworkKey(prefix));
+    expect(intakeNetworkKey("203.0.113.10")).toBe("4:203.0.113.10");
+    expect(intakeNetworkKey("203.0.113.11")).not.toBe(intakeNetworkKey("203.0.113.10"));
+    expect(intakeNetworkKey("::ffff:203.0.113.9")).toBe("4:203.0.113.9");
+    expect(intakeNetworkKey("not-an-ip")).toBeNull();
+    expect(INTAKE_GLOBAL_HOUR_LIMIT).toBe(200);
+    expect(INTAKE_GLOBAL_DAY_LIMIT).toBe(1000);
+  });
+
+  it("shares the 5 an hour limit across one IPv6 /64", async () => {
+    const dbEnv = envFor(openDb());
+    const page = await openForm(`${TAXES}/florida/request`, dbEnv);
+    const same = ["2001:db8:85a3:8d3::1", "2001:db8:85a3:8d3:ffff::2", "2001:0db8:85a3:08d3::3", "2001:db8:85a3:8d3:1:2:3:4", "2001:db8:85a3:8d3::5"];
+    const hashes = new Set<string>();
+    for (const ip of same) {
+      const posted = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, { ...fields, form_token: page.token }, ip);
+      expect(posted.status, ip).toBe(303);
+    }
+    const rows = await dbEnv.DB.prepare("SELECT ip_hash FROM county_requests").all<{ ip_hash: string }>();
+    for (const row of rows.results) hashes.add(row.ip_hash);
+    expect(hashes.size).toBe(1);
+    expect([...hashes][0]).toBe(await sha256Hex(`session-secret:county:${intakeNetworkKey(same[0])}`));
+    const blocked = await postForm(
+      `${TAXES}/florida/request`,
+      dbEnv,
+      page.cookie,
+      { ...fields, form_token: page.token },
+      "2001:db8:85a3:8d3:aaaa::9",
+    );
+    expect(blocked.status).toBe(429);
+    const other = await postForm(
+      `${TAXES}/florida/request`,
+      dbEnv,
+      page.cookie,
+      { ...fields, form_token: page.token },
+      "2001:db8:85a3:8d4::1",
+    );
+    expect(other.status).toBe(303);
+    const v4block = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, { ...fields, form_token: page.token, county_name: "Holmes County" }, "203.0.113.10");
+    expect(v4block.status).toBe(303);
+  });
+
+  async function seedForms(db: D1Database, countyCount: number, reportCount: number, iso: string) {
+    for (let i = 0; i < countyCount; i += 1) {
+      await db
+        .prepare(
+          `INSERT INTO county_requests (created_at, state_name, state_slug, county_name, county_slug, requester_name, requester_email, note, ip_hash)
+           VALUES (?, 'Florida', 'florida', 'Sample', 'sample', 'Ada', 'ada@county.test', '', ?)`,
+        )
+        .bind(iso, `seed-c-${i}`)
+        .run();
+    }
+    for (let i = 0; i < reportCount; i += 1) {
+      await db
+        .prepare(
+          `INSERT INTO data_reports (created_at, kind, county_name, subject, correction, source_note, requester_name, requester_email, ip_hash)
+           VALUES (?, 'idea', 'Walton County', 'Idea', '', '', '', '', ?)`,
+        )
+        .bind(iso, `seed-r-${i}`)
+        .run();
+    }
+  }
+
+  it("stops both forms at the shared hourly and daily caps", async () => {
+    const dbEnv = envFor(openDb());
+    const page = await openForm(`${TAXES}/florida/request`, dbEnv);
+    const report = await openForm(`${TAXES}/report`, dbEnv);
+    const now = new Date().toISOString();
+    await seedForms(dbEnv.DB, 120, 79, now);
+    const room = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, { ...fields, form_token: page.token }, "203.0.113.70");
+    expect(room.status).toBe(303);
+    const countyBlocked = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, { ...fields, form_token: page.token }, "203.0.113.71");
+    const countyHtml = await countyBlocked.text();
+    expect(countyBlocked.status).toBe(503);
+    expect(countyHtml).toContain("a lot of notes");
+    expect(countyHtml).not.toContain("You can close this page");
+    expect(countyHtml).not.toContain(ASKER);
+    const reportBlocked = await postForm(
+      `${TAXES}/report`,
+      dbEnv,
+      report.cookie,
+      { form_token: report.token, kind: "idea", idea: "A picture of the budget", county: "walton", company_website: "", email: ASKER },
+      "203.0.113.72",
+    );
+    expect(reportBlocked.status).toBe(503);
+    expect(await reportBlocked.text()).toContain("a lot of notes");
+    const honeypot = await postForm(
+      `${TAXES}/florida/request`,
+      dbEnv,
+      page.cookie,
+      { ...fields, form_token: page.token, company_website: "https://spam.example" },
+      "203.0.113.73",
+    );
+    expect(honeypot.status).toBe(303);
+    const cross = await postForm(
+      `${TAXES}/florida/request`,
+      dbEnv,
+      page.cookie,
+      { ...fields, form_token: page.token },
+      "203.0.113.74",
+      { origin: "https://evil.example" },
+    );
+    expect(cross.status).toBe(403);
+
+    const dayEnv = envFor(openDb());
+    const dayPage = await openForm(`${TAXES}/states/texas`, dayEnv);
+    const old = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    await seedForms(dayEnv.DB, 400, 600, old);
+    const dayBlocked = await postForm(
+      `${TAXES}/states/texas`,
+      dayEnv,
+      dayPage.cookie,
+      { ...fields, form_token: dayPage.token },
+      "203.0.113.80",
+    );
+    expect(dayBlocked.status).toBe(503);
+    expect(await dayBlocked.text()).toContain("a lot of notes");
+    const saved = await dayEnv.DB.prepare("SELECT COUNT(*) AS n FROM county_requests").first<{ n: number }>();
+    expect(Number(saved?.n)).toBe(400);
+  });
+
+  it("returns 503 when CF-Connecting-IP is missing and ignores other client headers", async () => {
+    const dbEnv = envFor(openDb());
+    const page = await openForm(`${TAXES}/florida/request`, dbEnv);
+    const missing = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, { ...fields, form_token: page.token }, null);
+    const missingHtml = await missing.text();
+    expect(missing.status).toBe(503);
+    expect(missingHtml).toContain("This form is not available right now. Please try again later.");
+    expect(missingHtml).not.toContain(ASKER);
+    expect(missingHtml).not.toContain("You can close this page");
+    const forwarded = await postForm(
+      `${TAXES}/florida/request`,
+      dbEnv,
+      page.cookie,
+      { ...fields, form_token: page.token },
+      null,
+      { "x-forwarded-for": "198.51.100.20" },
+    );
+    expect(forwarded.status).toBe(503);
+    const invalid = await postForm(`${TAXES}/florida/request`, dbEnv, page.cookie, { ...fields, form_token: page.token }, "not-an-ip");
+    expect(invalid.status).toBe(503);
+    const report = await openForm(`${TAXES}/report`, dbEnv);
+    const reportMissing = await postForm(
+      `${TAXES}/report`,
+      dbEnv,
+      report.cookie,
+      { form_token: report.token, kind: "idea", idea: "Show one picture", county: "walton", company_website: "" },
+      null,
+    );
+    expect(reportMissing.status).toBe(503);
+    const kept = await postForm(
+      `${TAXES}/florida/request`,
+      dbEnv,
+      page.cookie,
+      { ...fields, form_token: page.token },
+      "203.0.113.44",
+      { "x-forwarded-for": "198.51.100.99" },
+    );
+    expect(kept.status).toBe(303);
+    const row = await dbEnv.DB.prepare("SELECT ip_hash FROM county_requests").first<{ ip_hash: string }>();
+    expect(row?.ip_hash).toBe(await sha256Hex(`session-secret:county:${intakeNetworkKey("203.0.113.44")}`));
+    expect(row?.ip_hash).not.toBe(await sha256Hex("session-secret:county:4:198.51.100.99"));
+    const total = await dbEnv.DB.prepare("SELECT COUNT(*) AS n FROM county_requests").first<{ n: number }>();
+    expect(Number(total?.n)).toBe(1);
   });
 });

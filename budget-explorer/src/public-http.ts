@@ -1,4 +1,5 @@
 import { CSP } from "./headers";
+import { safeRedirectLocation } from "./redirect-path";
 
 export function applyPublicHeaders(headers: Headers, index: boolean): void {
   headers.set("X-Content-Type-Options", "nosniff");
@@ -19,7 +20,7 @@ export function publicHtml(body: string, status: number, index: boolean): Respon
 export function publicRedirect(location: string, status: 301 | 303 = 303): Response {
   const headers = new Headers();
   applyPublicHeaders(headers, false);
-  headers.set("Location", location);
+  headers.set("Location", safeRedirectLocation(location));
   headers.set("Cache-Control", "private, no-store");
   return new Response(null, { status, headers });
 }
