@@ -12,7 +12,7 @@ import {
   showPersonNamesFromForm,
 } from "./access";
 import { directAnswer, publicFactText } from "./answers";
-import { loadBudgetFacts, loadCategorySpend, loadFundRollups, loadOfficePaymentCents, loadTopAccounts, loadTopVendors, loadVendorNames } from "./budget";
+import { loadBudgetFacts, loadCapitalAccounts, loadCategorySpend, loadFundRollups, loadLargestPayments, loadOfficePaymentCents, loadTopAccounts, loadTopVendors, loadVendorNames } from "./budget";
 import { buildVendorIndex, withDisplayNames } from "./vendors";
 import type { SessionPayload } from "./auth";
 import {
@@ -214,7 +214,7 @@ app.get("/", async (c) => {
     fundNameMap(c.env.DB, current.id),
     fundRollups(c.env.DB, current.id),
     monthlyParts(c.env.DB, current.id, asOf),
-    organizationVendors(c.env.DB, current.id, asOf, 10),
+    organizationVendors(c.env.DB, current.id, asOf, 40),
     constitutionalTransferCents(c.env.DB, current.id, asOf),
     landSpendByMonth(c.env.DB, current.id, asOf),
     landSpendByDept(c.env.DB, current.id, asOf),
@@ -266,7 +266,7 @@ app.get("/funds/:code", async (c) => {
   const code = c.req.param("code");
   if (!/^\d{3}$/.test(code)) return c.text("Not found", 404);
   const showNames = c.get("showNames");
-  const [funds, departments, names, categories, accounts, vendors, vendorNames, payments, officeCents] = await Promise.all([
+  const [funds, departments, names, categories, accounts, vendors, vendorNames, payments, officeCents, capitalByDept] = await Promise.all([
     fundRollups(c.env.DB, current.id),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
@@ -274,8 +274,9 @@ app.get("/funds/:code", async (c) => {
     loadTopAccounts(c.env.DB, current.id, { fund: code }),
     loadTopVendors(c.env.DB, current.id, { showNames, fund: code }),
     loadVendorNames(c.env.DB, current.id),
-    searchLines(c.env.DB, current.id, { q: "", vendor: "", dept: "", fund: code, minCents: 0, from: "", to: "", excludeTransfer: true }, 0, 24, showNames),
+    loadLargestPayments(c.env.DB, current.id, { showNames, fund: code }),
     loadOfficePaymentCents(c.env.DB, current.id, { fund: code }),
+    loadCapitalAccounts(c.env.DB, current.id, code),
   ]);
   const fund = funds.find((item) => item.code === code);
   if (!fund) return c.text("Fund not found", 404);
@@ -287,9 +288,10 @@ app.get("/funds/:code", async (c) => {
       categories,
       accounts,
       vendors,
-      payments: payments.rows,
+      payments,
       officeCents,
       names,
+      capitalByDept,
       displayName: buildVendorIndex(vendorNames),
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
@@ -330,7 +332,7 @@ app.get("/departments/:dept", async (c) => {
     loadCategorySpend(c.env.DB, current.id, { dept }),
     loadTopVendors(c.env.DB, current.id, { showNames, dept }),
     loadVendorNames(c.env.DB, current.id),
-    searchLines(c.env.DB, current.id, { q: "", vendor: "", dept, fund: found.fund_code, minCents: 0, from: "", to: "", excludeTransfer: true }, 0, 24, showNames),
+    loadLargestPayments(c.env.DB, current.id, { showNames, dept }),
     loadOfficePaymentCents(c.env.DB, current.id, { dept }),
   ]);
   return c.html(
@@ -342,7 +344,7 @@ app.get("/departments/:dept", async (c) => {
       names,
       categories,
       vendors,
-      payments: payments.rows,
+      payments,
       officeCents,
       displayName: buildVendorIndex(vendorNames),
       csrf: c.get("session").csrf,
@@ -725,6 +727,7 @@ function readFilters(c: { req: { query: (name: string) => string | undefined } }
     minCents: Number.isFinite(minNumber) && minNumber > 0 ? Math.round(minNumber * 100) : 0,
     from: isoDate(c.req.query("from") || ""),
     to: isoDate(c.req.query("to") || ""),
+    excludeTransfer: c.req.query("transfers") !== "1",
   };
 }
 
