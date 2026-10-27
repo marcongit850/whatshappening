@@ -280,9 +280,9 @@ a.card:hover { border-color: #cfc6b4; }
 .meter div { height: 100%; border-radius: 8px; }
 .pace .note, .card .note { margin: 22px 0 0; font-size: 15px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; background: transparent; }
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin-bottom: 32px; min-width: 0; }
-.kpi { padding: 26px 28px; }
+.kpi { padding: 26px 28px; min-width: 0; overflow: hidden; }
 .kpi .l { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
-.kpi .n { font-family: var(--serif); font-size: 46px; font-weight: 500; line-height: 1.15; margin: 8px 0 4px; }
+.kpi .n { font-family: var(--serif); font-size: 46px; font-weight: 500; line-height: 1.15; margin: 8px 0 4px; overflow-wrap: anywhere; max-width: 100%; }
 .kpi .s { font-size: 15px; color: var(--muted); }
 .kpi.k1 { border-top: 4px solid var(--teal); }
 .kpi.k2 { border-top: 4px solid var(--teal2); }

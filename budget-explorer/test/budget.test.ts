@@ -4,16 +4,17 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import app from "../src/app";
 import { newSession, signSession } from "../src/auth";
-import { BUDGET_FACTS_SQL, TOP_VENDOR_SQL, factsFromRow, loadCategorySpend } from "../src/budget";
+import { BUDGET_FACTS_SQL, PAYMENT_SCOPE_SQL, TOP_VENDOR_SQL, capitalLinesCovering, factsFromRow, loadCategorySpend, loadLargestPayments, netPaymentReversals, sqlExpressionDepth } from "../src/budget";
 import { publishImport, saveImport } from "../src/db";
 import { leftLabel } from "../src/format";
-import { isCountyOfficeVendor } from "../src/overview";
-import { parseReport } from "../src/parser";
-import { collapsePayments, disambiguatedDepartmentNames, paymentWho } from "../src/view";
+import { CONSTITUTIONAL_SQL, isCountyOfficeVendor } from "../src/overview";
+import { parseReport, sqlIsPersonName } from "../src/parser";
+import { collapsePayments, disambiguatedDepartmentNames, paymentWho, renderFund, renderOverview } from "../src/view";
 import { vendorSpendAnswer } from "../src/answers";
 import {
   buildVendorIndex,
   mergeVendorSpend,
+  nameLooksCut,
   sumVendorMatches,
   titleCaseVendor,
   vendorNameMatches,
@@ -119,39 +120,48 @@ async function readerCookie(): Promise<{ header: string; csrf: string }> {
 describe("vendor names", () => {
   it("title-cases a store name and keeps a letter after an apostrophe lower", () => {
     expect(titleCaseVendor("LOWE'S HOME CENTERS,")).toBe("Lowe's Home Centers");
-    expect(titleCaseVendor("ACME BUILDING SUPPLY X")).toBe("Acme Building Supply");
+    expect(titleCaseVendor("ACME BUILDING SUPPLY X")).toBe("Acme Building Supply X");
   });
 
-  it("expands a cut-off name when a longer stored name starts the same way", () => {
-    const display = buildVendorIndex(["WALTON COUNTY SHERIFF OFFICE", "ZEHNDER COMMUNICATIONS INC"]);
-    expect(display("WALTON COUNTY SHERIF").text).toBe("Walton County Sheriff Office");
-    expect(display("ZEHNDER COMMUNICATIO").text).toBe("Zehnder Communications INC");
-    expect(display("ZEHNDER COMMUNICATIO").shortened).toBe(false);
+  it("shows the report's name and marks a 20 character cutoff", () => {
+    const display = buildVendorIndex(["WALTON COUNTY SHERIFF OFFICE", "ZEHNDER COMMUNICATIONS INC", "FLORIDA DEPARTMENT OF REVENUE"]);
+    expect(display("WALTON COUNTY SHERIF").text).toBe("Walton County Sherif");
+    expect(display("ZEHNDER COMMUNICATIO").text).toBe("Zehnder Communicatio");
+    expect(display("ZEHNDER COMMUNICATIO").shortened).toBe(true);
     expect(display("JANE Q PUBLIC").text).toBe("JANE Q PUBLIC");
     expect(display("Payroll (batch total)").text).toBe("Payroll (batch total)");
     const alone = buildVendorIndex([]);
-    expect(alone("ZEHNDER COMMUNICATIO").text).toBe("Zehnder");
-    expect(alone("ZEHNDER COMMUNICATIO").shortened).toBe(true);
-    expect(alone("Adkinson Law Firm Ll")).toEqual({ text: "Adkinson Law Firm LLC", shortened: true });
-    expect(alone("C&A Landscape Mainte").text).toBe("C&A Landscape");
-    expect(alone("South Walton Fire Di").text).toBe("South Walton Fire");
-    expect(alone("JM PHELPS CONSTRUCTI").text).toBe("Jm Phelps");
-    expect(alone("TOPSAIL PRESERVE STA").text).toBe("Topsail Preserve");
-    expect(alone("HEFFLEY &").text).toBe("Heffley");
-    expect(alone("VINTAGE SIGN &").text).toBe("Vintage Sign");
-    expect(alone("REFLECTION CITY OF").text).toBe("Reflection City");
+    expect(alone("ZEHNDER COMMUNICATIO")).toEqual({ text: "Zehnder Communicatio", shortened: true });
+    expect(alone("Adkinson Law Firm Ll")).toEqual({ text: "Adkinson Law Firm Ll", shortened: true });
+    expect(alone("C&A Landscape Mainte").text).toBe("C&A Landscape Mainte");
+    expect(alone("South Walton Fire Di").text).toBe("South Walton Fire Di");
+    expect(alone("JM PHELPS CONSTRUCTI").text).toBe("Jm Phelps Constructi");
+    expect(alone("TOPSAIL PRESERVE STA").text).toBe("Topsail Preserve Sta");
+    expect(alone("HEFFLEY &").text).toBe("Heffley &");
+    expect(alone("VINTAGE SIGN &").text).toBe("Vintage Sign &");
+    expect(alone("REFLECTION CITY OF").text).toBe("Reflection City Of");
     expect(alone("HARPER LANDSCAPING").text).toBe("Harper Landscaping");
     expect(alone("SOUTH WALTON TURTLE").text).toBe("South Walton Turtle");
     expect(alone("AT&T MOBILITY").text).toBe("AT&T Mobility");
+    expect(alone("FLORIDA DEPARTMENT O")).toEqual({ text: "Florida Department O", shortened: true });
+    expect(alone("DISTRICT ONE CONSTRU")).toEqual({ text: "District One Constru", shortened: true });
+    expect(alone("HABITAT FOR HUMANI").text).toBe("Habitat For Humani");
+    expect(alone("SHI INTER*")).toEqual({ text: "Shi Inter", shortened: true });
+    expect(alone("WALTON COUNTY ECONOM FY 26").text).toBe("Walton County Econom Fy 26");
+    expect(nameLooksCut("SHI INTER*")).toBe(true);
+    expect(nameLooksCut("HARPER LANDSCAPING")).toBe(false);
     const merged = mergeVendorSpend(
       [
         { vendor_name: "FLORIDA DEPARTMENT O", cents: 100 },
         { vendor_name: "FLORIDA DEPARTMENT OF", cents: 40 },
+        { vendor_name: "LOWE'S HOME CENTERS,", cents: 10 },
+        { vendor_name: "lowe's home centers", cents: 5 },
       ],
       alone,
     );
-    expect(merged).toHaveLength(1);
-    expect(merged[0].cents).toBe(140);
+    expect(merged.map((row) => row.vendor_name).sort()).toEqual(["FLORIDA DEPARTMENT O", "FLORIDA DEPARTMENT OF", "LOWE'S HOME CENTERS,"]);
+    const lowes = merged.find((row) => row.vendor_name.includes("LOWE"));
+    expect(lowes?.cents).toBe(15);
   });
 
   it("matches Lowe's and a cut-off sheriff, and does not match a different word", () => {
@@ -293,6 +303,20 @@ describe("county offices, categories, and payment lines", () => {
     );
     expect(labels.get("11101000")).toBe("Marketing (Tourist Development)");
     expect(labels.get("00122000")).toBe("Marketing (General Fund)");
+    const housing = disambiguatedDepartmentNames(
+      [
+        { code: "11040000", fund_code: "110", report_name: "Housing & Urban Development" },
+        { code: "00140000", fund_code: "001", report_name: "Housing & Urban Development" },
+      ],
+      { fund: new Map([["110", "Housing & Urban Development Fund"], ["001", "General Fund"]]), department: new Map(), object: new Map() },
+      new Map([
+        ["110", "Housing & Urban Development Fund"],
+        ["001", "General Fund"],
+      ]),
+    );
+    expect(housing.get("11040000")).toBe("Housing & Urban Development (11040000)");
+    expect(housing.get("00140000")).toBe("Housing & Urban Development (General Fund)");
+    expect(housing.get("11040000")).not.toContain("Housing & Urban Development Fund");
   });
 
   it("merges categories that share a label and drops a zero row", async () => {
@@ -336,6 +360,9 @@ describe("budget pages", () => {
     expect(overview).toContain("Resolution 2025-82");
     expect(overview).toContain("budget limit after mid-year changes");
     expect(overview).toContain("Share of the mid-year limit: 39.2%");
+    expect(overview).toContain("Paid out is 39.2% of the mid-year limit, and 96% of the year is gone.");
+    expect(overview).not.toContain("under the year's progress");
+    expect(overview).not.toContain("ahead of the year's progress");
     expect(overview).not.toContain("of its $3,700");
     expect(overview).not.toContain("current budget");
     expect(overview).not.toContain("$200M");
@@ -425,6 +452,8 @@ describe("budget pages", () => {
     expect(search).toContain("$1,450.00");
     expect(search).not.toContain("$4,783.00");
     expect(search).toContain("Money moved between county funds is not included.");
+    expect(search).toContain("year-to-date column on the account report");
+    expect(search).toContain("Lines dated after the report date are left out of this search.");
     const withTransfers = await (await app.request("http://localhost/search?transfers=1", { headers }, env)).text();
     expect(withTransfers).toContain("$4,783.00");
     expect(budget).not.toContain("$6,333");
@@ -434,5 +463,210 @@ describe("budget pages", () => {
     const tourist = await ask("What is the Tourist Development budget?");
     expect(tourist).toContain("$1,500");
     expect(tourist).toContain("$800");
+  });
+});
+
+describe("expression depth, reversals, land, and the money left card", () => {
+  it("guards D1 expression depth and still filters hidden names", async () => {
+    expect(sqlExpressionDepth("a")).toBe(1);
+    expect(sqlExpressionDepth("replace(replace(replace(x,'a',''),'b',''),'c','')")).toBe(4);
+    let chain = "a";
+    for (let i = 0; i < 99; i++) chain += " OR a";
+    expect(sqlExpressionDepth(chain)).toBe(100);
+    expect(PAYMENT_SCOPE_SQL).toContain("is_person_name = 0");
+    expect(PAYMENT_SCOPE_SQL).not.toContain("LIKE '% LLC %'");
+    const scopeDepth = sqlExpressionDepth(PAYMENT_SCOPE_SQL);
+    expect(scopeDepth).toBeLessThanOrEqual(100);
+    const crowded = `import_id = ?
+         AND after_cutoff = 0
+         AND object_code != '591000'
+         AND NOT ${CONSTITUTIONAL_SQL}
+         AND (? = 1 OR ${sqlIsPersonName("vendor_name")} = 0)
+         AND (? = '' OR fund_code = ?)
+         AND (? = '' OR dept_code = ?)`;
+    expect(sqlExpressionDepth(crowded)).toBeGreaterThan(100);
+
+    const { db } = openDb();
+    const insert = db.prepare(
+      `INSERT INTO payments (import_id, fund_code, dept_code, object_code, project_code, pay_date, amount_cents, vendor_name, check_number, after_cutoff, is_person_name, dedupe_key)
+       VALUES (1, '111', '11141090', '534000', '', ?, ?, ?, ?, 0, ?, ?)`,
+    );
+    const add = async (date: string, cents: number, vendor: string, check: string, person: number, key: string) => {
+      await insert.bind(date, cents, vendor, check, person, key).run();
+    };
+    await add("2025-12-22", 1_248_750_000, "ADKINSON LAW FIRM", "A1", 0, "p1");
+    await add("2026-04-02", 1_248_750_000, "ADKINSON LAW FIRM", "A2", 0, "p2");
+    await add("2026-04-03", 1_248_750_000, "", "A3", 0, "p3");
+    await add("2026-04-04", -1_248_750_000, "ADKINSON LAW FIRM", "A4", 0, "p4");
+    await add("2026-05-01", 7_728_500, "ADKINSON LAW FIRM", "A5", 0, "p5");
+    await add("2026-01-01", 24_750_000, "DISTRICT ONE", "D1", 0, "d1");
+    await add("2026-02-01", 24_750_000, "DISTRICT ONE", "D2", 0, "d2");
+    await add("2026-03-01", 24_750_000, "DISTRICT ONE", "D3", 0, "d3");
+    await add("2026-03-02", -24_750_000, "DISTRICT ONE", "D4", 0, "d4");
+    await add("2026-03-03", -24_750_000, "DISTRICT ONE", "D5", 0, "d5");
+    await add("2026-06-01", 9_000, "JANE Q PUBLIC", "J1", 1, "j1");
+    await add("2026-06-02", 5_000, "ACME SUPPLY CO", "C1", 0, "c1");
+
+    const hidden = await loadLargestPayments(db, 1, { showNames: false, fund: "111" });
+    expect(hidden.some((row) => (row.vendor_name || "").includes("JANE"))).toBe(false);
+    expect(hidden.some((row) => row.vendor_name === "ACME SUPPLY CO")).toBe(true);
+    const shown = await loadLargestPayments(db, 1, { showNames: true, fund: "111" });
+    expect(shown.some((row) => row.vendor_name === "JANE Q PUBLIC")).toBe(true);
+    const adkinson = shown.filter((row) => row.vendor_name === "ADKINSON LAW FIRM");
+    expect(adkinson.map((row) => row.amount_cents).sort((a, b) => b - a)).toEqual([1_248_750_000, 7_728_500]);
+    expect(shown.some((row) => !(row.vendor_name || "").trim() && row.amount_cents === 1_248_750_000)).toBe(false);
+    const district = shown.filter((row) => row.vendor_name === "DISTRICT ONE");
+    expect(district).toHaveLength(1);
+    expect(district[0].amount_cents).toBe(24_750_000);
+    const netTotal = adkinson.reduce((sum, row) => sum + row.amount_cents, 0);
+    expect(netTotal).toBeLessThanOrEqual(1_248_750_000 + 7_728_500);
+  });
+
+  it("nets a posted reversal and drops the blank twin", () => {
+    const rows = [
+      { pay_date: "2025-12-22", amount_cents: 100, vendor_name: "ADKINSON LAW FIRM", check_number: "1", journal: "", invoice: "" },
+      { pay_date: "2026-04-02", amount_cents: 100, vendor_name: "ADKINSON LAW FIRM", check_number: "2", journal: "", invoice: "" },
+      { pay_date: "2026-04-03", amount_cents: 100, vendor_name: "", check_number: "3", journal: "", invoice: "" },
+      { pay_date: "2026-04-04", amount_cents: -100, vendor_name: "ADKINSON LAW FIRM", check_number: "4", journal: "", invoice: "" },
+    ];
+    const nets = new Map([["ADKINSON LAW FIRM", 100]]);
+    const kept = netPaymentReversals(rows, nets);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].vendor_name).toBe("ADKINSON LAW FIRM");
+    expect(kept[0].amount_cents).toBe(100);
+  });
+
+  it("labels land that covers a department overage and shortens the money left card", () => {
+    const land = 1_517_870_800;
+    const budget = 459_519_000;
+    const covered = capitalLinesCovering(land, budget, [{ object_code: "561000", title: "LAND", ytd_cents: land }]);
+    expect(covered).toHaveLength(1);
+    expect(capitalLinesCovering(100, 80, [{ object_code: "552000", title: "SUPPLIES", ytd_cents: 100 }])).toBeNull();
+
+    const row = {
+      id: 1,
+      created_at: "",
+      published_at: null,
+      data_as_of: "2026-09-15",
+      filename: null,
+      status: "published",
+      note: null,
+      fund_count: 1,
+      department_count: 1,
+      account_count: 1,
+      payment_count: 0,
+      payroll_batch_count: 0,
+      payroll_line_count: 0,
+      after_cutoff_count: 0,
+      recon_mismatch_count: 0,
+      orig_cents: budget,
+      adj_cents: 0,
+      rev_cents: budget,
+      ytd_cents: land,
+      enc_cents: 0,
+      avail_cents: 0,
+      printed_orig_cents: null,
+      printed_rev_cents: null,
+      printed_ytd_cents: null,
+    };
+    const dept = {
+      code: "11141090",
+      fund_code: "111",
+      report_name: "Beach Tram",
+      orig_cents: budget,
+      adj_cents: 0,
+      rev_cents: budget,
+      ytd_cents: land,
+      enc_cents: 0,
+      avail_cents: 0,
+      accounts: 1,
+      transfer_orig_cents: 0,
+      transfer_rev_cents: 0,
+      transfer_ytd_cents: 0,
+      transfer_enc_cents: 0,
+    };
+    const fundHtml = renderFund({
+      row,
+      fund: {
+        code: "111",
+        report_name: "Tourist Development",
+        orig_cents: 20_000_000_00,
+        adj_cents: 0,
+        rev_cents: 20_000_000_00,
+        ytd_cents: 16_000_000_00,
+        enc_cents: 0,
+        avail_cents: 0,
+        accounts: 1,
+        transfer_orig_cents: 0,
+        transfer_rev_cents: 0,
+        transfer_ytd_cents: 0,
+        transfer_enc_cents: 0,
+      },
+      departments: [dept],
+      categories: [],
+      accounts: [],
+      vendors: [],
+      payments: [],
+      officeCents: 0,
+      names: { fund: new Map([["111", "Tourist Development"]]), department: new Map([["11141090", "Beach Tram"]]), object: new Map() },
+      displayName: () => ({ text: "", shortened: false }),
+      capitalByDept: new Map([["11141090", [{ object_code: "561000", title: "LAND", ytd_cents: land }]]]),
+      csrf: "t",
+      isAdmin: false,
+      showNames: true,
+    });
+    expect(fundHtml).toContain("Includes $15,178,708 coded to Land (account 561000).");
+    expect(fundHtml).not.toContain("Over budget by");
+    expect(fundHtml).not.toContain("may reflect an amendment");
+    expect(fundHtml).not.toContain("\u2014");
+    expect(fundHtml).not.toContain("\u2013");
+
+    const left = 16_911_787_800;
+    const spent = 1_000_000_000;
+    const current = spent + left;
+    const overviewHtml = renderOverview({
+      row,
+      departments: [],
+      funds: [],
+      fundReports: new Map(),
+      names: { fund: new Map(), department: new Map(), object: new Map() },
+      months: [],
+      vendors: [],
+      officeCents: 0,
+      landByMonth: [],
+      landByDept: new Map(),
+      platMonths: [],
+      facts: {
+        grossOrig: spent,
+        grossRev: current,
+        grossYtd: spent,
+        grossEnc: 0,
+        transferOrig: 0,
+        transferRev: 0,
+        transferYtd: 0,
+        transferEnc: 0,
+        adopted: spent,
+        current,
+        spent,
+        encumbered: 0,
+        left,
+        amendments: current - spent,
+        transfer: 0,
+        spentOfCurrentPct: 5.6,
+        spentOfAdoptedPct: 100,
+      },
+      displayName: () => ({ text: "", shortened: false }),
+      csrf: "t",
+      isAdmin: false,
+      showNames: true,
+    });
+    const card = overviewHtml.slice(overviewHtml.indexOf("kpi k4"), overviewHtml.indexOf("kpi k4") + 400);
+    expect(card).toContain("$169.1M");
+    expect(card).not.toContain("169,117,878");
+    expect(overviewHtml).toContain("Paid out is 5.6% of the mid-year limit");
+    expect(overviewHtml).not.toContain("under the year's progress");
+    expect(overviewHtml).not.toContain("$663.8M");
+    expect(overviewHtml).not.toContain("$468.3M");
+    expect(overviewHtml).not.toContain("$494.7M");
   });
 });

@@ -97,17 +97,17 @@ function seed(raw: DatabaseSync): void {
   const pay = raw.prepare(`INSERT INTO payments (
     import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
     amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key, is_person_name
-  ) VALUES (1, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?, '1', '', ?, ?, 0)`);
-  const payments: [string, string, string, string, string, number, string, string, string, number, string][] = [
-    ["114", "11444000", "534000", "2025-10-15", "API", 15_000_000, "1001", "NORTH BUILDERS LLC", "N1", 0, "n1"],
-    ["114", "11444000", "561000", "2025-10-20", "API", 2_000_000, "1001", "NORTH BUILDERS LLC", "N2", 0, "n2"],
-    ["001", "00133000", "534000", "2025-12-02", "API", 8_000_000, "1002", "ACME WIDGET CO", "A1", 0, "a1"],
-    ["001", "00133000", "534000", "2025-11-01", "API", 123_456, "1003", "SAMPLE COUNTY SHERIFF", "S1", 0, "s1"],
-    ["001", "00122000", "534000", "2025-11-02", "API", 100, "1004", "JANE Q PUBLIC", "P1", 0, "p1"],
-    ["114", "11444000", "534000", "2026-09-20", "API", 99_999_900, "1005", "LATE VENDOR CO", "L1", 1, "l1"],
-    ["001", "00133000", "534000", "2025-12-01", "GEN", 4_000_000, "1006", "INTERNAL JOURNAL CO", "J1", 0, "j1"],
-    ["001", "00133000", "534000", "2026-01-15", "API", 6_000_000, "1007", "PLAT SUPPLY CO", "PS1", 0, "ps1"],
-    ["001", "00122000", "534000", "2026-01-16", "API", 7_000_000, "1008", "PLATFORM SERVICES INC", "PF1", 0, "pf1"],
+  ) VALUES (1, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?, '1', '', ?, ?, ?)`);
+  const payments: [string, string, string, string, string, number, string, string, string, number, string, number][] = [
+    ["114", "11444000", "534000", "2025-10-15", "API", 15_000_000, "1001", "NORTH BUILDERS LLC", "N1", 0, "n1", 0],
+    ["114", "11444000", "561000", "2025-10-20", "API", 2_000_000, "1001", "NORTH BUILDERS LLC", "N2", 0, "n2", 0],
+    ["001", "00133000", "534000", "2025-12-02", "API", 8_000_000, "1002", "ACME WIDGET CO", "A1", 0, "a1", 0],
+    ["001", "00133000", "534000", "2025-11-01", "API", 123_456, "1003", "SAMPLE COUNTY SHERIFF", "S1", 0, "s1", 0],
+    ["001", "00122000", "534000", "2025-11-02", "API", 100, "1004", "JANE Q PUBLIC", "P1", 0, "p1", 1],
+    ["114", "11444000", "534000", "2026-09-20", "API", 99_999_900, "1005", "LATE VENDOR CO", "L1", 1, "l1", 0],
+    ["001", "00133000", "534000", "2025-12-01", "GEN", 4_000_000, "1006", "INTERNAL JOURNAL CO", "J1", 0, "j1", 0],
+    ["001", "00133000", "534000", "2026-01-15", "API", 6_000_000, "1007", "PLAT SUPPLY CO", "PS1", 0, "ps1", 0],
+    ["001", "00122000", "534000", "2026-01-16", "API", 7_000_000, "1008", "PLATFORM SERVICES INC", "PF1", 0, "pf1", 0],
   ];
   for (const row of payments) pay.run(...row);
   raw.exec(`INSERT INTO payroll_lines (
@@ -194,7 +194,8 @@ describe("overview dashboard", () => {
     expect(html).toContain("/search?vendor=NORTH%20BUILDERS%20LLC");
     expect(html).toContain("/search?fund=114");
     expect(html).toContain("<svg");
-    expect(html).toContain("may reflect an amendment not in this report");
+    expect(html).toContain(">Over budget<");
+    expect(html).not.toContain("may reflect an amendment");
     expect(html).toContain("Recreation Plat Fee");
     expect(html).toContain("Roads Division");
     expect(html).toContain(moneyCompact(123_456));

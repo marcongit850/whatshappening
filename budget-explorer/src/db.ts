@@ -1,7 +1,7 @@
 import { TRANSFER_OBJECT } from "./budget";
 import type { ChartNames } from "./csv";
 import { CONSTITUTIONAL_SQL, VENDOR_SOURCES } from "./overview";
-import { foldedPayrollNote, sqlIsPersonName, type ParseResult, type ParsedPayment, type ParsedPayrollLine } from "./parser";
+import { foldedPayrollNote, type ParseResult, type ParsedPayment, type ParsedPayrollLine } from "./parser";
 
 export interface ImportRow {
   id: number;
@@ -516,10 +516,12 @@ export async function monthlyParts(db: D1Database, importId: number, asOf: strin
   return [...map.values()];
 }
 
-/** Organizations only. Person names are excluded in SQL in both name-switch modes. */
+/**
+ * Organizations only. Person names are excluded in both name-switch modes.
+ * The stored is_person_name column is used here so this WHERE stays under D1's expression depth.
+ */
 export async function organizationVendors(db: D1Database, importId: number, asOf: string, limit = 10): Promise<OrgVendor[]> {
   const sources = VENDOR_SOURCES.map((source) => `'${source}'`).join(", ");
-  const person = sqlIsPersonName("vendor_name");
   const rows = await db
     .prepare(
       `SELECT CASE WHEN vendor_number = '' THEN vendor_name ELSE vendor_number END AS vendor_key,
@@ -536,7 +538,7 @@ export async function organizationVendors(db: D1Database, importId: number, asOf
          AND vendor_name IS NOT NULL
          AND trim(vendor_name) != ''
          AND object_code != '${TRANSFER_OBJECT}'
-         AND ${person} = 0
+         AND is_person_name = 0
          AND NOT ${CONSTITUTIONAL_SQL}
        GROUP BY vendor_key
        ORDER BY cents DESC

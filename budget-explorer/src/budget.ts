@@ -1,6 +1,5 @@
 import type { PaymentRow } from "./db";
 import { CONSTITUTIONAL_SQL } from "./overview";
-import { sqlIsPersonName } from "./parser";
 
 /** Object code for money moved from one county fund to another. */
 export const TRANSFER_OBJECT = "591000";
@@ -265,30 +264,76 @@ export async function loadTopVendors(
   }));
 }
 
-/** Largest outside payments. Offices and transfers are left out before the limit, so a fund of office payments still shows a contractor. */
+/**
+ * Fund and department payment lists. The person check uses the stored is_person_name
+ * column. Combining NOT CONSTITUTIONAL_SQL with sqlIsPersonName in one WHERE exceeds
+ * D1's expression depth of 100. Hidden mode still requires is_person_name = 0.
+ */
+export const PAYMENT_SCOPE_SQL = `
+  import_id = ?
+  AND after_cutoff = 0
+  AND object_code != '${TRANSFER_OBJECT}'
+  AND NOT ${CONSTITUTIONAL_SQL}
+  AND (? = 1 OR is_person_name = 0)
+  AND (? = '' OR fund_code = ?)
+  AND (? = '' OR dept_code = ?)
+`;
+
+const PAYMENT_COLUMNS = `id, import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
+  amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key`;
+
+function scopeBinds(importId: number, opts: { showNames: boolean; fund?: string; dept?: string }): (string | number)[] {
+  const fund = opts.fund || "";
+  const dept = opts.dept || "";
+  return [importId, opts.showNames ? 1 : 0, fund, fund, dept, dept];
+}
+
+/** Largest outside payments, net of a later reversal for the same vendor and amount. */
 export async function loadLargestPayments(
   db: D1Database,
   importId: number,
   opts: { showNames: boolean; fund?: string; dept?: string },
 ): Promise<PaymentRow[]> {
-  const rows = await db
-    .prepare(
-      `SELECT id, import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
-              amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key
-       FROM payments
-       WHERE import_id = ?
-         AND after_cutoff = 0
-         AND object_code != '${TRANSFER_OBJECT}'
-         AND NOT ${CONSTITUTIONAL_SQL}
-         AND (? = 1 OR ${sqlIsPersonName("vendor_name")} = 0)
-         AND (? = '' OR fund_code = ?)
-         AND (? = '' OR dept_code = ?)
-       ORDER BY amount_cents DESC
-       LIMIT 60`,
-    )
-    .bind(importId, opts.showNames ? 1 : 0, opts.fund || "", opts.fund || "", opts.dept || "", opts.dept || "")
-    .all<PaymentRow>();
-  return rows.results || [];
+  const binds = scopeBinds(importId, opts);
+  const [positives, negatives, nets] = await Promise.all([
+    db
+      .prepare(
+        `SELECT ${PAYMENT_COLUMNS}
+         FROM payments
+         WHERE ${PAYMENT_SCOPE_SQL} AND amount_cents > 0
+         ORDER BY amount_cents DESC
+         LIMIT 40`,
+      )
+      .bind(...binds)
+      .all<PaymentRow>(),
+    db
+      .prepare(
+        `SELECT ${PAYMENT_COLUMNS}
+         FROM payments
+         WHERE ${PAYMENT_SCOPE_SQL}
+           AND amount_cents < 0
+           AND -amount_cents IN (
+             SELECT amount_cents FROM payments
+             WHERE ${PAYMENT_SCOPE_SQL} AND amount_cents > 0
+             ORDER BY amount_cents DESC
+             LIMIT 40
+           )`,
+      )
+      .bind(...binds, ...binds)
+      .all<PaymentRow>(),
+    db
+      .prepare(
+        `SELECT upper(trim(vendor_name)) AS vendor_name, COALESCE(SUM(amount_cents), 0) AS cents
+         FROM payments
+         WHERE ${PAYMENT_SCOPE_SQL} AND trim(vendor_name) != ''
+         GROUP BY upper(trim(vendor_name))`,
+      )
+      .bind(...binds)
+      .all<{ vendor_name: string; cents: number }>(),
+  ]);
+  const netByVendor = new Map<string, number>();
+  for (const row of nets.results || []) netByVendor.set(row.vendor_name, Number(row.cents) || 0);
+  return netPaymentReversals([...(positives.results || []), ...(negatives.results || [])], netByVendor);
 }
 
 export async function loadVendorNames(db: D1Database, importId: number): Promise<string[]> {
@@ -347,4 +392,425 @@ export async function loadTopAccounts(
     .bind(importId, code)
     .all<AccountSpend>();
   return rows.results || [];
+}
+
+export interface CapitalLine {
+  object_code: string;
+  title: string | null;
+  ytd_cents: number;
+}
+
+/** Capital accounts (object codes 56xxxx) whose year-to-date total covers spending above the department budget. */
+export function capitalLinesCovering(spent: number, budget: number, lines: CapitalLine[]): CapitalLine[] | null {
+  if (!(budget > 0) || spent <= budget) return null;
+  const over = spent - budget;
+  const capital = lines
+    .filter((line) => line.object_code.startsWith("56") && line.ytd_cents > 0)
+    .map((line) => ({ object_code: line.object_code, title: line.title, ytd_cents: line.ytd_cents }))
+    .sort((a, b) => b.ytd_cents - a.ytd_cents);
+  const chosen: CapitalLine[] = [];
+  let running = 0;
+  for (const line of capital) {
+    chosen.push(line);
+    running += line.ytd_cents;
+    if (running >= over) return chosen;
+  }
+  return null;
+}
+
+export async function loadCapitalAccounts(
+  db: D1Database,
+  importId: number,
+  fund: string,
+): Promise<Map<string, CapitalLine[]>> {
+  const rows = await db
+    .prepare(
+      `SELECT dept_code, object_code, COALESCE(MAX(title), '') AS title, COALESCE(SUM(ytd_cents), 0) AS ytd_cents
+       FROM accounts
+       WHERE import_id = ? AND fund_code = ? AND object_code GLOB '56*'
+       GROUP BY dept_code, object_code
+       HAVING ytd_cents > 0`,
+    )
+    .bind(importId, fund)
+    .all<{ dept_code: string; object_code: string; title: string; ytd_cents: number }>();
+  const byDept = new Map<string, CapitalLine[]>();
+  for (const row of rows.results || []) {
+    const list = byDept.get(row.dept_code) || [];
+    list.push({ object_code: row.object_code, title: row.title, ytd_cents: Number(row.ytd_cents) || 0 });
+    byDept.set(row.dept_code, list);
+  }
+  return byDept;
+}
+
+interface ReversiblePayment {
+  pay_date: string | null;
+  amount_cents: number;
+  vendor_name: string | null;
+  invoice?: string | null;
+  check_number: string | null;
+  journal: string | null;
+}
+
+function vendorPayKey(name: string | null | undefined): string {
+  return (name || "").trim().toUpperCase();
+}
+
+function sameRef(left: string | null | undefined, right: string | null | undefined): boolean {
+  const a = (left || "").trim();
+  const b = (right || "").trim();
+  return Boolean(a) && a === b;
+}
+
+function sharesPaymentRef(a: ReversiblePayment, b: ReversiblePayment): boolean {
+  return sameRef(a.invoice, b.invoice) || sameRef(a.check_number, b.check_number) || sameRef(a.journal, b.journal);
+}
+
+function daysApart(a: string | null | undefined, b: string | null | undefined): number {
+  if (!a || !b) return 9999;
+  const left = Date.parse(a);
+  const right = Date.parse(b);
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return 9999;
+  return Math.abs(left - right) / 86400000;
+}
+
+/**
+ * Drop a positive line when an offsetting negative line has the same absolute amount.
+ * Same vendor matches directly. A blank name matches only when the check, invoice,
+ * journal, or a date within 14 days ties the two lines together.
+ * What remains for a named vendor cannot add up to more than that vendor's net total.
+ */
+export function netPaymentReversals<T extends ReversiblePayment>(rows: T[], nets: Map<string, number>): T[] {
+  const positives = rows.filter((row) => row.amount_cents > 0);
+  const negatives = rows.filter((row) => row.amount_cents < 0);
+  const used = new Set<number>();
+  for (const neg of negatives) {
+    let best = -1;
+    let bestScore = 0;
+    positives.forEach((pos, index) => {
+      if (used.has(index) || pos.amount_cents !== -neg.amount_cents) return;
+      const posName = vendorPayKey(pos.vendor_name);
+      const negName = vendorPayKey(neg.vendor_name);
+      let score = 0;
+      if (posName && negName && posName === negName) score = 100;
+      else if (!posName && !negName) score = 80;
+      else if (!posName || !negName) {
+        if (sharesPaymentRef(pos, neg) || daysApart(pos.pay_date, neg.pay_date) <= 14) score = 40;
+      }
+      if (!score) return;
+      if (sharesPaymentRef(pos, neg)) score += 30;
+      const days = daysApart(pos.pay_date, neg.pay_date);
+      if (days <= 14) score += Math.max(0, 14 - days);
+      if (score > bestScore) {
+        bestScore = score;
+        best = index;
+      }
+    });
+    if (best >= 0) used.add(best);
+  }
+  let kept = positives.filter((_, index) => !used.has(index));
+  kept = kept.filter((row) => {
+    if (vendorPayKey(row.vendor_name)) return true;
+    return !rows.some((other) => {
+      if (other === row || !vendorPayKey(other.vendor_name)) return false;
+      if (Math.abs(other.amount_cents) !== row.amount_cents) return false;
+      return sharesPaymentRef(row, other) || daysApart(row.pay_date, other.pay_date) <= 14;
+    });
+  });
+  const byVendor = new Map<string, T[]>();
+  const blanks: T[] = [];
+  for (const row of kept) {
+    const name = vendorPayKey(row.vendor_name);
+    if (!name) {
+      blanks.push(row);
+      continue;
+    }
+    const list = byVendor.get(name) || [];
+    list.push(row);
+    byVendor.set(name, list);
+  }
+  const capped: T[] = [];
+  for (const [name, list] of byVendor) {
+    const net = nets.get(name);
+    list.sort((a, b) => b.amount_cents - a.amount_cents);
+    if (net == null) {
+      capped.push(...list);
+      continue;
+    }
+    if (net <= 0) continue;
+    let running = 0;
+    for (const row of list) {
+      if (row.amount_cents > net || running + row.amount_cents > net) continue;
+      running += row.amount_cents;
+      capped.push(row);
+    }
+  }
+  capped.push(...blanks);
+  capped.sort((a, b) => b.amount_cents - a.amount_cents);
+  return capped;
+}
+
+/** Height of a SQLite expression tree. D1 rejects a tree deeper than 100. */
+export function sqlExpressionDepth(sql: string): number {
+  const parser = new SqlDepthParser(sql);
+  const depth = parser.parseOr();
+  parser.skip();
+  if (!parser.done()) {
+    throw new Error(`SQL depth parser stopped early: ${parser.rest()}`);
+  }
+  return depth;
+}
+
+class SqlDepthParser {
+  i = 0;
+  constructor(private readonly sql: string) {}
+
+  done(): boolean {
+    return this.i >= this.sql.length;
+  }
+
+  rest(): string {
+    return this.sql.slice(this.i, this.i + 48);
+  }
+
+  skip(): void {
+    while (this.i < this.sql.length && /\s/.test(this.sql[this.i])) this.i += 1;
+  }
+
+  private peekWord(): string {
+    this.skip();
+    const match = /^[A-Za-z_][A-Za-z_0-9]*/.exec(this.sql.slice(this.i));
+    return match ? match[0].toUpperCase() : "";
+  }
+
+  private eatWord(word: string): boolean {
+    if (this.peekWord() !== word) return false;
+    this.i += word.length;
+    return true;
+  }
+
+  private startsWith(text: string): boolean {
+    this.skip();
+    return this.sql.startsWith(text, this.i);
+  }
+
+  parseOr(): number {
+    let depth = this.parseAnd();
+    while (this.eatWord("OR")) depth = 1 + Math.max(depth, this.parseAnd());
+    return depth;
+  }
+
+  private parseAnd(): number {
+    let depth = this.parseNot();
+    while (this.eatWord("AND")) depth = 1 + Math.max(depth, this.parseNot());
+    return depth;
+  }
+
+  private parseNot(): number {
+    if (this.eatWord("NOT")) return 1 + this.parseNot();
+    return this.parseCmp();
+  }
+
+  private parseCmp(): number {
+    const left = this.parseConcat();
+    this.skip();
+    if (this.eatWord("IS")) {
+      if (this.eatWord("NOT")) this.eatWord("NULL");
+      else this.eatWord("NULL");
+      return 1 + Math.max(left, 1);
+    }
+    if (this.eatWord("NOT")) {
+      if (this.eatWord("IN") || this.eatWord("LIKE") || this.eatWord("GLOB")) return 1 + Math.max(left, this.parseInOrPattern());
+    }
+    if (this.eatWord("IN") || this.eatWord("LIKE") || this.eatWord("GLOB")) return 1 + Math.max(left, this.parseInOrPattern());
+    if (this.eatWord("BETWEEN")) {
+      const low = this.parseConcat();
+      if (!this.eatWord("AND")) throw new Error("BETWEEN without AND");
+      const high = this.parseConcat();
+      return 1 + Math.max(left, low, high);
+    }
+    const ops = ["<>", "!=", "<=", ">=", "=", "<", ">"];
+    for (const op of ops) {
+      if (!this.startsWith(op)) continue;
+      this.i += op.length;
+      return 1 + Math.max(left, this.parseConcat());
+    }
+    return left;
+  }
+
+  private parseInOrPattern(): number {
+    this.skip();
+    if (this.sql[this.i] !== "(") return this.parseConcat();
+    this.i += 1;
+    this.skip();
+    if (this.peekWord() === "SELECT") {
+      const inner = this.consumeGroup();
+      const where = /\bWHERE\b([\s\S]*)$/i.exec(inner);
+      if (!where) return 1;
+      const clause = where[1].replace(/\b(GROUP|ORDER|LIMIT|UNION)\b[\s\S]*$/i, "");
+      return sqlExpressionDepth(clause);
+    }
+    let max = 1;
+    if (this.sql[this.i] !== ")") {
+      while (true) {
+        max = Math.max(max, this.parseOr());
+        this.skip();
+        if (this.sql[this.i] === ",") {
+          this.i += 1;
+          continue;
+        }
+        break;
+      }
+    }
+    if (this.sql[this.i] !== ")") throw new Error("Unclosed IN list");
+    this.i += 1;
+    return max;
+  }
+
+  private consumeGroup(): string {
+    let level = 1;
+    const start = this.i;
+    while (this.i < this.sql.length && level > 0) {
+      const ch = this.sql[this.i];
+      if (ch === "'") {
+        this.i += 1;
+        while (this.i < this.sql.length) {
+          if (this.sql[this.i] === "'" && this.sql[this.i + 1] === "'") {
+            this.i += 2;
+            continue;
+          }
+          if (this.sql[this.i] === "'") {
+            this.i += 1;
+            break;
+          }
+          this.i += 1;
+        }
+        continue;
+      }
+      if (ch === "(") level += 1;
+      if (ch === ")") level -= 1;
+      this.i += 1;
+    }
+    return this.sql.slice(start, this.i - 1);
+  }
+
+  private parseConcat(): number {
+    let depth = this.parseAdd();
+    while (this.startsWith("||")) {
+      this.i += 2;
+      depth = 1 + Math.max(depth, this.parseAdd());
+    }
+    return depth;
+  }
+
+  private parseAdd(): number {
+    let depth = this.parseMul();
+    while (this.startsWith("+") || (this.startsWith("-") && !this.startsWith("->"))) {
+      this.i += 1;
+      depth = 1 + Math.max(depth, this.parseMul());
+    }
+    return depth;
+  }
+
+  private parseMul(): number {
+    let depth = this.parseUnary();
+    while (this.startsWith("*") || this.startsWith("/") || this.startsWith("%")) {
+      this.i += 1;
+      depth = 1 + Math.max(depth, this.parseUnary());
+    }
+    return depth;
+  }
+
+  private parseUnary(): number {
+    this.skip();
+    if (this.startsWith("-") || this.startsWith("+") || this.startsWith("~")) {
+      this.i += 1;
+      return 1 + this.parseUnary();
+    }
+    return this.parsePrimary();
+  }
+
+  private parsePrimary(): number {
+    this.skip();
+    const ch = this.sql[this.i];
+    if (!ch) throw new Error("Unexpected end of SQL expression");
+    if (ch === "(") {
+      this.i += 1;
+      const depth = this.parseOr();
+      this.skip();
+      if (this.sql[this.i] !== ")") throw new Error("Unclosed parenthesis");
+      this.i += 1;
+      return depth;
+    }
+    if (ch === "'" ) {
+      this.i += 1;
+      while (this.i < this.sql.length) {
+        if (this.sql[this.i] === "'" && this.sql[this.i + 1] === "'") {
+          this.i += 2;
+          continue;
+        }
+        if (this.sql[this.i] === "'") {
+          this.i += 1;
+          break;
+        }
+        this.i += 1;
+      }
+      return 1;
+    }
+    if (ch === "?") {
+      this.i += 1;
+      return 1;
+    }
+    if (/[0-9.]/.test(ch)) {
+      this.i += 1;
+      while (this.i < this.sql.length && /[0-9.]/.test(this.sql[this.i])) this.i += 1;
+      return 1;
+    }
+    const word = this.peekWord();
+    if (!word) throw new Error(`Unexpected SQL at ${this.rest()}`);
+    if (word === "CASE") {
+      this.i += word.length;
+      let max = 0;
+      while (this.eatWord("WHEN")) {
+        max = Math.max(max, this.parseOr());
+        if (!this.eatWord("THEN")) throw new Error("CASE without THEN");
+        max = Math.max(max, this.parseOr());
+      }
+      if (this.eatWord("ELSE")) max = Math.max(max, this.parseOr());
+      if (!this.eatWord("END")) throw new Error("CASE without END");
+      return 1 + max;
+    }
+    if (word === "NULL") {
+      this.i += word.length;
+      return 1;
+    }
+    this.i += word.length;
+    this.skip();
+    if (this.sql[this.i] === "(") {
+      const args = this.parseArgList();
+      return 1 + args;
+    }
+    return 1;
+  }
+
+  private parseArgList(): number {
+    this.i += 1;
+    this.skip();
+    if (this.sql[this.i] === ")") {
+      this.i += 1;
+      return 0;
+    }
+    let max = 0;
+    while (true) {
+      max = Math.max(max, this.parseOr());
+      this.skip();
+      if (this.sql[this.i] === ",") {
+        this.i += 1;
+        continue;
+      }
+      break;
+    }
+    if (this.sql[this.i] !== ")") throw new Error("Unclosed function call");
+    this.i += 1;
+    return max;
+  }
 }

@@ -1,5 +1,5 @@
-import type { AccountSpend, BudgetFacts, CategorySpend, VendorSpendRow } from "./budget";
-import { TRANSFER_OBJECT, factsFromRow } from "./budget";
+import type { AccountSpend, BudgetFacts, CapitalLine, CategorySpend, VendorSpendRow } from "./budget";
+import { TRANSFER_OBJECT, capitalLinesCovering, factsFromRow } from "./budget";
 import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters } from "./db";
 import type { QaRecord } from "./qa";
 import {
@@ -118,6 +118,35 @@ function limitNote(facts: BudgetFacts): string {
   return `Budget limits were raised to ${moneyCompact(facts.current)} during the year ${RESOLUTION_NOTE}`;
 }
 
+/** Short figure for the overview card. Full dollars stay in the count section. */
+function kpiLeftValue(revCents: number, ytdCents: number): string {
+  const left = leftLabel(revCents, ytdCents);
+  if (left.unbudgeted) return left.value;
+  return moneyCompact(Math.abs(revCents - ytdCents));
+}
+
+function capitalObjectName(code: string, title: string | null): string {
+  if (code === "561000") return "Land";
+  const cleaned = (title || "").trim();
+  if (!cleaned) return "this account";
+  const letters = cleaned.replace(/[^A-Za-z]/g, "");
+  if (letters && letters === letters.toUpperCase()) {
+    return cleaned.toLowerCase().replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+  }
+  return cleaned;
+}
+
+function capitalCoverText(lines: CapitalLine[]): string {
+  const parts = lines.map((line) => `${money(line.ytd_cents)} coded to ${capitalObjectName(line.object_code, line.title)} (account ${line.object_code})`);
+  if (parts.length === 1) return `Includes ${parts[0]}.`;
+  return `Includes ${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}.`;
+}
+
+function capitalStatusText(lines: CapitalLine[]): string {
+  if (lines.length && lines.every((line) => line.object_code === "561000")) return "Land";
+  return lines[0]?.object_code || "Account";
+}
+
 export function disambiguatedDepartmentNames(
   departments: { code: string; fund_code: string; report_name?: string | null }[],
   names: NameMaps,
@@ -130,10 +159,14 @@ export function disambiguatedDepartmentNames(
   });
   const nameCount = new Map<string, number>();
   for (const row of rows) nameCount.set(row.primary, (nameCount.get(row.primary) || 0) + 1);
+  const suffixOf = (row: { primary: string; fund: string; code: string }) => {
+    if (fundRepeatsDepartment(row.primary, row.fund)) return row.code;
+    return row.fund;
+  };
   const pairCount = new Map<string, number>();
   for (const row of rows) {
     if ((nameCount.get(row.primary) || 0) < 2) continue;
-    const pair = `${row.primary}\n${row.fund}`;
+    const pair = `${row.primary}\n${suffixOf(row)}`;
     pairCount.set(pair, (pairCount.get(pair) || 0) + 1);
   }
   const labels = new Map<string, string>();
@@ -142,10 +175,29 @@ export function disambiguatedDepartmentNames(
       labels.set(row.code, row.primary);
       continue;
     }
-    const pair = `${row.primary}\n${row.fund}`;
-    labels.set(row.code, (pairCount.get(pair) || 0) > 1 ? `${row.primary} (${row.fund}, ${row.code})` : `${row.primary} (${row.fund})`);
+    const suffix = suffixOf(row);
+    const pair = `${row.primary}\n${suffix}`;
+    const repeated = fundRepeatsDepartment(row.primary, suffix);
+    if ((pairCount.get(pair) || 0) > 1 && !repeated) labels.set(row.code, `${row.primary} (${suffix}, ${row.code})`);
+    else labels.set(row.code, `${row.primary} (${suffix})`);
   }
   return labels;
+}
+
+function significantWords(value: string): string[] {
+  return value
+    .toUpperCase()
+    .replace(/&/g, " AND ")
+    .split(/[^A-Z0-9]+/)
+    .filter((word) => word && word !== "FUND" && word !== "THE" && word !== "AND");
+}
+
+/** True when the fund name is the department name plus a word like Fund. */
+function fundRepeatsDepartment(primary: string, fund: string): boolean {
+  const left = significantWords(primary);
+  const right = significantWords(fund);
+  if (!left.length || !right.length) return false;
+  return left.every((word) => right.includes(word));
 }
 
 function bar(rev: number, ytd: number, enc: number, elapsed: number, status: Pace): string {
@@ -221,17 +273,10 @@ export function renderOverview(opts: {
   const facts = opts.facts;
   const limitShare = facts.spentOfCurrentPct;
   const yearShown = Math.round(fiscal.elapsedPct);
-  const countyPace = pace(facts.current, facts.spent, 0, fiscal.elapsedPct);
   const paceSentence =
-    countyPace === "yellow"
-      ? `Spending is ahead of the year's progress (${yearShown}% of the year is gone).`
-      : countyPace === "under"
-        ? `Spending is under the year's progress (${yearShown}% of the year is gone).`
-        : countyPace === "red"
-          ? "Spending is over the mid-year limit."
-          : countyPace === "none"
-            ? "No spending is recorded yet."
-            : `Spending is in line with the year (${yearShown}% of the year is gone).`;
+    facts.current > 0
+      ? `Paid out is ${limitShare.toFixed(1)}% of the mid-year limit, and ${yearShown}% of the year is gone.`
+      : "No mid-year limit is set in the county report.";
   const fundRows = opts.funds.map((fund) => netSpendRow(fund.code, fund.code, fund.report_name, fund));
   const deptRows: SpendRow[] = opts.departments.map((dept) => netSpendRow(dept.code, dept.fund_code, dept.report_name, dept));
   const deptLabels = disambiguatedDepartmentNames(opts.departments, opts.names, opts.fundReports);
@@ -274,7 +319,7 @@ ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 <a class="card kpi k1" href="/departments"><div class="l">Budget passed by commissioners</div><div class="n">${esc(moneyCompact(facts.adopted))}</div><div class="s">The budget the commissioners voted on</div></a>
 <a class="card kpi k2" href="/search"><div class="l">Paid out</div><div class="n">${esc(moneyCompact(facts.spent))}</div><div class="s">Share of the mid-year limit: ${limitShare.toFixed(1)}%</div></a>
 <a class="card kpi k3" href="/departments?sort=enc"><div class="l">Promised, not paid</div><div class="n">${esc(moneyCompact(facts.encumbered))}</div><div class="s">Committed to open orders and contracts</div></a>
-<a class="card kpi k4" href="/departments?sort=avail"><div class="l">${esc(leftLabel(facts.current, facts.spent).title)}</div><div class="n">${esc(leftLabel(facts.current, facts.spent).value)}</div><div class="s">Budget limit after mid-year changes ${esc(moneyCompact(facts.current))}</div></a>
+<a class="card kpi k4" href="/departments?sort=avail"><div class="l">${esc(leftLabel(facts.current, facts.spent).title)}</div><div class="n">${esc(kpiLeftValue(facts.current, facts.spent))}</div><div class="s">Budget limit after mid-year changes ${esc(moneyCompact(facts.current))}</div></a>
 </section>
 ${countCard(facts)}
 <section class="grid2">
@@ -476,7 +521,7 @@ function vendorCard(
 ${rows || `<p class="cap">No outside-vendor payments are in this import.</p>`}
 ${officeRow}
 ${transferRow}
-<p class="mnote">${esc(landSentence)}People, payroll, and individual pay are not listed. A name cut off in the county report is filled in when a longer copy exists. Otherwise a partial word is dropped.</p></div>`;
+<p class="mnote">${esc(landSentence)}People, payroll, and individual pay are not listed. A name cut off at 20 characters in the county report is marked. The rest of the name is not guessed.</p></div>`;
 }
 
 function lookCard(picks: ReturnType<typeof lookPicks>): string {
@@ -485,12 +530,14 @@ function lookCard(picks: ReturnType<typeof lookPicks>): string {
       if (pick.kind === "committed") {
         return `<a class="item i3" href="${esc(pick.href)}"><span class="tagl">Committed</span><h3>${esc(pick.title)}</h3><div class="big">${esc(moneyCompact(pick.enc))}</div><div class="vs">encumbered</div><p>That is ${pick.encShare.toFixed(0)}% of all encumbrances countywide, against ${esc(moneyCompact(pick.spent))} spent so far.</p></a>`;
       }
+      const landCovers = pick.land > 0 && pick.budget > 0 && pick.spent > pick.budget && pick.land >= pick.spent - pick.budget;
       const detail = pick.land > 0
-        ? `Includes ${moneyCompact(pick.land)} coded to Land (account 561000). This may reflect an amendment not in this report.`
+        ? `Includes ${moneyCompact(pick.land)} coded to Land (account 561000).`
         : pick.enc > 0
-          ? `Another ${moneyCompact(pick.enc)} is encumbered. This may reflect an amendment not in this report.`
-          : "This may reflect an amendment not in this report.";
-      return `<a class="item" href="${esc(pick.href)}"><span class="tagl">Over budget</span><h3>${esc(pick.title)}</h3><div class="big">${esc(moneyCompact(pick.spent))}</div><div class="vs">spent vs ${esc(moneyCompact(pick.budget))} budget</div><p>${esc(detail)}</p></a>`;
+          ? `Another ${moneyCompact(pick.enc)} is encumbered.`
+          : "";
+      const tag = landCovers ? "Land" : "Over budget";
+      return `<a class="item" href="${esc(pick.href)}"><span class="tagl">${tag}</span><h3>${esc(pick.title)}</h3><div class="big">${esc(moneyCompact(pick.spent))}</div><div class="vs">spent vs ${esc(moneyCompact(pick.budget))} budget</div>${detail ? `<p>${esc(detail)}</p>` : ""}</a>`;
     })
     .join("");
   const empty = picks.length ? "" : `<p class="cap">No department is over its revised budget in this report.</p>`;
@@ -569,16 +616,19 @@ ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 </section>`;
 }
 
-function budgetHead(net: BudgetFacts, elapsedPct: number): string {
+function budgetHead(net: BudgetFacts, elapsedPct: number, capital: CapitalLine[] | null = null): string {
   const left = leftLabel(net.current, net.spent);
   const status = net.current <= 0 && net.spent > 0 ? "gray" : pace(net.current, net.spent, net.encumbered, elapsedPct);
-  const note = left.unbudgeted ? `${money(net.spent)} paid out` : left.over ? "Paid out is higher than the mid-year limit" : "Mid-year limit minus money paid out";
+  const cover = capital ? capitalCoverText(capital) : "";
+  const note = cover ? "From the object code on the account report." : left.unbudgeted ? `${money(net.spent)} paid out` : left.over ? "Paid out is higher than the mid-year limit" : "Mid-year limit minus money paid out";
+  const statusLabel = capital?.length ? capitalStatusText(capital) : PACE_PILL[status];
+  const statusNote = cover ? cover : `${Math.round(elapsedPct)}% of the year is gone. ${PACE_LABEL[status]}.`;
   return `<section class="metrics">
 ${metric("Adopted budget", net.adopted <= 0 ? "No budget set in the county report" : money(net.adopted), "Passed by commissioners")}
 ${metric("Budget limit after mid-year changes", net.current <= 0 ? "No budget set in the county report" : money(net.current), "A ceiling, not a spending plan")}
 ${metric("Paid out", money(net.spent), net.current <= 0 ? "n/a" : `${pct(net.spent, net.current)} share of the mid-year limit`)}
-${metric(left.title, left.value, note)}
-${metric("Status", PACE_PILL[status], `${Math.round(elapsedPct)}% of the year is gone. ${PACE_LABEL[status]}.`)}
+${metric(cover ? "Account" : left.title, cover || left.value, note)}
+${metric("Status", statusLabel, statusNote)}
 </section>
 <p class="cap">The adopted budget is what commissioners passed. The budget limit after mid-year changes is a ceiling, not a spending plan. Paid out is what the books show.</p>`;
 }
@@ -598,15 +648,20 @@ function overAmount(row: { orig_cents: number; rev_cents: number; ytd_cents: num
   return 0;
 }
 
-function departmentMoneyRow(dept: DeptRollup, names: NameMaps, elapsedPct: number, label?: string): string {
+function departmentMoneyRow(dept: DeptRollup, names: NameMaps, elapsedPct: number, label?: string, capital: CapitalLine[] = []): string {
   const named = deptName(dept, names);
   const primary = label || named.primary;
   const net = factsFromRow(dept);
+  const covered = capitalLinesCovering(net.spent, net.current, capital);
   const status = net.current <= 0 && net.spent > 0 ? "gray" : pace(net.current, net.spent, net.encumbered, elapsedPct);
   const left = leftLabel(net.current, net.spent);
-  const leftCell = left.unbudgeted ? "n/a" : left.over ? `Over budget by ${left.value}` : left.value;
+  const cover = covered ? capitalCoverText(covered) : "";
+  const leftCell = cover ? cover : left.unbudgeted ? "n/a" : left.over ? `Over budget by ${left.value}` : left.value;
   const budgetCell = net.current <= 0 ? "No budget set in the county report" : money(net.current);
-  return `<tr><td><a class="name" href="/departments/${esc(dept.code)}">${esc(primary)}</a></td><td class="num">${budgetCell}</td><td class="num">${money(net.spent)}</td><td class="num">${leftCell}</td><td class="num">${net.current <= 0 ? "n/a" : pct(net.spent, net.current)}</td><td>${pill(status)}</td></tr>`;
+  const statusHtml = covered
+    ? `<span class="pill gray" title="${esc(cover)}">${esc(capitalStatusText(covered))}</span>`
+    : pill(status);
+  return `<tr><td><a class="name" href="/departments/${esc(dept.code)}">${esc(primary)}</a></td><td class="num">${budgetCell}</td><td class="num">${money(net.spent)}</td><td class="num">${esc(leftCell)}</td><td class="num">${net.current <= 0 ? "n/a" : pct(net.spent, net.current)}</td><td>${statusHtml}</td></tr>`;
 }
 
 export interface CollapsedPayment<T> {
@@ -710,6 +765,7 @@ ${vendors || `<p class="cap">No outside vendors are in this report.</p>`}
 ${officeRow}
 ${transferRow}
 <h3>Largest payments</h3>
+<p class="cap">A payment that was posted and later reversed is left out, so this list lines up with the vendor totals.</p>
 <div class="table-wrap"><table><thead><tr><th>Date</th><th>Who got paid</th><th class="num">Amount</th><th></th></tr></thead>
 <tbody>${payments || `<tr><td colspan="4" class="empty">No outside payments are in this report.</td></tr>`}</tbody></table></div>
 ${footnote}
@@ -762,12 +818,14 @@ export function renderFund(opts: {
   officeCents: number;
   names: NameMaps;
   displayName: (raw: string) => VendorLabel;
+  capitalByDept?: Map<string, CapitalLine[]>;
   csrf: string;
   isAdmin: boolean;
   showNames: boolean;
 }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const named = fundLabel(opts.fund.code, opts.fund.report_name, opts.names);
+  const capitalByDept = opts.capitalByDept || new Map<string, CapitalLine[]>();
   const net = factsFromRow({
     orig_cents: opts.fund.orig_cents,
     rev_cents: opts.fund.rev_cents,
@@ -779,12 +837,16 @@ export function renderFund(opts: {
     transfer_enc_cents: opts.fund.transfer_enc_cents || 0,
   });
   const spendingDepts = opts.departments.filter((dept) => !isTransferDepartment(dept.report_name, opts.names.department.get(dept.code) || ""));
-  const overCents = spendingDepts.reduce((sum, dept) => sum + overAmount(dept), 0);
+  const overCents = spendingDepts.reduce((sum, dept) => {
+    const deptNet = factsFromRow(dept);
+    if (capitalLinesCovering(deptNet.spent, deptNet.current, capitalByDept.get(dept.code) || [])) return sum;
+    return sum + overAmount(dept);
+  }, 0);
   const overNote = overCents > 0 ? `<p class="note">Departments in this fund are over budget by ${money(overCents)}. Money left above is what remains in the rest of the fund.</p>` : "";
   const fundReports = new Map([[opts.fund.code, opts.fund.report_name]]);
   const deptLabels = disambiguatedDepartmentNames(spendingDepts, opts.names, fundReports);
   const rows = spendingDepts
-    .map((dept) => departmentMoneyRow(dept, opts.names, fiscal.elapsedPct, deptLabels.get(dept.code)))
+    .map((dept) => departmentMoneyRow(dept, opts.names, fiscal.elapsedPct, deptLabels.get(dept.code), capitalByDept.get(dept.code) || []))
     .join("");
   const body = `<p class="crumb"><a href="/">Overview</a> / <a href="/funds">Funds</a> / ${esc(opts.fund.code)}</p>
 <h1>${esc(named.primary)}</h1>
@@ -858,11 +920,14 @@ export function renderDepartment(opts: {
   const named = deptName(opts.dept, opts.names);
   const fund = fundLabel(opts.dept.fund_code || "", opts.fundReport, opts.names);
   const net = factsFromRow(opts.dept);
-  const status = pace(net.current, net.spent, net.encumbered, fiscal.elapsedPct);
+  const covered = capitalLinesCovering(net.spent, net.current, opts.accounts);
+  const status = covered ? "gray" : pace(net.current, net.spent, net.encumbered, fiscal.elapsedPct);
+  const statusPill = covered ? `<span class="pill gray" title="${esc(capitalCoverText(covered))}">${esc(capitalStatusText(covered))}</span>` : pill(status);
   const rows = opts.accounts
     .filter((account) => account.object_code !== TRANSFER_OBJECT)
     .map((account) => {
       const accountStatus = account.rev_cents <= 0 && account.ytd_cents > 0 ? "gray" : pace(account.rev_cents, account.ytd_cents, account.enc_cents, fiscal.elapsedPct);
+      const capitalAccount = account.object_code.startsWith("56") && account.ytd_cents > account.rev_cents;
       const objectName = nameFor(opts.names.object.get(account.object_code), account.title || "", account.object_code);
       const project = account.project_code ? `-${account.project_code}` : "";
       const href = `/departments/${esc(account.dept_code)}/${esc(account.object_code)}/${esc(account.project_code || "_")}`;
@@ -874,15 +939,15 @@ export function renderDepartment(opts: {
 <td class="num">${money(account.enc_cents)}</td>
 <td>${bar(account.rev_cents, account.ytd_cents, account.enc_cents, fiscal.elapsedPct, accountStatus)}</td>
 <td class="num">${pct(account.ytd_cents, account.rev_cents)}</td>
-<td>${pill(accountStatus)}</td>
+<td>${capitalAccount ? `<span class="pill gray" title="${esc(`Coded to ${capitalObjectName(account.object_code, account.title)} (account ${account.object_code})`)}">${esc(account.object_code === "561000" ? "Land" : account.object_code)}</span>` : pill(accountStatus)}</td>
 </tr>`;
     })
     .join("");
   const body = `
 <p class="crumb"><a href="/">Overview</a> / <a href="/departments">Departments</a> / ${esc(opts.dept.code)}</p>
 <h1>${esc(named.primary)}${badge(named.unmatched)}</h1>
-<p class="lede">${esc(fund.primary)} · ${opts.accounts.filter((account) => account.object_code !== TRANSFER_OBJECT).length} accounts · ${pill(status)}</p>
-${budgetHead(net, fiscal.elapsedPct)}
+<p class="lede">${esc(fund.primary)} · ${opts.accounts.filter((account) => account.object_code !== TRANSFER_OBJECT).length} accounts · ${statusPill}</p>
+${budgetHead(net, fiscal.elapsedPct, covered)}
 ${whereMoneyWent({
   categories: opts.categories,
   vendors: opts.vendors,
@@ -1030,6 +1095,7 @@ export function renderSearch(opts: {
 <section class="panel">
 <h2>${opts.total.toLocaleString("en-US")} payments found, totaling ${moneyExact(opts.totalCents)}</h2>
 <p class="hint">${opts.filters.excludeTransfer === false ? "These results include money moved between county funds." : "Money moved between county funds is not included."} Sorted by amount, largest first. <a href="/search.csv?${query}">Download results (CSV)</a></p>
+<p class="note">The overview paid-out figure is the year-to-date column on the account report, minus money moved between county funds. This total adds payment lines and payroll lines instead. Lines dated after the report date are left out of this search. That is why this total can differ from the overview.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Date</th><th>Vendor</th><th>Invoice</th><th>Description</th><th>Department</th><th>Check</th><th class="num">Amount</th></tr></thead>
 <tbody>${rows || `<tr><td colspan="7" class="empty">No payments match these filters.</td></tr>`}</tbody>
