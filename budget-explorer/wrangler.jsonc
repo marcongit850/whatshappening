@@ -3,6 +3,7 @@
   // D1 database budget-explorer. Migration 0001_init.sql is already applied remotely.
   // Apply migrations/0002_settings.sql remotely before deploying the names switch.
   // Apply migrations/0003_revenue_reserves.sql by hand. Do not run wrangler d1 migrations apply --remote.
+  // Apply migrations/0004_county_requests.sql by hand. Do not run wrangler d1 migrations apply --remote.
   "name": "budget-explorer",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-27",

@@ -228,7 +228,8 @@ describe("revenue and reserves pages", () => {
     expect(revenue).toContain("Budget");
     expect(revenue).toContain("Paid by Coastal Parasail, Inc.");
     expect(revenue).not.toContain("Inc..");
-    expect(revenue.match(/not explained in the county budget file/g)).toEqual(["not explained in the county budget file"]);
+    expect(revenue).toContain("The county budget file does not explain this line.");
+    expect(revenue).not.toContain("not explained in the county budget file");
     expect(revenue.match(/General Fund account 329004\./g)?.length).toBe(3);
     expect(reserves).not.toContain("The commissioners voted to use this for a stated purpose. The commissioners voted");
     expect(revenue).toContain("How much is in savings");

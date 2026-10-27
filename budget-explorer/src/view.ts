@@ -91,7 +91,7 @@ export function page(opts: ShellOpts): string {
 <div class="nav-scroller"><nav>${nav}${adminLink}${logout}</nav></div>
 </div></header>
 <main>${opts.body}</main>
-<footer class="footer"><div class="footer-inner">Concept prototype for private review. Not affiliated with or endorsed by Walton County government. Figures are unaudited and may change. ${payrollFooter} No county seal is used.</div></footer>
+<footer class="footer"><div class="footer-inner"><p class="footer-report"><a data-report href="/report">Report a problem or share an idea</a></p><p>Concept prototype for private review. Not affiliated with or endorsed by Walton County government. Figures are unaudited and may change. ${payrollFooter} No county seal is used.</p></div></footer>
 <script src="/assets/app.js" defer></script>
 </body></html>`;
 }
@@ -230,7 +230,10 @@ function fundLabel(code: string, report: string, names: NameMaps): { primary: st
   return { ...named, primary: readableLabel(named.primary) };
 }
 
-export function renderLogin(error: string, next: string, formToken = "", showNames = true): string {
+export function renderLogin(error: string, next: string, formToken = "", showNames = true, taxesNote = false): string {
+  const lede = taxesNote
+    ? "This is an unofficial look at how Walton County, Florida spends county money. It is built from public records provided by the Walton County Clerk and Comptroller. It is not a county website. Access is currently private."
+    : "One shared password opens this prototype. Nothing here is an official county system.";
   return page({
     title: "Sign in. Budget Explorer",
     active: "",
@@ -240,7 +243,7 @@ export function renderLogin(error: string, next: string, formToken = "", showNam
     body: `<div class="login-wrap"><section class="login-card">
 <p class="brand-kicker" style="color:var(--gold)">Private access</p>
 <h1>Sign in</h1>
-<p class="lede">One shared password opens this prototype. Nothing here is an official county system.</p>
+<p class="lede">${lede}</p>
 ${error ? `<p class="warning">${esc(error)}</p>` : ""}
 <form class="stack" method="post" action="/login" data-busy>
 <input type="hidden" name="next" value="${esc(next)}">
