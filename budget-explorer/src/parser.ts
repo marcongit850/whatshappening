@@ -45,6 +45,7 @@ export interface ParsedPayment {
   description: string;
   afterCutoff: boolean;
   dedupeKey: string;
+  isPersonName: boolean;
 }
 
 export interface ParsedPayrollBatch {
@@ -56,6 +57,24 @@ export interface ParsedPayrollBatch {
   payDate: string;
   amountCents: number;
   lineCount: number;
+  /** True when a folded batch still has fewer than MIN_PAYROLL_BATCH_LINES lines. */
+  belowMinimum: boolean;
+}
+
+export interface ParsedPayrollLine {
+  fund: string;
+  dept: string;
+  objectCode: string;
+  project: string;
+  journal: string;
+  payDate: string;
+  source: string;
+  amountCents: number;
+  employeeName: string;
+  batchKey: string;
+  description: string;
+  afterCutoff: boolean;
+  dedupeKey: string;
 }
 
 export interface ParseResult {
@@ -65,6 +84,7 @@ export interface ParseResult {
   accounts: ParsedAccount[];
   payments: ParsedPayment[];
   payrollBatches: ParsedPayrollBatch[];
+  payrollLines: ParsedPayrollLine[];
   printed: { origCents: number; adjCents: number; revCents: number; ytdCents: number; encCents: number; availCents: number } | null;
   afterCutoffCount: number;
   reconMismatches: ParsedAccount[];
@@ -72,7 +92,7 @@ export interface ParseResult {
 }
 
 export const MAX_REPORT_LINE = 4000;
-const MIN_PAYROLL_BATCH_LINES = 3;
+export const MIN_PAYROLL_BATCH_LINES = 3;
 
 export function isPayrollObject(code: string): boolean {
   return /^(51[1-5]\d{3}|52[1-5]\d{3})$/.test(code);
@@ -195,26 +215,63 @@ export function looksLikePersonName(name: string): boolean {
 }
 
 export function foldedPayrollNote(count: number): string {
-  return `Folded ${count} payroll batches with fewer than 3 lines into a combined monthly total. They are not stored individually.`;
+  return `Folded ${count} payroll batches with fewer than 3 lines into a combined monthly total.`;
 }
 
-export function foldPayrollBatches(batches: ParsedPayrollBatch[]): { batches: ParsedPayrollBatch[]; foldedCount: number } {
+export function batchIdentity(batch: { fund: string; dept: string; objectCode: string; project: string; batchKey: string; payDate: string }): string {
+  return [batch.fund, batch.dept, batch.objectCode, batch.project, batch.batchKey, batch.payDate].join("|");
+}
+
+const PAY_TYPE = /^(REGULAR|SALARY|HOURLY|OVERTIME|BENEFIT|WAGES|WAGE|SUPPLEMENT)\s+/i;
+
+/** Employee name from a payroll detail line. Control tokens are not kept. */
+export function payrollEmployeeName(rest: string): string {
+  const text = rest
+    .replace(/\bWARRANT=[A-Za-z0-9]+/gi, " ")
+    .replace(/\bRUN=\d+/gi, " ")
+    .replace(/\bREF\s+\S+/gi, " ")
+    .replace(/\bDIRECT\s+DEP(?:OSIT)?\b/gi, " ")
+    .replace(/\bPAYROLL\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(PAY_TYPE, "")
+    .trim();
+  return text.slice(0, 80);
+}
+
+export interface FoldedPayroll {
+  batches: ParsedPayrollBatch[];
+  foldedCount: number;
+  /** Original batch identity to the stored batch key. Line dollars stay on payroll lines. */
+  redirect: Map<string, { batchKey: string; payDate: string }>;
+}
+
+/**
+ * Batches under the minimum are folded into a monthly total.
+ * A folded batch that is still under the minimum is flagged belowMinimum and kept,
+ * so its dollars are stored on a row the reader returns instead of a silent gap.
+ */
+export function foldPayrollBatches(batches: ParsedPayrollBatch[]): FoldedPayroll {
+  const redirect = new Map<string, { batchKey: string; payDate: string }>();
   const kept: ParsedPayrollBatch[] = [];
-  const folded = new Map<string, ParsedPayrollBatch>();
+  const folded = new Map<string, ParsedPayrollBatch & { members: string[] }>();
   let foldedCount = 0;
   for (const batch of batches) {
+    const id = batchIdentity(batch);
     if (batch.lineCount >= MIN_PAYROLL_BATCH_LINES) {
-      kept.push(batch);
+      kept.push({ ...batch, belowMinimum: false });
+      redirect.set(id, { batchKey: batch.batchKey, payDate: batch.payDate });
       continue;
     }
     foldedCount += 1;
     const month = batch.payDate.slice(0, 7);
-    const payDate = month.length === 7 ? `${month}-01` : "";
+    const payDate = month.length === 7 ? `${month}-01` : batch.payDate;
     const key = [batch.fund, batch.dept, batch.objectCode, batch.project, payDate].join("|");
     const existing = folded.get(key);
     if (existing) {
       existing.amountCents += batch.amountCents;
       existing.lineCount += batch.lineCount;
+      existing.members.push(id);
     } else {
       folded.set(key, {
         fund: batch.fund,
@@ -225,10 +282,29 @@ export function foldPayrollBatches(batches: ParsedPayrollBatch[]): { batches: Pa
         payDate,
         amountCents: batch.amountCents,
         lineCount: batch.lineCount,
+        belowMinimum: true,
+        members: [id],
       });
     }
   }
-  return { batches: [...kept, ...folded.values()], foldedCount };
+  const ready = [...kept];
+  for (const batch of folded.values()) {
+    const belowMinimum = batch.lineCount < MIN_PAYROLL_BATCH_LINES;
+    const stored: ParsedPayrollBatch = {
+      fund: batch.fund,
+      dept: batch.dept,
+      objectCode: batch.objectCode,
+      project: batch.project,
+      batchKey: "combined",
+      payDate: batch.payDate,
+      amountCents: batch.amountCents,
+      lineCount: batch.lineCount,
+      belowMinimum,
+    };
+    ready.push(stored);
+    for (const member of batch.members) redirect.set(member, { batchKey: stored.batchKey, payDate: stored.payDate });
+  }
+  return { batches: ready, foldedCount, redirect };
 }
 
 function batchKeyFrom(rest: string, journal: string): string {
@@ -252,6 +328,7 @@ export function parseReport(text: string): ParseResult {
   const departments = new Map<string, { fund: string; reportName: string }>();
   const payments: ParsedPayment[] = [];
   const payroll = new Map<string, ParsedPayrollBatch>();
+  const payrollLines: ParsedPayrollLine[] = [];
 
   let fund = "";
   let current: string | null = null;
@@ -369,6 +446,7 @@ export function parseReport(text: string): ParseResult {
       if (isPayrollLine(source, account.objectCode, rest)) {
         account.isPayroll = true;
         const batchKey = batchKeyFrom(rest, detail[1]);
+        const employeeName = payrollEmployeeName(rest);
         const pkey = [account.fund, account.dept, account.objectCode, account.project, batchKey, payDate].join("|");
         const existing = payroll.get(pkey);
         if (existing) {
@@ -384,12 +462,29 @@ export function parseReport(text: string): ParseResult {
             payDate,
             amountCents,
             lineCount: 1,
+            belowMinimum: false,
           });
         }
+        payrollLines.push({
+          fund: account.fund,
+          dept: account.dept,
+          objectCode: account.objectCode,
+          project: account.project,
+          journal: detail[1],
+          payDate,
+          source,
+          amountCents,
+          employeeName,
+          batchKey,
+          description: "",
+          afterCutoff,
+          dedupeKey: dedupeKey(account.fund, account.dept, account.objectCode, account.project, "", amountCents, detail[1]),
+        });
         continue;
       }
       const vendor = parseVendorRest(rest);
       const checkNumber = vendor?.checkNumber || "";
+      const vendorName = vendor?.vendorName || "";
       payments.push({
         fund: account.fund,
         dept: account.dept,
@@ -400,18 +495,23 @@ export function parseReport(text: string): ParseResult {
         source,
         amountCents,
         vendorNumber: vendor?.vendorNumber || "",
-        vendorName: vendor?.vendorName || "",
+        vendorName,
         invoice: vendor?.invoice || "",
         checkNumber,
         description: vendor ? vendor.description.slice(0, 120) : "",
         afterCutoff,
         dedupeKey: dedupeKey(account.fund, account.dept, account.objectCode, account.project, checkNumber, amountCents, detail[1]),
+        isPersonName: looksLikePersonName(vendorName),
       });
     }
   }
 
   const folded = foldPayrollBatches([...payroll.values()]);
   const payrollList = folded.batches;
+  for (const line of payrollLines) {
+    const target = folded.redirect.get(batchIdentity(line));
+    if (target) line.batchKey = target.batchKey;
+  }
   const sums = new Map<string, number>();
   for (const payment of payments) {
     const key = `${payment.dept}|${payment.objectCode}|${payment.project}`;
@@ -438,6 +538,7 @@ export function parseReport(text: string): ParseResult {
     accounts: accountList,
     payments,
     payrollBatches: payrollList,
+    payrollLines,
     printed,
     afterCutoffCount: payments.filter((payment) => payment.afterCutoff).length,
     reconMismatches: accountList.filter((account) => account.reconDiffCents !== 0),
@@ -445,7 +546,7 @@ export function parseReport(text: string): ParseResult {
   };
 }
 
-/** Every stored string from a parse. Used to prove payroll names are dropped. */
+/** Every stored string from a parse, including payroll names and amounts. */
 export function storedText(result: ParseResult): string {
   return JSON.stringify({
     funds: result.funds,
@@ -453,5 +554,6 @@ export function storedText(result: ParseResult): string {
     accounts: result.accounts,
     payments: result.payments,
     payrollBatches: result.payrollBatches,
+    payrollLines: result.payrollLines,
   });
 }

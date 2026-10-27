@@ -1,5 +1,5 @@
 import type { ChartNames } from "./csv";
-import { foldedPayrollNote, type ParseResult, type ParsedPayment } from "./parser";
+import { foldedPayrollNote, type ParseResult, type ParsedPayment, type ParsedPayrollLine } from "./parser";
 
 export interface ImportRow {
   id: number;
@@ -14,6 +14,7 @@ export interface ImportRow {
   account_count: number;
   payment_count: number;
   payroll_batch_count: number;
+  payroll_line_count: number;
   after_cutoff_count: number;
   recon_mismatch_count: number;
   orig_cents: number;
@@ -84,6 +85,7 @@ export interface ImportRowCounts {
   accounts: number;
   payments: number;
   payrollBatches: number;
+  payrollLines?: number;
 }
 
 export function rowCountsMatch(expected: ImportRowCounts, actual: ImportRowCounts): boolean {
@@ -92,7 +94,8 @@ export function rowCountsMatch(expected: ImportRowCounts, actual: ImportRowCount
     expected.departments === actual.departments &&
     expected.accounts === actual.accounts &&
     expected.payments === actual.payments &&
-    expected.payrollBatches === actual.payrollBatches
+    expected.payrollBatches === actual.payrollBatches &&
+    (expected.payrollLines === undefined || actual.payrollLines === undefined || expected.payrollLines === actual.payrollLines)
   );
 }
 
@@ -124,10 +127,10 @@ export async function saveImport(db: D1Database, result: ParseResult, filename: 
     .prepare(
       `INSERT INTO imports (
         created_at, data_as_of, filename, status, fund_count, department_count, account_count,
-        payment_count, payroll_batch_count, after_cutoff_count, recon_mismatch_count,
+        payment_count, payroll_batch_count, payroll_line_count, after_cutoff_count, recon_mismatch_count,
         orig_cents, adj_cents, rev_cents, ytd_cents, enc_cents, avail_cents,
         printed_orig_cents, printed_rev_cents, printed_ytd_cents
-      ) VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       createdAt,
@@ -138,6 +141,7 @@ export async function saveImport(db: D1Database, result: ParseResult, filename: 
       result.accounts.length,
       result.payments.length,
       result.payrollBatches.length,
+      result.payrollLines.length,
       result.afterCutoffCount,
       result.reconMismatches.length,
       sum(result.accounts, (row) => row.origCents),
@@ -198,12 +202,24 @@ export async function saveImport(db: D1Database, result: ParseResult, filename: 
     db
       .prepare(
         `INSERT INTO payroll_batches (
-          import_id, fund_code, dept_code, object_code, project_code, batch_key, pay_date, amount_cents, line_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          import_id, fund_code, dept_code, object_code, project_code, batch_key, pay_date, amount_cents, line_count, below_minimum
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(importId, batch.fund, batch.dept, batch.objectCode, batch.project, batch.batchKey, batch.payDate, batch.amountCents, batch.lineCount),
+      .bind(
+        importId,
+        batch.fund,
+        batch.dept,
+        batch.objectCode,
+        batch.project,
+        batch.batchKey,
+        batch.payDate,
+        batch.amountCents,
+        batch.lineCount,
+        batch.belowMinimum ? 1 : 0,
+      ),
   );
   await runChunked(db, payrollStmts);
+  await insertPayrollLines(db, importId, result.payrollLines);
   const stored = await getImport(db, importId);
   const actual = await storedCounts(db, importId);
   const expected = countsFromImport(stored);
@@ -227,7 +243,7 @@ export async function insertPayments(db: D1Database, importId: number, payments:
   const width = 4;
   for (let i = 0; i < payments.length; i += width) {
     const slice = payments.slice(i, i + width);
-    const placeholders = slice.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+    const placeholders = slice.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
     const binds: (string | number | null)[] = [];
     for (const row of slice) {
       binds.push(
@@ -247,12 +263,52 @@ export async function insertPayments(db: D1Database, importId: number, payments:
         row.description,
         row.afterCutoff ? 1 : 0,
         row.dedupeKey,
+        row.isPersonName ? 1 : 0,
       );
     }
     statements.push(db.prepare(`INSERT INTO payments (
       import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
-      amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key
+      amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key, is_person_name
     ) VALUES ${placeholders}`).bind(...binds));
+  }
+  await runChunked(db, statements, 20);
+}
+
+export async function insertPayrollLines(db: D1Database, importId: number, lines: ParsedPayrollLine[]): Promise<void> {
+  const statements: D1PreparedStatement[] = [];
+  const width = 4;
+  for (let i = 0; i < lines.length; i += width) {
+    const slice = lines.slice(i, i + width);
+    const placeholders = slice.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+    const binds: (string | number | null)[] = [];
+    for (const row of slice) {
+      binds.push(
+        importId,
+        row.fund,
+        row.dept,
+        row.objectCode,
+        row.project,
+        row.journal,
+        row.payDate,
+        row.source,
+        row.amountCents,
+        row.employeeName,
+        row.batchKey,
+        row.afterCutoff ? 1 : 0,
+        row.dedupeKey,
+        row.description,
+      );
+    }
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO payroll_lines (
+            import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
+            amount_cents, employee_name, batch_key, after_cutoff, dedupe_key, description
+          ) VALUES ${placeholders}`,
+        )
+        .bind(...binds),
+    );
   }
   await runChunked(db, statements, 20);
 }
@@ -278,6 +334,7 @@ function countsFromImport(row: ImportRow | null): ImportRowCounts | null {
     accounts: row.account_count,
     payments: row.payment_count,
     payrollBatches: row.payroll_batch_count,
+    payrollLines: row.payroll_line_count,
   };
 }
 
@@ -289,6 +346,7 @@ async function storedCounts(db: D1Database, importId: number): Promise<ImportRow
     accounts: await count("SELECT COUNT(*) AS n FROM accounts WHERE import_id = ?"),
     payments: await count("SELECT COUNT(*) AS n FROM payments WHERE import_id = ?"),
     payrollBatches: await count("SELECT COUNT(*) AS n FROM payroll_batches WHERE import_id = ?"),
+    payrollLines: await count("SELECT COUNT(*) AS n FROM payroll_lines WHERE import_id = ?"),
   };
 }
 
@@ -408,34 +466,6 @@ export async function oneAccount(
     .first<AccountRow>();
 }
 
-export async function paymentPage(
-  db: D1Database,
-  importId: number,
-  dept: string,
-  objectCode: string,
-  project: string,
-  page: number,
-  pageSize: number,
-): Promise<{ rows: PaymentRow[]; total: number }> {
-  const totalRow = await db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM payments
-       WHERE import_id = ? AND dept_code = ? AND object_code = ? AND project_code = ? AND after_cutoff = 0`,
-    )
-    .bind(importId, dept, objectCode, project)
-    .first<{ n: number }>();
-  const rows = await db
-    .prepare(
-      `SELECT * FROM payments
-       WHERE import_id = ? AND dept_code = ? AND object_code = ? AND project_code = ? AND after_cutoff = 0
-       ORDER BY pay_date DESC, id DESC
-       LIMIT ? OFFSET ?`,
-    )
-    .bind(importId, dept, objectCode, project, pageSize, page * pageSize)
-    .all<PaymentRow>();
-  return { rows: rows.results || [], total: Number(totalRow?.n || 0) };
-}
-
 export interface SearchFilters {
   q: string;
   vendor: string;
@@ -443,57 +473,6 @@ export interface SearchFilters {
   minCents: number;
   from: string;
   to: string;
-}
-
-function like(value: string): string {
-  const cleaned = value.replace(/[%_]/g, " ").trim().slice(0, 40);
-  return `%${cleaned}%`;
-}
-
-export async function searchPayments(
-  db: D1Database,
-  importId: number,
-  filters: SearchFilters,
-  page: number,
-  pageSize: number,
-): Promise<{ rows: PaymentRow[]; total: number; totalCents: number }> {
-  const where = ["import_id = ?", "after_cutoff = 0"];
-  const binds: (string | number)[] = [importId];
-  if (filters.dept) {
-    where.push("dept_code = ?");
-    binds.push(filters.dept);
-  }
-  if (filters.minCents > 0) {
-    where.push("amount_cents >= ?");
-    binds.push(filters.minCents);
-  }
-  if (filters.from) {
-    where.push("pay_date >= ?");
-    binds.push(filters.from);
-  }
-  if (filters.to) {
-    where.push("pay_date <= ?");
-    binds.push(filters.to);
-  }
-  if (filters.vendor.trim()) {
-    where.push("vendor_name LIKE ?");
-    binds.push(like(filters.vendor));
-  }
-  if (filters.q.trim()) {
-    const pattern = like(filters.q);
-    where.push("(vendor_name LIKE ? OR invoice LIKE ? OR description LIKE ? OR check_number LIKE ? OR vendor_number LIKE ?)");
-    binds.push(pattern, pattern, pattern, pattern, pattern);
-  }
-  const clause = where.join(" AND ");
-  const totals = await db
-    .prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS cents FROM payments WHERE ${clause}`)
-    .bind(...binds)
-    .first<{ n: number; cents: number }>();
-  const rows = await db
-    .prepare(`SELECT * FROM payments WHERE ${clause} ORDER BY amount_cents DESC, pay_date DESC LIMIT ? OFFSET ?`)
-    .bind(...binds, pageSize, page * pageSize)
-    .all<PaymentRow>();
-  return { rows: rows.results || [], total: Number(totals?.n || 0), totalCents: Number(totals?.cents || 0) };
 }
 
 export async function reconAccounts(db: D1Database, importId: number): Promise<AccountRow[]> {
@@ -567,14 +546,6 @@ export async function platHistory(db: D1Database, fund: string, dept: string, ad
     .bind(fund, dept, ...statuses)
     .all<PlatSnapshot>();
   return rows.results || [];
-}
-
-export async function vendorNamesForImport(db: D1Database, importId: number): Promise<string[]> {
-  const rows = await db
-    .prepare("SELECT DISTINCT vendor_name AS name FROM payments WHERE import_id = ? AND vendor_name != '' ORDER BY vendor_name")
-    .bind(importId)
-    .all<{ name: string }>();
-  return (rows.results || []).map((row) => row.name);
 }
 
 export async function overlapCount(db: D1Database, importId: number, priorId: number): Promise<number> {

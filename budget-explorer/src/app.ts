@@ -1,4 +1,16 @@
 import { Hono, type Context } from "hono";
+import {
+  accountLines,
+  buildQuestionContext,
+  finalizeAnswer,
+  personNamesUpdatedAt,
+  platLines,
+  qaSystem,
+  searchLines,
+  setShowPersonNames,
+  showPersonNames,
+  showPersonNamesFromForm,
+} from "./access";
 import type { SessionPayload } from "./auth";
 import {
   FORM_COOKIE,
@@ -35,25 +47,22 @@ import {
   monthlyCents,
   oneAccount,
   overlapCount,
-  paymentPage,
   platHistory,
   publishImport,
-  vendorNamesForImport,
   qaHits,
   reconAccounts,
   recordLoginAttempt as storeAttempt,
   saveChart,
   saveImport,
-  searchPayments,
   unmatchedCodes,
   type SearchFilters,
 } from "./db";
 import { adminPasswordSet, publicBase, type AppEnv } from "./env";
-import { csvCell, fiscalPosition, fyMonthIndex, isoDate } from "./format";
+import { csvAmount, csvCell, fiscalPosition, fyMonthIndex, isoDate } from "./format";
 import { uploadAllowed } from "./limits";
-import { looksLikePersonName, parseReport } from "./parser";
+import { parseReport } from "./parser";
 import { safeNext } from "./safe-next";
-import { AI_MODEL, QA_SYSTEM, modelText, retrieveContext } from "./qa";
+import { AI_MODEL, modelText } from "./qa";
 import { CLIENT_JS, CSS } from "./style";
 import { xlsxToRows } from "./xlsx";
 import {
@@ -76,7 +85,7 @@ import {
   FAVICON,
 } from "./view";
 
-const app = new Hono<{ Bindings: AppEnv; Variables: { session: SessionPayload } }>();
+const app = new Hono<{ Bindings: AppEnv; Variables: { session: SessionPayload; showNames: boolean } }>();
 
 const CSP = [
   "default-src 'none'",
@@ -125,7 +134,8 @@ app.get("/favicon.svg", (c) => {
 app.get("/login", async (c) => {
   const token = crypto.randomUUID().replace(/-/g, "");
   c.header("Set-Cookie", formCookie(token));
-  return c.html(renderLogin("", safeNext(c.req.query("next") || "/", new URL(c.req.url).origin), token));
+  const names = await showPersonNames(c.env.DB);
+  return c.html(renderLogin("", safeNext(c.req.query("next") || "/", new URL(c.req.url).origin), token, names));
 });
 
 app.post("/login", async (c) => {
@@ -133,19 +143,20 @@ app.post("/login", async (c) => {
   const token = readCookie(c.req.header("cookie"), FORM_COOKIE);
   const provided = String(form.csrf || "");
   const formToken = String(form.form_token || "");
+  const names = await showPersonNames(c.env.DB);
   if (!(await csrfOk(token, formToken || provided))) {
     const fresh = crypto.randomUUID().replace(/-/g, "");
     c.header("Set-Cookie", formCookie(fresh));
-    return c.html(renderLogin("The sign-in form expired. Try again.", "/", fresh), 400);
+    return c.html(renderLogin("The sign-in form expired. Try again.", "/", fresh, names), 400);
   }
   if (!c.env.SITE_PASSWORD || !c.env.SESSION_SECRET) {
-    return c.html(renderLogin("The site password is not configured.", "/"), 500);
+    return c.html(renderLogin("The site password is not configured.", "/", "", names), 500);
   }
   const ipHash = await sha256Hex(`${c.env.SESSION_SECRET}:${clientIp(c.req.raw)}`);
   const windowStart = Math.floor(Date.now() / 1000 / LOGIN_WINDOW_SEC) * LOGIN_WINDOW_SEC;
   const prior = await attemptsFor(c.env.DB, ipHash, windowStart);
   if (!throttleDecision(prior).allowed) {
-    return c.html(renderLogin("Too many sign-in attempts. Wait a few minutes and try again.", "/"), 429);
+    return c.html(renderLogin("Too many sign-in attempts. Wait a few minutes and try again.", "/", "", names), 429);
   }
   const password = String(form.password || "");
   const ok = await passwordsMatch(password, c.env.SITE_PASSWORD);
@@ -153,7 +164,7 @@ app.post("/login", async (c) => {
     await storeAttempt(c.env.DB, ipHash, windowStart);
     const fresh = crypto.randomUUID().replace(/-/g, "");
     c.header("Set-Cookie", formCookie(fresh));
-    return c.html(renderLogin("That password does not match.", "/", fresh), 401);
+    return c.html(renderLogin("That password does not match.", "/", fresh, names), 401);
   }
   const session = newSession(false);
   c.header("Set-Cookie", sessionCookie(await signSession(c.env.SESSION_SECRET, session)));
@@ -161,7 +172,7 @@ app.post("/login", async (c) => {
 });
 
 app.use("*", async (c, next) => {
-  if (!c.env.SESSION_SECRET) return c.html(renderLogin("The site password is not configured.", "/"), 500);
+  if (!c.env.SESSION_SECRET) return c.html(renderLogin("The site password is not configured.", "/", "", await showPersonNames(c.env.DB)), 500);
   const token = readCookie(c.req.header("cookie"), "be_session");
   const session = await readSession(c.env.SESSION_SECRET, token);
   if (!session) {
@@ -169,6 +180,7 @@ app.use("*", async (c, next) => {
     return c.redirect(`/login?next=${encodeURIComponent(nextUrl)}`, 303);
   }
   c.set("session", session);
+  c.set("showNames", await showPersonNames(c.env.DB));
   await next();
 });
 
@@ -183,7 +195,7 @@ app.post("/logout", async (c) => {
 app.get("/", async (c) => {
   const current = await latestPublished(c.env.DB);
   const session = c.get("session");
-  if (!current) return c.html(renderEmpty(session.csrf, isAdmin(c)));
+  if (!current) return c.html(renderEmpty(session.csrf, isAdmin(c), c.get("showNames")));
   const [departments, names, funds, months] = await Promise.all([
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
@@ -199,6 +211,7 @@ app.get("/", async (c) => {
       months: foldMonths(months, current.data_as_of),
       csrf: session.csrf,
       isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
     }),
   );
 });
@@ -212,7 +225,7 @@ app.get("/departments", async (c) => {
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
   ]);
-  return c.html(renderDepartments({ row: current, departments, fundReports: funds, names, csrf: session.csrf, isAdmin: isAdmin(c) }));
+  return c.html(renderDepartments({ row: current, departments, fundReports: funds, names, csrf: session.csrf, isAdmin: isAdmin(c), showNames: c.get("showNames") }));
 });
 
 app.get("/departments/:dept", async (c) => {
@@ -237,6 +250,7 @@ app.get("/departments/:dept", async (c) => {
       names,
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
     }),
   );
 });
@@ -253,7 +267,7 @@ app.get("/departments/:dept/:object/:project", async (c) => {
   const pageIndex = pageNumber(c.req.query("page"));
   const pageSize = 25;
   const [payments, names] = await Promise.all([
-    account.is_payroll ? Promise.resolve({ rows: [], total: 0 }) : paymentPage(c.env.DB, current.id, dept, objectCode, project, pageIndex, pageSize),
+    accountLines(c.env.DB, current.id, dept, objectCode, project, pageIndex, pageSize, c.get("showNames")),
     loadNames(c.env.DB),
   ]);
   const departments = await departmentRollups(c.env.DB, current.id);
@@ -270,6 +284,7 @@ app.get("/departments/:dept/:object/:project", async (c) => {
       deptReport: deptRow?.report_name || "",
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
     }),
   );
 });
@@ -280,7 +295,7 @@ app.get("/search", async (c) => {
   const filters = readFilters(c);
   const pageIndex = pageNumber(c.req.query("page"));
   const [result, departments, names] = await Promise.all([
-    searchPayments(c.env.DB, current.id, filters, pageIndex, 25),
+    searchLines(c.env.DB, current.id, filters, pageIndex, 25, c.get("showNames")),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
   ]);
@@ -297,6 +312,7 @@ app.get("/search", async (c) => {
       pageSize: 25,
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
     }),
   );
 });
@@ -305,13 +321,11 @@ app.get("/search.csv", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
   const filters = readFilters(c);
-  const result = await searchPayments(c.env.DB, current.id, filters, 0, 2000);
+  const result = await searchLines(c.env.DB, current.id, filters, 0, 2000, c.get("showNames"));
   const lines = ["date,vendor,invoice,description,department,check,amount"];
   for (const row of result.rows) {
     lines.push(
-      [row.pay_date, row.vendor_name, row.invoice, row.description, row.dept_code, row.check_number, (row.amount_cents / 100).toFixed(2)]
-        .map(csvCell)
-        .join(","),
+      [csvCell(row.pay_date), csvCell(row.vendor_name), csvCell(row.invoice), csvCell(row.description), csvCell(row.dept_code), csvCell(row.check_number), csvAmount(row.amount_cents)].join(","),
     );
   }
   c.header("Content-Type", "text/csv; charset=utf-8");
@@ -322,18 +336,19 @@ app.get("/search.csv", async (c) => {
 app.get("/ask", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
-  return c.html(renderAsk({ row: current, csrf: c.get("session").csrf, question: "", answer: "", records: [], error: "", isAdmin: isAdmin(c) }));
+  return c.html(renderAsk({ row: current, csrf: c.get("session").csrf, question: "", answer: "", records: [], error: "", isAdmin: isAdmin(c), showNames: c.get("showNames") }));
 });
 
 app.post("/ask", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
   const session = c.get("session");
+  const shown = c.get("showNames");
   const form = await c.req.parseBody();
   if (!(await csrfOk(session.csrf, String(form.csrf || c.req.header("x-csrf-token") || "")))) return c.text("Invalid form token", 403);
   const question = String(form.question || "").trim();
   if (!question || question.length > QA_MAX_CHARS) {
-    return c.html(renderAsk({ row: current, csrf: session.csrf, question, answer: "", records: [], error: "Enter a question of 500 characters or fewer.", isAdmin: isAdmin(c) }), 400);
+    return c.html(renderAsk({ row: current, csrf: session.csrf, question, answer: "", records: [], error: "Enter a question of 500 characters or fewer.", isAdmin: isAdmin(c), showNames: shown }), 400);
   }
   const hour = hourBucket();
   const day = dayBucket();
@@ -341,11 +356,11 @@ app.post("/ask", async (c) => {
   const decision = rateDecision(hourHits, dayHits);
   if (!decision.allowed) {
     const error = decision.reason === "hour" ? "This signed-in visitor has reached the hourly question limit." : "This signed-in visitor has reached the daily question limit.";
-    return c.html(renderAsk({ row: current, csrf: session.csrf, question, answer: "", records: [], error, isAdmin: isAdmin(c) }), 429);
+    return c.html(renderAsk({ row: current, csrf: session.csrf, question, answer: "", records: [], error, isAdmin: isAdmin(c), showNames: shown }), 429);
   }
   await bumpQa(c.env.DB, session.sid, hour);
   await bumpQa(c.env.DB, session.sid, day);
-  const pack = await retrieveContext(c.env.DB, current.id, question);
+  const pack = await buildQuestionContext(c.env.DB, current.id, question, shown);
   if (!pack.records.length) {
     return c.html(
       renderAsk({
@@ -356,6 +371,7 @@ app.post("/ask", async (c) => {
         records: [],
         error: "",
         isAdmin: isAdmin(c),
+        showNames: shown,
       }),
     );
   }
@@ -364,7 +380,7 @@ app.post("/ask", async (c) => {
     const ai = c.env.AI as { run: (model: string, input: unknown) => Promise<unknown> };
     const result = await ai.run(AI_MODEL, {
       messages: [
-        { role: "system", content: QA_SYSTEM },
+        { role: "system", content: qaSystem(shown) },
         { role: "user", content: pack.prompt },
       ],
       max_tokens: 700,
@@ -374,17 +390,18 @@ app.post("/ask", async (c) => {
     answer = "";
   }
   if (!answer) answer = "The question could not be answered just now. The records below are what the import contains for this question.";
-  return c.html(renderAsk({ row: current, csrf: session.csrf, question, answer, records: pack.records, error: "", isAdmin: isAdmin(c) }));
+  const finalAnswer = await finalizeAnswer(c.env.DB, current.id, answer, pack.records, shown);
+  return c.html(renderAsk({ row: current, csrf: session.csrf, question, answer: finalAnswer.answer, records: finalAnswer.records, error: "", isAdmin: isAdmin(c), showNames: shown }));
 });
 
 app.get("/about", async (c) => {
   const current = await latestPublished(c.env.DB);
-  return c.html(renderAbout(current, c.get("session").csrf, isAdmin(c), publicBase(c.env)));
+  return c.html(renderAbout(current, c.get("session").csrf, isAdmin(c), publicBase(c.env), c.get("showNames")));
 });
 
 app.get("/sheriff", async (c) => {
   const current = await latestPublished(c.env.DB);
-  return c.html(renderSheriff(current, c.get("session").csrf, isAdmin(c)));
+  return c.html(renderSheriff(current, c.get("session").csrf, isAdmin(c), c.get("showNames")));
 });
 
 app.get("/plat", async (c) => {
@@ -393,19 +410,9 @@ app.get("/plat", async (c) => {
   const current = await latestPublished(c.env.DB);
   const requested = Number(c.req.query("import") || 0);
   const selected = history.find((item) => item.id === requested) || [...history].reverse().find((item) => item.status === "published") || history[history.length - 1];
-  let payments: Awaited<ReturnType<typeof paymentPage>>["rows"] = [];
-  if (selected) {
-    const pageResult = await c.env.DB
-      .prepare(
-        `SELECT * FROM payments WHERE import_id = ? AND fund_code = ? AND dept_code = ? AND after_cutoff = 0
-         ORDER BY pay_date DESC, id DESC LIMIT 50`,
-      )
-      .bind(selected.id, "114", "11444000")
-      .all<Awaited<ReturnType<typeof paymentPage>>["rows"][number]>();
-    payments = pageResult.results || [];
-  }
+  const payments = selected ? await platLines(c.env.DB, selected.id, "114", "11444000", c.get("showNames")) : [];
   const names = await loadNames(c.env.DB);
-  return c.html(renderPlat({ row: current, history, payments, selected: selected?.id ?? null, names, csrf: session.csrf, isAdmin: isAdmin(c) }));
+  return c.html(renderPlat({ row: current, history, payments, selected: selected?.id ?? null, names, csrf: session.csrf, isAdmin: isAdmin(c), showNames: c.get("showNames") }));
 });
 
 app.get("/admin", async (c) => {
@@ -413,7 +420,18 @@ app.get("/admin", async (c) => {
   if (blocked) return blocked;
   const imports = await listImports(c.env.DB);
   const count = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM chart_names").first<{ n: number }>();
-  return c.html(renderAdminHome(imports, c.get("session").csrf, Number(count?.n || 0)));
+  const updatedAt = await personNamesUpdatedAt(c.env.DB);
+  return c.html(renderAdminHome(imports, c.get("session").csrf, Number(count?.n || 0), { shown: c.get("showNames"), updatedAt }));
+});
+
+app.post("/admin/settings", async (c) => {
+  const blocked = await guardAdmin(c);
+  if (blocked) return blocked;
+  const session = c.get("session");
+  const form = await c.req.parseBody();
+  if (!(await csrfOk(session.csrf, String(form.csrf || "")))) return c.text("Invalid form token", 403);
+  await setShowPersonNames(c.env.DB, showPersonNamesFromForm(form.show_person_names));
+  return c.redirect("/admin", 303);
 });
 
 app.get("/admin/history", async (c) => {
@@ -423,14 +441,14 @@ app.get("/admin/history", async (c) => {
 });
 
 app.get("/admin/unlock", async (c) => {
-  if (!adminPasswordSet(c.env)) return c.html(renderAdminDisabled(c.get("session").csrf), 404);
+  if (!adminPasswordSet(c.env)) return c.html(renderAdminDisabled(c.get("session").csrf, c.get("showNames")), 404);
   if (c.get("session").admin) return c.redirect("/admin", 303);
-  return c.html(renderUnlock(c.get("session").csrf, ""));
+  return c.html(renderUnlock(c.get("session").csrf, "", c.get("showNames")));
 });
 
 app.post("/admin/unlock", async (c) => {
   const session = c.get("session");
-  if (!adminPasswordSet(c.env)) return c.html(renderAdminDisabled(session.csrf), 404);
+  if (!adminPasswordSet(c.env)) return c.html(renderAdminDisabled(session.csrf, c.get("showNames")), 404);
   const form = await c.req.parseBody();
   if (!(await csrfOk(session.csrf, String(form.csrf || "")))) return c.text("Invalid form token", 403);
   const ipHash = await sha256Hex(`${c.env.SESSION_SECRET}:admin:${clientIp(c.req.raw)}`);
@@ -440,13 +458,13 @@ app.post("/admin/unlock", async (c) => {
     attemptsFor(c.env.DB, "admin-global", windowStart),
   ]);
   if (!adminUnlockAllowed(priorIp, priorGlobal)) {
-    return c.html(renderUnlock(session.csrf, "Too many admin attempts. Wait a few minutes and try again."), 429);
+    return c.html(renderUnlock(session.csrf, "Too many admin attempts. Wait a few minutes and try again.", c.get("showNames")), 429);
   }
   const ok = await passwordsMatch(String(form.admin_password || ""), c.env.ADMIN_PASSWORD);
   if (!ok) {
     await storeAttempt(c.env.DB, ipHash, windowStart);
     await storeAttempt(c.env.DB, "admin-global", windowStart);
-    return c.html(renderUnlock(session.csrf, "That admin password does not match."), 401);
+    return c.html(renderUnlock(session.csrf, "That admin password does not match.", c.get("showNames")), 401);
   }
   const upgraded = { ...session, admin: true };
   c.header("Set-Cookie", sessionCookie(await signSession(c.env.SESSION_SECRET || "", upgraded)));
@@ -458,30 +476,30 @@ app.post("/admin/import", async (c) => {
   if (blocked) return blocked;
   const session = c.get("session");
   if (!uploadAllowed(c.req.header("content-length"))) {
-    return c.html(renderMessage("Import", "That upload is missing a size or is larger than 20 MB.", session.csrf), 413);
+    return c.html(renderMessage("Import", "That upload is missing a size or is larger than 20 MB.", session.csrf, undefined, c.get("showNames")), 413);
   }
   const form = await c.req.parseBody();
   if (!(await csrfOk(session.csrf, String(form.csrf || "")))) return c.text("Invalid form token", 403);
   const file = form.file;
-  if (!(file instanceof File)) return c.html(renderMessage("Import", "Choose a file to import.", session.csrf), 400);
-  if (file.size > 20_000_000) return c.html(renderMessage("Import", "That file is larger than 20 MB.", session.csrf), 400);
+  if (!(file instanceof File)) return c.html(renderMessage("Import", "Choose a file to import.", session.csrf, undefined, c.get("showNames")), 400);
+  if (file.size > 20_000_000) return c.html(renderMessage("Import", "That file is larger than 20 MB.", session.csrf, undefined, c.get("showNames")), 400);
   try {
     const loaded = await interpretFile(file);
     if (loaded.kind === "pdf") {
-      return c.html(renderMessage("PDF files", "PDF text extraction is not available in this Worker. Export the year to date report as a text file and upload the .txt file. CSV and Excel files are accepted for a chart of accounts.", session.csrf), 400);
+      return c.html(renderMessage("PDF files", "PDF text extraction is not available in this Worker. Export the year to date report as a text file and upload the .txt file. CSV and Excel files are accepted for a chart of accounts.", session.csrf, undefined, c.get("showNames")), 400);
     }
     if (loaded.kind === "chart" && loaded.chart) {
       const count = await saveChart(c.env.DB, loaded.chart);
-      return c.html(renderMessage("Chart updated", `Saved ${count} chart names. Department and object labels will use them on the next page view.`, session.csrf));
+      return c.html(renderMessage("Chart updated", `Saved ${count} chart names. Department and object labels will use them on the next page view.`, session.csrf, undefined, c.get("showNames")));
     }
     if (loaded.kind === "report" && loaded.text) {
       const parsed = parseReport(loaded.text);
       const id = await saveImport(c.env.DB, parsed, file.name || "upload.txt");
       return c.redirect(`/admin/import/${id}`, 303);
     }
-    return c.html(renderMessage("Unrecognized file", "Upload the year to date budget report as text, or a chart CSV with fund, department, or object columns.", session.csrf), 400);
+    return c.html(renderMessage("Unrecognized file", "Upload the year to date budget report as text, or a chart CSV with fund, department, or object columns.", session.csrf, undefined, c.get("showNames")), 400);
   } catch {
-    return c.html(renderMessage("Import failed", "The file could not be saved. If this is the full year report, use scripts/seed-local.sh, which loads it in smaller database batches.", session.csrf), 500);
+    return c.html(renderMessage("Import failed", "The file could not be saved. If this is the full year report, use scripts/seed-local.sh, which loads it in smaller database batches.", session.csrf, undefined, c.get("showNames")), 500);
   }
 });
 
@@ -490,22 +508,22 @@ app.post("/admin/chart", async (c) => {
   if (blocked) return blocked;
   const session = c.get("session");
   if (!uploadAllowed(c.req.header("content-length"))) {
-    return c.html(renderMessage("Chart", "That upload is missing a size or is larger than 20 MB.", session.csrf), 413);
+    return c.html(renderMessage("Chart", "That upload is missing a size or is larger than 20 MB.", session.csrf, undefined, c.get("showNames")), 413);
   }
   const form = await c.req.parseBody();
   if (!(await csrfOk(session.csrf, String(form.csrf || "")))) return c.text("Invalid form token", 403);
   const file = form.file;
-  if (!(file instanceof File)) return c.html(renderMessage("Chart", "Choose a CSV or Excel file.", session.csrf), 400);
-  if (file.size > 20_000_000) return c.html(renderMessage("Chart", "That file is larger than 20 MB.", session.csrf), 400);
+  if (!(file instanceof File)) return c.html(renderMessage("Chart", "Choose a CSV or Excel file.", session.csrf, undefined, c.get("showNames")), 400);
+  if (file.size > 20_000_000) return c.html(renderMessage("Chart", "That file is larger than 20 MB.", session.csrf, undefined, c.get("showNames")), 400);
   try {
     const loaded = await interpretFile(file);
     if (loaded.kind !== "chart" || !loaded.chart) {
-      return c.html(renderMessage("Chart", "That file does not look like a chart of accounts. Expected columns include fund, department, or object codes and names.", session.csrf), 400);
+      return c.html(renderMessage("Chart", "That file does not look like a chart of accounts. Expected columns include fund, department, or object codes and names.", session.csrf, undefined, c.get("showNames")), 400);
     }
     const count = await saveChart(c.env.DB, loaded.chart);
-    return c.html(renderMessage("Chart updated", `Saved ${count} chart names.`, session.csrf));
+    return c.html(renderMessage("Chart updated", `Saved ${count} chart names.`, session.csrf, undefined, c.get("showNames")));
   } catch {
-    return c.html(renderMessage("Chart", "That spreadsheet could not be read. Use a small CSV or Excel file.", session.csrf), 400);
+    return c.html(renderMessage("Chart", "That spreadsheet could not be read. Use a small CSV or Excel file.", session.csrf, undefined, c.get("showNames")), 400);
   }
 });
 
@@ -520,10 +538,7 @@ app.get("/admin/import/:id", async (c) => {
     unmatchedCodes(c.env.DB, id),
     latestPublished(c.env.DB),
   ]);
-  const [overlap, names] = await Promise.all([
-    prior && prior.id !== id ? overlapCount(c.env.DB, id, prior.id) : Promise.resolve(null),
-    vendorNamesForImport(c.env.DB, id),
-  ]);
+  const overlap = prior && prior.id !== id ? await overlapCount(c.env.DB, id, prior.id) : null;
   return c.html(
     renderPreview({
       row,
@@ -531,9 +546,9 @@ app.get("/admin/import/:id", async (c) => {
       unmatchedDepts: unmatched.departments,
       unmatchedObjects: unmatched.objects,
       overlap,
-      personNames: names.filter(looksLikePersonName),
       csrf: c.get("session").csrf,
       error: "",
+      showNames: c.get("showNames"),
     }),
   );
 });
@@ -546,11 +561,11 @@ app.post("/admin/import/:id/publish", async (c) => {
   if (!(await csrfOk(session.csrf, String(form.csrf || "")))) return c.text("Invalid form token", 403);
   const id = Number(c.req.param("id"));
   const row = await getImport(c.env.DB, id);
-  if (!row || row.status === "failed") return c.html(renderMessage("Publish", "That import cannot be published.", session.csrf), 400);
+  if (!row || row.status === "failed") return c.html(renderMessage("Publish", "That import cannot be published.", session.csrf, undefined, c.get("showNames")), 400);
   try {
     await publishImport(c.env.DB, id);
   } catch {
-    return c.html(renderMessage("Publish", "That import cannot be published because its stored rows do not match the parsed file.", session.csrf), 400);
+    return c.html(renderMessage("Publish", "That import cannot be published because its stored rows do not match the parsed file.", session.csrf, undefined, c.get("showNames")), 400);
   }
   return c.redirect("/", 303);
 });
@@ -559,21 +574,21 @@ app.notFound((c) => c.text("Not found", 404));
 
 export default app;
 
-type AppContext = Context<{ Bindings: AppEnv; Variables: { session: SessionPayload } }>;
+type AppContext = Context<{ Bindings: AppEnv; Variables: { session: SessionPayload; showNames: boolean } }>;
 
 function isAdmin(c: AppContext): boolean {
   return adminPasswordSet(c.env) && c.get("session").admin;
 }
 
 async function guardAdmin(c: AppContext): Promise<Response | null> {
-  if (!adminPasswordSet(c.env)) return c.html(renderAdminDisabled(c.get("session").csrf), 404);
+  if (!adminPasswordSet(c.env)) return c.html(renderAdminDisabled(c.get("session").csrf, c.get("showNames")), 404);
   if (isAdmin(c)) return null;
-  return c.html(renderUnlock(c.get("session").csrf, ""));
+  return c.html(renderUnlock(c.get("session").csrf, "", c.get("showNames")));
 }
 
 async function requirePublished(c: AppContext): Promise<Response | import("./db").ImportRow> {
   const current = await latestPublished(c.env.DB);
-  if (!current) return c.html(renderEmpty(c.get("session").csrf, isAdmin(c)));
+  if (!current) return c.html(renderEmpty(c.get("session").csrf, isAdmin(c), c.get("showNames")));
   return current;
 }
 

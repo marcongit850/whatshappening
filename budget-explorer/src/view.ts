@@ -25,6 +25,7 @@ export interface ShellOpts {
   csrf?: string;
   fy?: string;
   bare?: boolean;
+  showNames: boolean;
 }
 
 const NAV = [
@@ -48,6 +49,9 @@ export function page(opts: ShellOpts): string {
     !opts.bare && opts.csrf
       ? `<form method="post" action="/logout" style="display:inline"><input type="hidden" name="csrf" value="${esc(opts.csrf)}"><button class="linkish" type="submit">Log out</button></form>`
       : "";
+  const payrollFooter = opts.showNames
+    ? "Payroll rows can include employee names and individual pay."
+    : "Payroll is shown as batch totals. Person names and individual pay are hidden.";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -73,7 +77,7 @@ export function page(opts: ShellOpts): string {
 <nav>${nav}${adminLink}${logout}</nav>
 </div></header>
 <main>${opts.body}</main>
-<footer class="footer"><div class="footer-inner">Concept prototype for private review. Not affiliated with or endorsed by Walton County government. Figures are unaudited and may change. Payroll is shown only as account totals, never by person. No county seal is used.</div></footer>
+<footer class="footer"><div class="footer-inner">Concept prototype for private review. Not affiliated with or endorsed by Walton County government. Figures are unaudited and may change. ${payrollFooter} No county seal is used.</div></footer>
 <script src="/assets/app.js" defer></script>
 </body></html>`;
 }
@@ -105,12 +109,13 @@ function fundLabel(code: string, report: string, names: NameMaps): { primary: st
   return nameFor(names.fund.get(code), report, code);
 }
 
-export function renderLogin(error: string, next: string, formToken = ""): string {
+export function renderLogin(error: string, next: string, formToken = "", showNames = true): string {
   return page({
     title: "Sign in. Budget Explorer",
     active: "",
     csrf: "",
     bare: true,
+    showNames,
     body: `<div class="login-wrap"><section class="login-card">
 <p class="brand-kicker" style="color:var(--gold)">Private access</p>
 <h1>Sign in</h1>
@@ -134,6 +139,7 @@ export function renderOverview(opts: {
   months: number[];
   csrf: string;
   isAdmin: boolean;
+  showNames: boolean;
 }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const counts = { green: 0, yellow: 0, red: 0, gray: 0 };
@@ -181,7 +187,7 @@ ${metric("Available", money(opts.row.avail_cents), `Spent only is ${used}. With 
 <section class="panel"><h2>Cumulative spending by month</h2><p class="hint">Running total of payments posted in each fiscal month, including payroll batches, against the revised budget.</p>${chart}</section>
 <section class="panel"><h2>Department status</h2><p class="hint">All ${opts.departments.length} departments with a row in this import.</p><div class="donut-row">${donut}<div class="legend">${(["green", "yellow", "red", "gray"] as Pace[]).map((key) => `<div>${pill(key)} <strong>${counts[key]}</strong></div>`).join("")}</div></div></section>
 </div>`;
-  return page({ title: "Overview. Budget Explorer", active: "overview", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel });
+  return page({ title: "Overview. Budget Explorer", active: "overview", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
 }
 
 function lineChart(months: number[], revCents: number, ytdCents: number): string {
@@ -236,7 +242,7 @@ function donutChart(counts: Record<Pace, number>): string {
   return `<svg width="160" height="160" viewBox="0 0 160 160" role="img" aria-label="${total} departments">${arcs}<text x="80" y="76" text-anchor="middle" font-size="28" font-family="Fraunces, serif" fill="#1a2330">${total}</text><text x="80" y="96" text-anchor="middle" font-size="11" fill="#5c6976">departments</text></svg>`;
 }
 
-export function renderDepartments(opts: { row: ImportRow; departments: DeptRollup[]; fundReports: Map<string, string>; names: NameMaps; csrf: string; isAdmin: boolean }): string {
+export function renderDepartments(opts: { row: ImportRow; departments: DeptRollup[]; fundReports: Map<string, string>; names: NameMaps; csrf: string; isAdmin: boolean; showNames: boolean }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const rows = opts.departments
     .map((dept) => {
@@ -258,7 +264,7 @@ export function renderDepartments(opts: { row: ImportRow; departments: DeptRollu
 <thead><tr><th>Department</th><th class="num">Revised</th><th class="num">Spent</th><th class="num">Encumbered</th><th class="num">% used</th><th>Status</th></tr></thead>
 <tbody>${rows || `<tr><td colspan="6" class="empty">No departments in this import.</td></tr>`}</tbody>
 </table></div></section>`;
-  return page({ title: "Departments. Budget Explorer", active: "departments", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel });
+  return page({ title: "Departments. Budget Explorer", active: "departments", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
 }
 
 export function renderDepartment(opts: {
@@ -269,6 +275,7 @@ export function renderDepartment(opts: {
   names: NameMaps;
   csrf: string;
   isAdmin: boolean;
+  showNames: boolean;
 }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const named = deptName(opts.dept, opts.names);
@@ -281,7 +288,7 @@ export function renderDepartment(opts: {
       const objectName = nameFor(opts.names.object.get(account.object_code), account.title || "", account.object_code);
       const project = account.project_code ? `-${account.project_code}` : "";
       const href = `/departments/${esc(account.dept_code)}/${esc(account.object_code)}/${esc(account.project_code || "_")}`;
-      const payroll = account.is_payroll ? `<span class="code"> totals only</span>` : "";
+      const payroll = account.is_payroll ? `<span class="code">${opts.showNames ? " names and pay" : " batch totals"}</span>` : "";
       return `<tr>
 <td><a class="mono" href="${href}">${esc(account.object_code)}${esc(project)}</a> <a class="name" href="${href}">${esc(objectName.primary)}</a>${badge(objectName.unmatched)}${payroll}</td>
 <td class="num">${money(account.rev_cents)}</td>
@@ -305,13 +312,13 @@ ${metric("Available", money(available), "Budget less spent and encumbered")}
 </section>
 <section class="panel">
 <h2>Accounts in this department</h2>
-<p class="hint">Open an account to see its payments. Payroll accounts show totals only. Individual names and pay are never shown.</p>
+<p class="hint">Open an account to see its payments. ${opts.showNames ? "Payroll accounts list employee names and individual pay." : "Payroll accounts list batch totals. Person names and individual pay are hidden."}</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Account</th><th class="num">Revised budget</th><th class="num">Spent</th><th class="num">Encumbered</th><th>Spent and encumbered vs. budget</th><th class="num">% used</th><th>Status</th></tr></thead>
 <tbody>${rows}</tbody>
 </table></div>
 </section>`;
-  return page({ title: `${named.primary}. Budget Explorer`, active: "departments", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel });
+  return page({ title: `${named.primary}. Budget Explorer`, active: "departments", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
 }
 
 export function renderAccount(opts: {
@@ -325,6 +332,7 @@ export function renderAccount(opts: {
   deptReport: string;
   csrf: string;
   isAdmin: boolean;
+  showNames: boolean;
 }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const objectName = nameFor(opts.names.object.get(opts.account.object_code), opts.account.title || "", opts.account.object_code);
@@ -344,8 +352,11 @@ export function renderAccount(opts: {
     .join("");
   const base = `/departments/${opts.account.dept_code}/${opts.account.object_code}/${opts.account.project_code || "_"}`;
   const payrollNote = opts.account.is_payroll
-    ? `<p class="note">This is a payroll account. Only the batch total is kept. Payment lines, employee names, and individual pay are not stored or shown.</p>`
-    : `<div class="table-wrap"><table>
+    ? opts.showNames
+      ? `<p class="note">This is a payroll account. Employee names and individual pay are shown.</p>`
+      : `<p class="note">This is a payroll account. Rows are labeled Payroll (batch total). Person names and individual pay are hidden.</p>`
+    : "";
+  const table = `<div class="table-wrap"><table>
 <thead><tr><th>Date</th><th>Vendor</th><th>Invoice number</th><th>Description</th><th>Check number</th><th class="num">Amount</th></tr></thead>
 <tbody>${rows || `<tr><td colspan="6" class="empty">No visible payment lines. Lines dated after the report date are stored and excluded here.</td></tr>`}</tbody>
 </table></div>${pager(opts.pageIndex, pages, (index) => `${base}?page=${index + 1}`)}`;
@@ -357,8 +368,9 @@ export function renderAccount(opts: {
 <h2>Payments</h2>
 <p class="hint">${opts.total.toLocaleString("en-US")} visible lines. Vendor names and descriptions are shortened in the Clerk's report, so the invoice number and check number are the reliable way to find a payment.</p>
 ${payrollNote}
+${table}
 </section>`;
-  return page({ title: `${objectName.primary}. Budget Explorer`, active: "departments", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel });
+  return page({ title: `${objectName.primary}. Budget Explorer`, active: "departments", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
 }
 
 export function renderSearch(opts: {
@@ -373,6 +385,7 @@ export function renderSearch(opts: {
   pageSize: number;
   csrf: string;
   isAdmin: boolean;
+  showNames: boolean;
 }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const pages = Math.max(1, Math.ceil(opts.total / opts.pageSize));
@@ -402,11 +415,11 @@ export function renderSearch(opts: {
   const query = searchQuery(opts.filters);
   const body = `
 <h1>Payment search</h1>
-<p class="lede">Search vendor payment lines in the published import. Payroll is not searchable. Lines dated after ${esc(displayDate(opts.row.data_as_of))} are stored and excluded.</p>
+<p class="lede">Search payment lines in the published import. ${opts.showNames ? "Employee names and individual pay are included." : "Payroll is included as batch totals. Person names and individual pay are hidden."} Lines dated after ${esc(displayDate(opts.row.data_as_of))} are stored and excluded.</p>
 <section class="panel">
 <form method="get" action="/search">
 <div class="filters">
-<div><label for="q">Vendor, invoice, check, or description</label><input id="q" name="q" type="search" value="${esc(opts.filters.q)}"></div>
+<div><label for="q">${opts.showNames ? "Vendor, employee, invoice, check, or description" : "Vendor, invoice, check, or description"}</label><input id="q" name="q" type="search" value="${esc(opts.filters.q)}"></div>
 <div><label for="dept">Department</label><select id="dept" name="dept">${options}</select></div>
 <div><label for="vendor">Vendor name</label><input id="vendor" name="vendor" type="text" value="${esc(opts.filters.vendor)}"></div>
 <div><label for="min">Minimum amount</label><input id="min" name="min" type="text" inputmode="decimal" value="${esc(opts.filters.minCents ? (opts.filters.minCents / 100).toString() : "")}"></div>
@@ -426,7 +439,7 @@ export function renderSearch(opts: {
 ${pager(opts.pageIndex, pages, (index) => `/search?${query}&page=${index + 1}`)}
 <p class="note" style="margin-top:16px">Descriptions are shortened in the Clerk's report. Some departments pay the same vendor through purchase cards, which appear under the card vendor. Payment dates after the report date are excluded here.</p>
 </section>`;
-  return page({ title: "Payment search. Budget Explorer", active: "search", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel });
+  return page({ title: "Payment search. Budget Explorer", active: "search", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
 }
 
 function searchQuery(filters: SearchFilters): string {
@@ -454,6 +467,7 @@ export function renderAsk(opts: {
   records: QaRecord[];
   error: string;
   isAdmin: boolean;
+  showNames: boolean;
 }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const recordRows = opts.records
@@ -484,10 +498,10 @@ ${
 </section>`
     : `<section class="panel"><p class="empty">Answers appear here, with the records that were retrieved from the database.</p></section>`
 }`;
-  return page({ title: "Ask a question. Budget Explorer", active: "ask", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel });
+  return page({ title: "Ask a question. Budget Explorer", active: "ask", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
 }
 
-export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolean, baseUrl = ""): string {
+export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolean, baseUrl = "", showNames = true): string {
   const body = `
 <h1>About the data</h1>
 <p class="lede">This is a private concept prototype. It is not a Walton County website and it does not use the county seal.</p>
@@ -495,15 +509,15 @@ export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolea
 <h2>Source</h2>
 <p>Figures come from a year to date budget report produced by the Walton County Clerk and Comptroller, imported by an administrator. The published snapshot is what the pages read. Older imports are kept.</p>
 <p>Department and object names come from a chart of accounts when one has been imported. Until then, a code is marked unmatched. Every figure is keyed by fund, department, object, and project codes.</p>
-<p>Payroll lines are kept only as batch totals. Employee names and individual pay are not stored. Payment lines dated after the report date are stored, flagged, and left out of search, department payments, and questions.</p>
+<p>${showNames ? "Payroll lines keep employee names and individual pay. An administrator can hide both without importing the file again." : "Person names and individual pay are hidden. Payroll is shown as batch totals. The names and amounts stay in the database."} Payment lines dated after the report date are stored, flagged, and left out of search, department payments, and questions.</p>
 <p>Status compares spent plus encumbered with the share of the fiscal year that has passed. The fiscal year starts on October 1.</p>
 ${row ? `<p class="code">Published import ${row.id}. Data as of ${esc(displayDate(row.data_as_of))}. ${row.account_count.toLocaleString("en-US")} accounts. ${row.payment_count.toLocaleString("en-US")} payment lines.</p>` : `<p>No import has been published yet.</p>`}
 ${baseUrl ? `<p>Public base URL: ${esc(baseUrl)}</p>` : `<p>No public base URL is configured. Links stay relative so this prototype can move to another hostname.</p>`}
 </section>`;
-  return page({ title: "About the data. Budget Explorer", active: "about", body, dataAsOf: row?.data_as_of, admin: isAdmin, csrf, fy: row ? fiscalPosition(row.data_as_of).fyLabel : undefined });
+  return page({ title: "About the data. Budget Explorer", active: "about", body, dataAsOf: row?.data_as_of, admin: isAdmin, csrf, fy: row ? fiscalPosition(row.data_as_of).fyLabel : undefined, showNames });
 }
 
-export function renderSheriff(row: ImportRow | null, csrf: string, isAdmin: boolean): string {
+export function renderSheriff(row: ImportRow | null, csrf: string, isAdmin: boolean, showNames = true): string {
   const body = `
 <h1>Sheriff</h1>
 <p class="lede">This section is a placeholder. A separate Sheriff view is not built yet.</p>
@@ -511,10 +525,10 @@ export function renderSheriff(row: ImportRow | null, csrf: string, isAdmin: bool
 <p>Sheriff activity that appears in the imported budget report is still available through Departments and Payment search, under its department code. This page does not add a second set of figures.</p>
 <p><a class="btn secondary" href="/departments">Browse departments</a></p>
 </section>`;
-  return page({ title: "Sheriff. Budget Explorer", active: "sheriff", body, dataAsOf: row?.data_as_of, admin: isAdmin, csrf });
+  return page({ title: "Sheriff. Budget Explorer", active: "sheriff", body, dataAsOf: row?.data_as_of, admin: isAdmin, csrf, showNames });
 }
 
-export function renderPlat(opts: { row: ImportRow | null; history: PlatSnapshot[]; payments: PaymentRow[]; selected: number | null; names: NameMaps; csrf: string; isAdmin: boolean }): string {
+export function renderPlat(opts: { row: ImportRow | null; history: PlatSnapshot[]; payments: PaymentRow[]; selected: number | null; names: NameMaps; csrf: string; isAdmin: boolean; showNames: boolean }): string {
   const rows = opts.history
     .map((item) => {
       const available = item.rev_cents - item.ytd_cents - item.enc_cents;
@@ -558,10 +572,15 @@ export function renderPlat(opts: { row: ImportRow | null; history: PlatSnapshot[
 <tbody>${activity || `<tr><td colspan="5" class="empty">No visible activity for this import.</td></tr>`}</tbody>
 </table></div>
 </section>`;
-  return page({ title: "Recreation plat fee. Budget Explorer", active: "plat", body, dataAsOf: opts.row?.data_as_of, admin: opts.isAdmin, csrf: opts.csrf });
+  return page({ title: "Recreation plat fee. Budget Explorer", active: "plat", body, dataAsOf: opts.row?.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, showNames: opts.showNames });
 }
 
-export function renderAdminHome(imports: ImportRow[], csrf: string, chartCount: number): string {
+export function renderAdminHome(
+  imports: ImportRow[],
+  csrf: string,
+  chartCount: number,
+  privacy: { shown: boolean; updatedAt: string | null },
+): string {
   const rows = imports
     .map(
       (item) => `<tr>
@@ -607,8 +626,19 @@ export function renderAdminHome(imports: ImportRow[], csrf: string, chartCount: 
 <input name="file" type="file" accept=".csv,.xlsx,text/csv" required>
 <p style="margin-top:12px"><button class="btn secondary" type="submit">Update chart</button></p>
 </form>
+</section>
+<section class="panel">
+<h2>Person names and individual pay</h2>
+<p>Current state: ${privacy.shown ? "on" : "off"}. ${privacy.updatedAt ? `Last change ${esc(privacy.updatedAt)}.` : "Names and individual pay are shown by default. No change has been saved."}</p>
+<p class="hint">This switch hides names and individual pay on every page, in search, in exports, and in questions. It does not require a new import or a deploy. The rows stay in the database.</p>
+<form method="post" action="/admin/settings">
+<input type="hidden" name="csrf" value="${esc(csrf)}">
+<input type="hidden" name="show_person_names" value="0">
+<label><input type="checkbox" name="show_person_names" value="1"${privacy.shown ? " checked" : ""}> Show person names and individual pay</label>
+<p style="margin-top:12px"><button class="btn" type="submit">Save</button></p>
+</form>
 </section>`;
-  return page({ title: "Admin. Budget Explorer", active: "admin", body, admin: true, csrf });
+  return page({ title: "Admin. Budget Explorer", active: "admin", body, admin: true, csrf, showNames: privacy.shown });
 }
 
 function optsCsrf(csrf: string): string {
@@ -621,9 +651,9 @@ export function renderPreview(opts: {
   unmatchedDepts: { code: string; report_name: string }[];
   unmatchedObjects: { code: string; title: string }[];
   overlap: number | null;
-  personNames: string[];
   csrf: string;
   error: string;
+  showNames: boolean;
 }): string {
   const printed = opts.row.printed_ytd_cents == null
     ? "This file has no printed grand total line."
@@ -641,7 +671,6 @@ export function renderPreview(opts: {
     )
     .join("");
   const foldedWarning = opts.row.note && opts.row.note.startsWith("Folded ") ? opts.row.note : "";
-  const people = opts.personNames.slice(0, 80).map((name) => `<li>${esc(name)}</li>`).join("");
   const deptList = opts.unmatchedDepts
     .slice(0, 40)
     .map((dept) => `<li><span class="mono">${esc(dept.code)}</span> ${esc(dept.report_name || "unmatched")}</li>`)
@@ -668,11 +697,7 @@ ${
 }
 ${opts.overlap != null ? `<p class="hint">${opts.overlap.toLocaleString("en-US")} payment lines share a check key with the previously published import. Publishing this snapshot does not add those lines on top of the older one. The site reads only the latest published import.</p>` : ""}
 ${foldedWarning ? `<p class="warning">${esc(foldedWarning)} Review this before publishing.</p>` : ""}
-${
-  people
-    ? `<h2>Names to review</h2><p class="warning">${opts.personNames.length.toLocaleString("en-US")} vendor names look like a person. The payments stay in this import. Check the list before you publish.</p><ul>${people}</ul>`
-    : ""
-}
+<p class="hint">Employee names and individual pay are stored with this import. The admin switch controls whether pages show them.</p>
 ${
   opts.row.status !== "published"
     ? `<form method="post" action="/admin/import/${opts.row.id}/publish"><input type="hidden" name="csrf" value="${esc(opts.csrf)}"><button class="btn gold" type="submit">Publish this import</button></form>`
@@ -684,36 +709,38 @@ ${
 <p class="hint">${opts.unmatchedDepts.length} departments and ${opts.unmatchedObjects.length} object codes have no chart name yet. They display as unmatched until a chart is imported.</p>
 ${deptList ? `<ul>${deptList}</ul>` : `<p>All department codes in this import match the chart.</p>`}
 </section>`;
-  return page({ title: "Import preview. Budget Explorer", active: "admin", body, dataAsOf: opts.row.data_as_of, admin: true, csrf: opts.csrf });
+  return page({ title: "Import preview. Budget Explorer", active: "admin", body, dataAsOf: opts.row.data_as_of, admin: true, csrf: opts.csrf, showNames: opts.showNames });
 }
 
-export function renderMessage(title: string, message: string, csrf: string, dataAsOf?: string | null): string {
+export function renderMessage(title: string, message: string, csrf: string, dataAsOf?: string | null, showNames = true): string {
   return page({
     title,
     active: "admin",
     admin: true,
     csrf,
     dataAsOf,
+    showNames,
     body: `<h1>${esc(title)}</h1><section class="panel"><p>${esc(message)}</p><p><a class="btn" href="/admin">Back to admin</a></p></section>`,
   });
 }
 
-export function renderEmpty(csrf: string, admin: boolean): string {
+export function renderEmpty(csrf: string, admin: boolean, showNames = true): string {
   const body = `<h1>No budget published yet</h1><p class="lede">An administrator needs to import a year to date report and publish it.</p>${admin ? `<p><a class="btn" href="/admin">Go to import</a></p>` : ""}`;
-  return page({ title: "Budget Explorer", active: "overview", body, admin, csrf });
+  return page({ title: "Budget Explorer", active: "overview", body, admin, csrf, showNames });
 }
 
-export function renderAdminDisabled(csrf: string): string {
+export function renderAdminDisabled(csrf: string, showNames = true): string {
   return page({
     title: "Admin is off. Budget Explorer",
     active: "",
     csrf,
     admin: false,
+    showNames,
     body: `<h1>Admin is off</h1><p class="lede">Admin tools stay off until ADMIN_PASSWORD is set on the Worker.</p>`,
   });
 }
 
-export function renderUnlock(csrf: string, error: string): string {
+export function renderUnlock(csrf: string, error: string, showNames = true): string {
   const body = `<div class="login-wrap"><section class="login-card"><h1>Admin password</h1>
 <p class="lede">This site password is signed in. Admin pages need the additional password.</p>
 ${error ? `<p class="warning">${esc(error)}</p>` : ""}
@@ -722,7 +749,7 @@ ${error ? `<p class="warning">${esc(error)}</p>` : ""}
 <div><label for="admin_password">Admin password</label><input id="admin_password" name="admin_password" type="password" required></div>
 <button class="btn" type="submit">Unlock admin</button>
 </form></section></div>`;
-  return page({ title: "Admin password. Budget Explorer", active: "admin", body, csrf, admin: false });
+  return page({ title: "Admin password. Budget Explorer", active: "admin", body, csrf, admin: false, showNames });
 }
 
 export const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#13283a"/><path d="M9 22V10h3.2c2.7 0 4.3 1.4 4.3 3.6 0 2.3-1.6 3.7-4.3 3.7H11.4V22H9zm2.4-6.2h.7c1.3 0 2-.6 2-1.6s-.7-1.6-2-1.6h-.7v3.2z" fill="#c6aa72"/></svg>`;

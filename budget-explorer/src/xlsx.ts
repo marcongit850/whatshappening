@@ -1,7 +1,9 @@
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, Unzip, UnzipInflate, type UnzipFile } from "fflate";
 
 export const XLSX_MAX_ENTRY_BYTES = 2_000_000;
 export const XLSX_MAX_TOTAL_BYTES = 8_000_000;
+/** Compressed .xlsx cap. Rejected before any unzip. */
+export const XLSX_MAX_COMPRESSED_BYTES = 2_000_000;
 
 export interface ZipLimits {
   entry: number;
@@ -36,16 +38,76 @@ function columnIndex(letters: string): number {
   return index - 1;
 }
 
+function wantedSheet(name: string): boolean {
+  return name === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet\d+\.xml$/.test(name);
+}
+
+/** Actual uncompressed bytes must not exceed the declared size, the entry cap, or the total cap. */
+export function uncompressedWithinLimits(actual: number, declared: number, total: number, limits: ZipLimits): boolean {
+  if (actual > declared) return false;
+  if (actual > limits.entry) return false;
+  if (total > limits.total) return false;
+  return true;
+}
+
+function concatChunks(chunks: Uint8Array[]): Uint8Array {
+  let length = 0;
+  for (const chunk of chunks) length += chunk.length;
+  const merged = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return merged;
+}
+
+/**
+ * Unzip with a hard stop. The compressed buffer is capped by the caller.
+ * Declared sizes are checked before inflate. Actual output is counted and
+ * aborted when it passes the declared size or the total cap.
+ */
+export function unzipChecked(buffer: Uint8Array, limits: ZipLimits): Record<string, Uint8Array> {
+  const out = new Map<string, Uint8Array[]>();
+  let declaredTotal = 0;
+  let actualTotal = 0;
+  const unzipper = new Unzip();
+  unzipper.register(UnzipInflate);
+  unzipper.onfile = (file: UnzipFile) => {
+    if (file.size == null || file.originalSize == null || file.size < 0 || file.originalSize < 0) {
+      throw new Error("Spreadsheet entry is missing a size.");
+    }
+    const decision = zipEntryAllowed({ size: file.size, originalSize: file.originalSize }, declaredTotal, limits);
+    if (!decision.ok) throw new Error("Spreadsheet entry is too large.");
+    declaredTotal = decision.total;
+    if (!wantedSheet(file.name)) return;
+    const declared = file.originalSize;
+    const chunks: Uint8Array[] = [];
+    let actual = 0;
+    file.ondata = (err, chunk, final) => {
+      if (err) throw err instanceof Error ? err : new Error("Spreadsheet could not be read.");
+      if (chunk && chunk.length) {
+        actual += chunk.length;
+        actualTotal += chunk.length;
+        if (!uncompressedWithinLimits(actual, declared, actualTotal, limits)) {
+          const overDeclared = actual > declared;
+          throw new Error(overDeclared ? "Spreadsheet entry is larger than declared." : "Spreadsheet entry is too large.");
+        }
+        chunks.push(chunk);
+      }
+      if (final) out.set(file.name, chunks);
+    };
+    file.start();
+  };
+  unzipper.push(buffer, true);
+  const files: Record<string, Uint8Array> = {};
+  for (const [name, chunks] of out) files[name] = concatChunks(chunks);
+  return files;
+}
+
 export function xlsxToRows(buffer: Uint8Array, limits: ZipLimits = { entry: XLSX_MAX_ENTRY_BYTES, total: XLSX_MAX_TOTAL_BYTES }): string[][] {
-  let total = 0;
-  const files = unzipSync(buffer, {
-    filter(file) {
-      const decision = zipEntryAllowed(file, total, limits);
-      total = decision.total;
-      if (!decision.ok) throw new Error("Spreadsheet entry is too large.");
-      return file.name === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet\d+\.xml$/.test(file.name);
-    },
-  });
+  if (buffer.byteLength > XLSX_MAX_COMPRESSED_BYTES) throw new Error("Spreadsheet is too large.");
+  const files = unzipChecked(buffer, limits);
   const strings: string[] = [];
   const shared = files["xl/sharedStrings.xml"];
   if (shared) {
