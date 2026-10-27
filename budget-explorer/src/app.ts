@@ -12,7 +12,7 @@ import {
   showPersonNamesFromForm,
 } from "./access";
 import { directAnswer, publicFactText } from "./answers";
-import { loadBudgetFacts, loadCategorySpend, loadFundRollups, loadTopAccounts, loadTopVendors, loadVendorNames } from "./budget";
+import { loadBudgetFacts, loadCategorySpend, loadFundRollups, loadOfficePaymentCents, loadTopAccounts, loadTopVendors, loadVendorNames } from "./budget";
 import { buildVendorIndex, withDisplayNames } from "./vendors";
 import type { SessionPayload } from "./auth";
 import {
@@ -40,15 +40,20 @@ import { chartFromCsv, chartFromRows } from "./csv";
 import {
   accountsForDept,
   bumpQa,
+  constitutionalTransferCents,
   departmentRollups,
   fundNameMap,
+  fundRollups,
   getImport,
+  landSpendByDept,
+  landSpendByMonth,
   latestPublished,
   listImports,
   loadNames,
   loginAttempts as attemptsFor,
-  monthlyCents,
+  monthlyParts,
   oneAccount,
+  organizationVendors,
   overlapCount,
   platHistory,
   publishImport,
@@ -61,7 +66,7 @@ import {
   type SearchFilters,
 } from "./db";
 import { adminPasswordSet, publicBase, type AppEnv } from "./env";
-import { csvAmount, csvCell, displayDate, fiscalPosition, fyMonthIndex, isoDate } from "./format";
+import { csvAmount, csvCell, displayDate, isoDate } from "./format";
 import { uploadAllowed } from "./limits";
 import { parseReport } from "./parser";
 import { safeNext } from "./safe-next";
@@ -202,24 +207,35 @@ app.get("/", async (c) => {
   const session = c.get("session");
   if (!current) return c.html(renderEmpty(session.csrf, isAdmin(c), c.get("showNames")));
   const showNames = c.get("showNames");
-  const [departments, names, fundRows, months, facts, vendors, vendorNames] = await Promise.all([
+  const asOf = current.data_as_of || "";
+  const [departments, names, funds, rollups, months, vendors, officeCents, landMonths, landDepts, platMonths, facts, vendorNames] = await Promise.all([
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
-    loadFundRollups(c.env.DB, current.id),
-    monthlyCents(c.env.DB, current.id),
+    fundNameMap(c.env.DB, current.id),
+    fundRollups(c.env.DB, current.id),
+    monthlyParts(c.env.DB, current.id, asOf),
+    organizationVendors(c.env.DB, current.id, asOf, 10),
+    constitutionalTransferCents(c.env.DB, current.id, asOf),
+    landSpendByMonth(c.env.DB, current.id, asOf),
+    landSpendByDept(c.env.DB, current.id, asOf),
+    monthlyParts(c.env.DB, current.id, asOf, "114"),
     loadBudgetFacts(c.env.DB, current.id),
-    loadTopVendors(c.env.DB, current.id, { showNames }),
     loadVendorNames(c.env.DB, current.id),
   ]);
   return c.html(
     renderOverview({
       row: current,
       departments,
-      funds: fundRows,
+      funds: rollups,
+      fundReports: funds,
       names,
-      months: foldMonths(months, current.data_as_of),
-      facts,
+      months,
       vendors,
+      officeCents,
+      landByMonth: landMonths,
+      landByDept: landDepts,
+      platMonths,
+      facts,
       displayName: buildVendorIndex(vendorNames),
       csrf: session.csrf,
       isAdmin: isAdmin(c),
@@ -231,7 +247,7 @@ app.get("/", async (c) => {
 app.get("/funds", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
-  const [funds, names] = await Promise.all([loadFundRollups(c.env.DB, current.id), loadNames(c.env.DB)]);
+  const [funds, names] = await Promise.all([fundRollups(c.env.DB, current.id), loadNames(c.env.DB)]);
   return c.html(
     renderFunds({
       row: current,
@@ -250,30 +266,31 @@ app.get("/funds/:code", async (c) => {
   const code = c.req.param("code");
   if (!/^\d{3}$/.test(code)) return c.text("Not found", 404);
   const showNames = c.get("showNames");
-  const [funds, departments, names, categories, accounts, vendors, vendorNames, payments] = await Promise.all([
-    loadFundRollups(c.env.DB, current.id),
+  const [funds, departments, names, categories, accounts, vendors, vendorNames, payments, officeCents] = await Promise.all([
+    fundRollups(c.env.DB, current.id),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     loadCategorySpend(c.env.DB, current.id, { fund: code }),
     loadTopAccounts(c.env.DB, current.id, { fund: code }),
     loadTopVendors(c.env.DB, current.id, { showNames, fund: code }),
     loadVendorNames(c.env.DB, current.id),
-    searchLines(c.env.DB, current.id, { q: "", vendor: "", dept: "", fund: code, minCents: 0, from: "", to: "", excludeTransfer: true }, 0, 6, showNames),
+    searchLines(c.env.DB, current.id, { q: "", vendor: "", dept: "", fund: code, minCents: 0, from: "", to: "", excludeTransfer: true }, 0, 24, showNames),
+    loadOfficePaymentCents(c.env.DB, current.id, { fund: code }),
   ]);
-  const fund = funds.find((item) => item.fund_code === code);
+  const fund = funds.find((item) => item.code === code);
   if (!fund) return c.text("Fund not found", 404);
-  const displayName = buildVendorIndex(vendorNames);
   return c.html(
     renderFund({
       row: current,
       fund,
-      departments,
+      departments: departments.filter((item) => item.fund_code === code),
       categories,
       accounts,
       vendors,
-      payments: withDisplayNames(payments.rows, displayName),
+      payments: payments.rows,
+      officeCents,
       names,
-      displayName,
+      displayName: buildVendorIndex(vendorNames),
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
       showNames,
@@ -285,12 +302,16 @@ app.get("/departments", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
   const session = c.get("session");
+  const sort = c.req.query("sort") || "";
   const [departments, names, funds] = await Promise.all([
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
   ]);
-  return c.html(renderDepartments({ row: current, departments, fundReports: funds, names, csrf: session.csrf, isAdmin: isAdmin(c), showNames: c.get("showNames") }));
+  if (sort === "spent") departments.sort((a, b) => b.ytd_cents - a.ytd_cents);
+  else if (sort === "enc") departments.sort((a, b) => b.enc_cents - a.enc_cents);
+  else if (sort === "avail") departments.sort((a, b) => b.avail_cents - a.avail_cents);
+  return c.html(renderDepartments({ row: current, departments, fundReports: funds, names, csrf: session.csrf, isAdmin: isAdmin(c), showNames: c.get("showNames"), sort }));
 });
 
 app.get("/departments/:dept", async (c) => {
@@ -302,16 +323,16 @@ app.get("/departments/:dept", async (c) => {
   const found = departments.find((item) => item.code === dept);
   if (!found) return c.text("Department not found", 404);
   const showNames = c.get("showNames");
-  const [accounts, names, funds, categories, vendors, vendorNames, payments] = await Promise.all([
+  const [accounts, names, funds, categories, vendors, vendorNames, payments, officeCents] = await Promise.all([
     accountsForDept(c.env.DB, current.id, dept),
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
     loadCategorySpend(c.env.DB, current.id, { dept }),
     loadTopVendors(c.env.DB, current.id, { showNames, dept }),
     loadVendorNames(c.env.DB, current.id),
-    searchLines(c.env.DB, current.id, { q: "", vendor: "", dept, fund: found.fund_code, minCents: 0, from: "", to: "", excludeTransfer: true }, 0, 6, showNames),
+    searchLines(c.env.DB, current.id, { q: "", vendor: "", dept, fund: found.fund_code, minCents: 0, from: "", to: "", excludeTransfer: true }, 0, 24, showNames),
+    loadOfficePaymentCents(c.env.DB, current.id, { dept }),
   ]);
-  const displayName = buildVendorIndex(vendorNames);
   return c.html(
     renderDepartment({
       row: current,
@@ -321,8 +342,9 @@ app.get("/departments/:dept", async (c) => {
       names,
       categories,
       vendors,
-      payments: withDisplayNames(payments.rows, displayName),
-      displayName,
+      payments: payments.rows,
+      officeCents,
+      displayName: buildVendorIndex(vendorNames),
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
       showNames,
@@ -370,17 +392,19 @@ app.get("/search", async (c) => {
   if (current instanceof Response) return current;
   const filters = readFilters(c);
   const pageIndex = pageNumber(c.req.query("page"));
-  const [result, departments, names, vendorNames] = await Promise.all([
+  const [result, departments, names, vendorNames, funds] = await Promise.all([
     searchLines(c.env.DB, current.id, filters, pageIndex, 25, c.get("showNames")),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     loadVendorNames(c.env.DB, current.id),
+    fundNameMap(c.env.DB, current.id),
   ]);
   return c.html(
     renderSearch({
       row: current,
       filters,
       departments,
+      fundReports: funds,
       names,
       payments: withDisplayNames(result.rows, buildVendorIndex(vendorNames)),
       total: result.total,
@@ -702,17 +726,6 @@ function readFilters(c: { req: { query: (name: string) => string | undefined } }
     from: isoDate(c.req.query("from") || ""),
     to: isoDate(c.req.query("to") || ""),
   };
-}
-
-function foldMonths(rows: { ym: string; cents: number }[], asOf: string | null): number[] {
-  const fiscal = fiscalPosition(asOf);
-  const startYear = Number(fiscal.fyStart.slice(0, 4));
-  const buckets = Array.from({ length: 12 }, () => 0);
-  for (const row of rows) {
-    const index = fyMonthIndex(`${row.ym}-01`, startYear);
-    if (index != null) buckets[index] += row.cents;
-  }
-  return buckets;
 }
 
 async function interpretFile(file: File): Promise<{ kind: "pdf" | "chart" | "report" | "reject"; text?: string; chart?: ReturnType<typeof chartFromRows> }> {

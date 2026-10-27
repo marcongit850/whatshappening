@@ -37,7 +37,13 @@ export function cleanVendorRaw(name: string): string {
   return text;
 }
 
-const ALWAYS_UPPER = new Set(["llc", "inc", "llp", "pllc"]);
+const ALWAYS_UPPER = new Set(["llc", "inc", "llp", "pllc", "pa"]);
+const COMPLETE_SHORT = new Set(["co", "pa", "lp", "pc", "of"]);
+const COMPLETE_WORD = new Set([
+  "centers", "center", "office", "county", "fund", "company", "services", "service", "group", "bank",
+  "supply", "district", "inc", "llc", "llp", "pllc", "pa", "beach", "fire", "school", "city", "state",
+  "park", "parks", "water", "waste", "health", "court", "store", "stores", "market", "rentals", "rental",
+]);
 
 export function titleCaseVendor(name: string): string {
   const cleaned = cleanVendorRaw(name);
@@ -49,42 +55,87 @@ export function titleCaseVendor(name: string): string {
       if (ALWAYS_UPPER.has(lower)) return lower.toUpperCase();
       return lower.replace(/[a-z0-9]+/gi, (part, offset) => {
         if (part.length === 1 && offset > 0 && APOSTROPHES.includes(lower[offset - 1])) return part.toLowerCase();
+        if (part.length === 1) return part.toUpperCase();
         return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
       });
     })
     .join(" ");
 }
 
+export interface VendorLabel {
+  text: string;
+  shortened: boolean;
+}
+
+function longerName(raw: string, names: string[]): string | null {
+  const short = raw.trim().toUpperCase().replace(/[\s,.;:]+$/g, "");
+  if (short.length < 18) return null;
+  const parts = short.split(/\s+/);
+  const last = parts[parts.length - 1] || "";
+  const stem = parts.slice(0, -1).join(" ");
+  let best = "";
+  for (const name of names) {
+    const candidate = name.trim().toUpperCase().replace(/[\s,.;:]+$/g, "");
+    if (candidate.length <= short.length || candidate.length > 80) continue;
+    const continuesWord = stem.length >= 3 && last.length >= 4 && candidate.startsWith(`${stem} `) && candidate.slice(stem.length).trim().split(/\s+/)[0].startsWith(last);
+    if (!candidate.startsWith(short) && !continuesWord) continue;
+    if (!best || candidate.length < best.length) best = name.trim();
+  }
+  return best || null;
+}
+
+function trimPartial(raw: string): { text: string; shortened: boolean } {
+  const trimmed = raw.trim().replace(/[\s,.;:]+$/g, "");
+  if (trimmed.length !== 20) return { text: trimmed, shortened: false };
+  const parts = trimmed.split(/\s+/);
+  const last = parts[parts.length - 1] || "";
+  const lastLower = last.toLowerCase();
+  if (lastLower === "ll" || lastLower === "l") {
+    parts[parts.length - 1] = "LLC";
+    return { text: parts.join(" "), shortened: true };
+  }
+  const dropShort = last.length <= 2 && !COMPLETE_SHORT.has(lastLower);
+  const dropLong = last.length >= 5 && !COMPLETE_WORD.has(lastLower) && !ALWAYS_UPPER.has(lastLower);
+  if ((dropShort || dropLong) && parts.length > 1) {
+    parts.pop();
+    return { text: parts.join(" "), shortened: true };
+  }
+  return { text: trimmed, shortened: false };
+}
+
 export function vendorKey(value: string): string {
   return vendorWords(cleanVendorRaw(value)).join(" ");
 }
 
-export function buildVendorIndex(names: string[]): (raw: string) => string {
-  const entries = names
-    .map((name) => ({ name: cleanVendorRaw(name), key: vendorKey(name) }))
-    .filter((entry) => entry.key)
-    .sort((a, b) => b.key.length - a.key.length);
-  const cache = new Map<string, string>();
+export function buildVendorIndex(names: string[]): (raw: string) => VendorLabel {
+  const pool = names.map((name) => name.trim()).filter(Boolean);
+  const cache = new Map<string, VendorLabel>();
   return (raw: string) => {
-    if (!raw) return "";
-    if (raw === PAYROLL_BATCH_LABEL || raw === NAME_WITHHELD) return raw;
-    if (looksLikePersonName(raw)) return raw;
+    if (!raw) return { text: "", shortened: false };
+    if (raw === PAYROLL_BATCH_LABEL || raw === NAME_WITHHELD) return { text: raw, shortened: false };
     const key = vendorKey(raw);
     const cached = cache.get(key);
     if (cached) return cached;
-    let chosen = cleanVendorRaw(raw);
-    if (raw.trim().length >= 18 && key.length >= 12) {
-      const fuller = entries.find((entry) => entry.key.length > key.length && entry.key.startsWith(key));
-      if (fuller) chosen = fuller.name;
+    const longer = longerName(raw, pool);
+    if (longer) {
+      const label = { text: titleCaseVendor(longer.replace(/[\s,.;:]+$/g, "")), shortened: false };
+      cache.set(key, label);
+      return label;
     }
-    const titled = titleCaseVendor(chosen);
-    cache.set(key, titled);
-    return titled;
+    if (looksLikePersonName(raw) && raw.trim().length !== 20) {
+      const label = { text: raw, shortened: false };
+      cache.set(key, label);
+      return label;
+    }
+    const chosen = trimPartial(raw);
+    const label = { text: titleCaseVendor(chosen.text), shortened: chosen.shortened };
+    cache.set(key, label);
+    return label;
   };
 }
 
-export function withDisplayNames<T extends { vendor_name: string | null }>(rows: T[], display: (raw: string) => string): T[] {
-  return rows.map((row) => ({ ...row, vendor_name: row.vendor_name ? display(row.vendor_name) : row.vendor_name }));
+export function withDisplayNames<T extends { vendor_name: string | null }>(rows: T[], display: (raw: string) => VendorLabel): T[] {
+  return rows.map((row) => ({ ...row, vendor_name: row.vendor_name ? display(row.vendor_name).text : row.vendor_name }));
 }
 
 const VENDOR_STOP = new Set([
@@ -93,7 +144,7 @@ const VENDOR_STOP = new Set([
   "has", "its", "into", "over", "under", "than", "then", "them", "they", "their", "budget", "spent",
   "spend", "spending", "year", "total", "totals", "please", "could", "would", "should", "where", "when",
   "who", "so", "far", "vendor", "vendors", "many", "any", "our", "you", "your", "can", "just", "through",
-  "date", "much", "get", "got",
+  "date", "much", "get", "got", "on",
 ]);
 
 /** A payee phrase from a question, or null when the question is not about a vendor payment. */
@@ -144,13 +195,28 @@ export interface VendorMatchTotals {
   transferOnly: boolean;
 }
 
+export function paymentRef(checkNumber: string | null, journal: string | null, invoice: string | null): string {
+  const check = (checkNumber || "").trim();
+  if (check) return `check:${check}`;
+  const journalId = (journal || "").trim();
+  if (journalId) return `journal:${journalId}`;
+  const invoiceId = (invoice || "").trim();
+  if (invoiceId) return `invoice:${invoiceId}`;
+  return "";
+}
+
 export function vendorSpendSql(transfersOnly = false): string {
   const objectSql = transfersOnly ? `object_code = '${TRANSFER_OBJECT}'` : `object_code != '${TRANSFER_OBJECT}'`;
   return `
 SELECT vendor_name,
   COALESCE(SUM(amount_cents), 0) AS cents,
   COUNT(*) AS lines,
-  COUNT(DISTINCT CASE WHEN check_number != '' THEN check_number END) AS checks
+  GROUP_CONCAT(DISTINCT CASE
+    WHEN trim(COALESCE(check_number, '')) != '' THEN 'check:' || trim(check_number)
+    WHEN trim(COALESCE(journal, '')) != '' THEN 'journal:' || trim(journal)
+    WHEN trim(COALESCE(invoice, '')) != '' THEN 'invoice:' || trim(invoice)
+    ELSE NULL
+  END) AS pay_refs
 FROM payments
 WHERE import_id = ?
   AND after_cutoff = 0
@@ -163,15 +229,22 @@ GROUP BY vendor_name
 }
 
 export function sumVendorMatches(
-  rows: { vendor_name: string; cents: number; lines: number; checks: number }[],
+  rows: { vendor_name: string; cents: number; lines: number; pay_refs?: string | null; checks?: number }[],
   phrase: string,
 ): VendorMatchTotals | null {
   const matched = rows.filter((row) => vendorNameMatches(row.vendor_name, phrase));
   if (!matched.length) return null;
+  const refs = new Set<string>();
+  for (const row of matched) {
+    for (const ref of String(row.pay_refs || "").split(",")) {
+      if (ref) refs.add(ref);
+    }
+  }
+  const checks = refs.size || matched.reduce((sum, row) => sum + Number(row.checks || 0), 0);
   return {
     cents: matched.reduce((sum, row) => sum + Number(row.cents), 0),
     lines: matched.reduce((sum, row) => sum + Number(row.lines), 0),
-    checks: matched.reduce((sum, row) => sum + Number(row.checks), 0),
+    checks,
     names: matched.map((row) => row.vendor_name),
     transferOnly: false,
   };

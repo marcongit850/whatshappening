@@ -1,5 +1,6 @@
-import { factsFromRow, type BudgetFacts, type FundRollup } from "./budget";
+import { TRANSFER_OBJECT, factsFromRow, type BudgetFacts, type FundRollup } from "./budget";
 import { moneyExact, moneyWords } from "./format";
+import { CONSTITUTIONAL_SQL, VENDOR_SOURCES } from "./overview";
 import type { QaRecord } from "./qa";
 import {
   buildVendorIndex,
@@ -87,7 +88,34 @@ export function noVendorAnswer(): string {
 function displayMatchName(names: string[]): string {
   const display = buildVendorIndex(names);
   const longest = [...names].sort((a, b) => b.length - a.length)[0] || "";
-  return display(longest) || titleCaseVendor(longest);
+  return display(longest).text || titleCaseVendor(longest);
+}
+
+export function asksWhoIsPaidMost(question: string): boolean {
+  return /\b(who|which|what)\b/i.test(question) && /\b(most|largest|biggest|highest)\b/i.test(question) && /\b(paid|pay|vendor|vendors)\b/i.test(question);
+}
+
+async function topOutsideVendor(db: D1Database, importId: number, showNames: boolean): Promise<{ name: string; cents: number; lines: number } | null> {
+  const sources = VENDOR_SOURCES.map((source) => `'${source}'`).join(", ");
+  const row = await db
+    .prepare(
+      `SELECT vendor_name, COALESCE(SUM(amount_cents), 0) AS cents, COUNT(*) AS lines
+       FROM payments
+       WHERE import_id = ?
+         AND after_cutoff = 0
+         AND source IN (${sources})
+         AND object_code != '${TRANSFER_OBJECT}'
+         AND trim(COALESCE(vendor_name, '')) != ''
+         AND (? = 1 OR is_person_name = 0)
+         AND NOT ${CONSTITUTIONAL_SQL}
+       GROUP BY vendor_name
+       ORDER BY cents DESC
+       LIMIT 1`,
+    )
+    .bind(importId, showNames ? 1 : 0)
+    .first<{ vendor_name: string; cents: number; lines: number }>();
+  if (!row) return null;
+  return { name: displayMatchName([row.vendor_name]), cents: Number(row.cents), lines: Number(row.lines) };
 }
 
 export async function lookupVendorSpend(
@@ -104,7 +132,7 @@ export async function lookupVendorSpend(
   const rows = await db
     .prepare(vendorSpendSql(transfersOnly))
     .bind(importId, showNames ? 1 : 0, `${compact}%`)
-    .all<{ vendor_name: string; cents: number; lines: number; checks: number }>();
+    .all<{ vendor_name: string; cents: number; lines: number; pay_refs: string | null }>();
   const totals = sumVendorMatches(rows.results || [], phrase);
   if (!totals) return null;
   return { ...totals, transferOnly: transfersOnly };
@@ -120,7 +148,7 @@ export async function directAnswer(
   asOfLabel: string,
 ): Promise<{ answer: string; records: QaRecord[] } | null> {
   const phrase = vendorPhrase(question);
-  if (phrase) {
+  if (phrase && !asksWhoIsPaidMost(question)) {
     const paid = await lookupVendorSpend(db, importId, phrase, showNames, false);
     if (paid) {
       const name = displayMatchName(paid.names);
@@ -130,14 +158,22 @@ export async function directAnswer(
       };
     }
     const moved = await lookupVendorSpend(db, importId, phrase, showNames, true);
-    if (moved) {
+    if (moved && /\b(pay|paid|vendor|vendors)\b/i.test(question)) {
       const name = displayMatchName(moved.names);
       return {
         answer: transferVendorAnswer(name, moved),
         records: [{ kind: "total", text: `${name} is a transfer between county funds: ${moneyExact(moved.cents)}.` }],
       };
     }
-    return { answer: noVendorAnswer(), records: [] };
+  }
+  if (asksWhoIsPaidMost(question)) {
+    const top = await topOutsideVendor(db, importId, showNames);
+    if (top) {
+      return {
+        answer: `${top.name} was paid the most, ${moneyExact(top.cents)} across ${top.lines.toLocaleString("en-US")} payment lines. That leaves out money moved between county funds and payments to other county offices.`,
+        records: [{ kind: "total", text: `${top.name}: ${moneyExact(top.cents)}, ${top.lines} lines.` }],
+      };
+    }
   }
   if (asksAboutTransfers(question)) {
     return {

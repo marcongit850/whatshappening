@@ -1,3 +1,5 @@
+import { CONSTITUTIONAL_SQL } from "./overview";
+
 /** Object code for money moved from one county fund to another. */
 export const TRANSFER_OBJECT = "591000";
 
@@ -154,6 +156,7 @@ WHERE import_id = ?
   AND after_cutoff = 0
   AND object_code != '${TRANSFER_OBJECT}'
   AND vendor_name != ''
+  AND NOT ${CONSTITUTIONAL_SQL}
   AND (? = 1 OR is_person_name = 0)
   AND (? = '' OR fund_code = ?)
   AND (? = '' OR dept_code = ?)
@@ -163,10 +166,13 @@ LIMIT 80
 `;
 
 export const VENDOR_NAME_SQL = `
-SELECT vendor_name
+SELECT vendor_name AS name
 FROM payments
-WHERE import_id = ? AND is_person_name = 0 AND vendor_name != '' AND length(vendor_name) >= 18
-GROUP BY vendor_name
+WHERE import_id = ? AND is_person_name = 0 AND vendor_name != '' AND length(vendor_name) >= 12
+UNION
+SELECT description AS name
+FROM payments
+WHERE import_id = ? AND description != '' AND length(description) BETWEEN 12 AND 80
 `;
 
 export async function loadBudgetFacts(db: D1Database, importId: number): Promise<BudgetFacts> {
@@ -201,12 +207,20 @@ export async function loadCategorySpend(
     .prepare(categorySql(column))
     .bind(importId, code)
     .all<{ prefix: string; rev_cents: number; ytd_cents: number }>();
-  return (rows.results || []).map((row) => ({
-    prefix: row.prefix,
-    label: categoryLabel(row.prefix),
-    rev_cents: Number(row.rev_cents) || 0,
-    ytd_cents: Number(row.ytd_cents) || 0,
-  }));
+  const merged = new Map<string, CategorySpend>();
+  for (const row of rows.results || []) {
+    const label = categoryLabel(row.prefix);
+    const rev = Number(row.rev_cents) || 0;
+    const ytd = Number(row.ytd_cents) || 0;
+    const existing = merged.get(label);
+    if (existing) {
+      existing.rev_cents += rev;
+      existing.ytd_cents += ytd;
+    } else {
+      merged.set(label, { prefix: row.prefix, label, rev_cents: rev, ytd_cents: ytd });
+    }
+  }
+  return [...merged.values()].filter((row) => row.rev_cents !== 0 || row.ytd_cents !== 0);
 }
 
 export async function loadTopVendors(
@@ -227,8 +241,30 @@ export async function loadTopVendors(
 }
 
 export async function loadVendorNames(db: D1Database, importId: number): Promise<string[]> {
-  const rows = await db.prepare(VENDOR_NAME_SQL).bind(importId).all<{ vendor_name: string }>();
-  return (rows.results || []).map((row) => row.vendor_name);
+  const rows = await db.prepare(VENDOR_NAME_SQL).bind(importId, importId).all<{ name: string }>();
+  return (rows.results || []).map((row) => row.name);
+}
+
+/** Payments to county offices that are not already counted as object 591000 transfers. */
+export async function loadOfficePaymentCents(
+  db: D1Database,
+  importId: number,
+  scope: { fund?: string; dept?: string } = {},
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cents), 0) AS cents
+       FROM payments
+       WHERE import_id = ?
+         AND after_cutoff = 0
+         AND object_code != '${TRANSFER_OBJECT}'
+         AND ${CONSTITUTIONAL_SQL}
+         AND (? = '' OR fund_code = ?)
+         AND (? = '' OR dept_code = ?)`,
+    )
+    .bind(importId, scope.fund || "", scope.fund || "", scope.dept || "", scope.dept || "")
+    .first<{ cents: number }>();
+  return Number(row?.cents || 0);
 }
 
 export interface AccountSpend {

@@ -65,6 +65,20 @@ export function moneyWords(cents: number): string {
   return moneyExact(cents);
 }
 
+/** Headline and chart label. Full cents stay in tables and in question facts. */
+export function moneyCompact(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const dollars = Math.abs(cents) / 100;
+  if (dollars >= 1_000_000) {
+    const millions = dollars / 1_000_000;
+    const digits = millions >= 10 ? 1 : 2;
+    return `${sign}$${millions.toFixed(digits)}M`;
+  }
+  if (dollars >= 100_000) return `${sign}$${Math.round(dollars / 1_000)}K`;
+  if (dollars >= 10_000) return `${sign}$${(dollars / 1_000).toFixed(1)}K`;
+  return `${sign}$${Math.round(dollars).toLocaleString("en-US")}`;
+}
+
 /** Compact axis label. Full figures stay on the cards and in the tables. */
 export function moneyShort(cents: number): string {
   const sign = cents < 0 ? "-" : "";
@@ -101,25 +115,43 @@ export function accountKey(fund: string, dept: string, objectCode: string, proje
   return `${fund}-${dept}-${objectCode}-${project}`;
 }
 
-export type Pace = "green" | "yellow" | "red" | "gray" | "none";
+export type Pace = "green" | "yellow" | "red" | "gray" | "none" | "under";
 
-/** Compare money spent with the share of the year that has passed. Promised but unpaid amounts are not part of the comparison. */
+/**
+ * Compare money spent with the year percent shown on the page (rounded to a whole number).
+ * Promised but unpaid amounts are not part of the comparison.
+ * In line means within 1 percentage point of that year percent.
+ */
 export function pace(revCents: number, ytdCents: number, _encCents: number, elapsedPct: number): Pace {
   if (ytdCents <= 0) return "none";
   if (revCents <= 0) return "red";
   if (ytdCents > revCents) return "red";
-  const elapsed = elapsedPct / 100;
-  if (ytdCents > revCents * elapsed) return "yellow";
+  const yearShown = Math.round(elapsedPct);
+  const spentPct = (ytdCents / revCents) * 100;
+  if (spentPct > yearShown + 1) return "yellow";
+  if (spentPct < yearShown - 1) return "under";
   return "green";
 }
 
 export const PACE_LABEL: Record<Pace, string> = {
-  green: "On pace",
-  yellow: "Above pace",
+  green: "In line",
+  yellow: "Spending more than the year's progress",
   red: "Over budget",
-  gray: "No budget",
+  gray: "No budget set in the county report",
   none: "No spending yet",
+  under: "Under",
 };
+
+/** Money left, or a plain over-budget amount when spending is already past the budget. */
+export function leftLabel(revCents: number, ytdCents: number): { title: string; value: string; over: boolean; unbudgeted: boolean } {
+  if (revCents <= 0) {
+    return { title: "Money left", value: "No budget set in the county report", over: false, unbudgeted: true };
+  }
+  if (ytdCents > revCents) {
+    return { title: "Over budget by", value: money(ytdCents - revCents), over: true, unbudgeted: false };
+  }
+  return { title: "Money left", value: money(revCents - ytdCents), over: false, unbudgeted: false };
+}
 
 export interface FiscalPosition {
   fyLabel: string;
@@ -172,3 +204,36 @@ export function fyMonthIndex(payDate: string, fyStartYear: number): number | nul
 }
 
 export const FY_MONTHS = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"];
+
+export interface FiscalMonth {
+  ym: string;
+  label: string;
+  short: string;
+}
+
+/** Fiscal months from October through the month of the data-as-of date. Later months are omitted. */
+export function fiscalYearMonths(asOfRaw: string | null | undefined): FiscalMonth[] {
+  const fiscal = fiscalPosition(asOfRaw);
+  const startYear = Number(fiscal.fyStart.slice(0, 4));
+  const asYm = fiscal.asOf.slice(0, 7);
+  const months: FiscalMonth[] = [];
+  for (let i = 0; i < 12; i += 1) {
+    const month = ((i + 9) % 12) + 1;
+    const year = i < 3 ? startYear : startYear + 1;
+    const ym = `${year}-${String(month).padStart(2, "0")}`;
+    if (ym > asYm) break;
+    months.push({ ym, label: FY_MONTHS[i], short: FY_MONTHS[i].slice(0, 1) });
+  }
+  return months;
+}
+
+export function monthBounds(ym: string, asOf: string): { from: string; to: string } {
+  const [yearText, monthText] = ym.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const from = `${ym}-01`;
+  let to = `${ym}-${String(last).padStart(2, "0")}`;
+  if (asOf && to > asOf) to = asOf;
+  return { from, to };
+}
