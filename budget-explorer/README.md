@@ -29,12 +29,10 @@ The session cookie is `HttpOnly`, `Secure`, `SameSite=Lax`, and expires after ab
 
 ## D1
 
-`wrangler.jsonc` ships with a placeholder `database_id`. Create the database, then paste the real id into that file before `wrangler deploy`.
+The D1 database name is `budget-explorer`. Its id is in `wrangler.jsonc`. Migration `0001_init.sql` is already applied on the remote database. Apply it locally before seeding:
 
 ```bash
-npx wrangler d1 create budget-explorer
 npx wrangler d1 migrations apply budget-explorer --local
-npx wrangler d1 migrations apply budget-explorer --remote
 ```
 
 ## Local data

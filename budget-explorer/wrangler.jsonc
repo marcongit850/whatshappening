@@ -1,6 +1,6 @@
 {
   // Budget Explorer. Separate Worker from the placeholder site.
-  // database_id is a placeholder. Create the D1 database, then paste its id here.
+  // D1 database budget-explorer. Migration 0001_init.sql is already applied remotely.
   "name": "budget-explorer",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-27",
@@ -17,7 +17,7 @@
     {
       "binding": "DB",
       "database_name": "budget-explorer",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "06dfc109-c0e5-4ce1-a87f-e7f1b4b2ef50"
     }
   ],
   "vars": {
