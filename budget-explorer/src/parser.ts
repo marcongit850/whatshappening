@@ -202,16 +202,130 @@ export function parseVendorRest(rest: string): VendorParts | null {
   return { vendorNumber, invoice, vendorName, description, checkNumber };
 }
 
-const ORG_WORD = /\b(INC|LLC|LLP|CORP|CO|LTD|COUNTY|CITY|BANK|DEPT|OFFICE|SUPPLY|SERVICE|SERVICES|ASSOC|ASSN|PLLC|GROUP|FUND|STATE|AUTHORITY|DISTRICT|SCHOOL|HOSPITAL|CLINIC|RENTALS|CENTERS|COMPANY|UNIVERSITY|UNIV)\b/;
+/**
+ * A vendor is a person unless one of these words marks an organization.
+ * Matched on whole words after the name is normalized, in any letter case.
+ * All-caps multi-word business names are organizations when they contain one of these.
+ */
+export const ORG_NAME_TOKENS = [
+  "LLC", "LLP", "PLLC", "INC", "INCORPORATED", "CORP", "CORPORATION", "CO", "COMPANY",
+  "LTD", "LIMITED", "PC", "PA", "LP", "PLC", "NA", "FSB", "COUNTY", "CITY", "FLORIDA",
+  "STATE", "BANK", "DEPT", "DEPARTMENT", "OFFICE", "SUPPLY", "SERVICE", "SERVICES",
+  "ASSOC", "ASSOCIATION", "ASSN", "GROUP", "FUND", "AUTHORITY", "DISTRICT", "SCHOOL",
+  "HOSPITAL", "CLINIC", "RENTALS", "CENTER", "CENTERS", "UNIVERSITY", "UNIV",
+  "FOUNDATION", "CHURCH", "TRUST", "BOARD", "COMMISSION", "AGENCY", "BUREAU",
+  "GOVERNMENT", "GOVT", "UTILITY", "UTILITIES", "ELECTRIC", "INSURANCE", "SYSTEMS",
+  "ENTERPRISE", "ENTERPRISES", "INDUSTRIES", "PARTNERS", "PARTNERSHIP", "HOLDINGS",
+  "HOLDING", "CONSTRUCTION", "CONTRACTORS", "MANAGEMENT", "SOLUTIONS", "INTERNATIONAL",
+  "NATIONAL", "FEDERAL", "MUNICIPAL", "TOWN", "COUNCIL", "SOCIETY", "UNION", "HOUSING",
+  "DEVELOPMENT", "ADMINISTRATION", "DIVISION", "PROGRAM", "PROPERTIES", "REALTY",
+] as const;
 
-/** A vendor string that looks like a person's name. Company words are left alone. */
+const ORG_NAME_TOKEN_SET = new Set<string>(ORG_NAME_TOKENS);
+const INVOICE_PREFIX = /^(INV|INVOICE|PO|VOUCHER|CHK|CHECK|BILL|ACCT|ACCOUNT|ORDER)\b/;
+
+/** Uppercase, drop periods, and turn punctuation into spaces so "L.L.C." and "Co." match. */
+export function normalizePartyName(name: string): string {
+  return name
+    .toUpperCase()
+    .replace(/\./g, "")
+    .replace(/&/g, " ")
+    .replace(/[,/#'-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function digitLetterCounts(normalized: string): { digits: number; letters: number } {
+  let digits = 0;
+  let letters = 0;
+  for (const char of normalized) {
+    if (char >= "0" && char <= "9") digits += 1;
+    else if (char >= "A" && char <= "Z") letters += 1;
+  }
+  return { digits, letters };
+}
+
+/** Invoice numbers and other digit-heavy labels are not person names. */
+export function isDigitsHeavyName(digits: number, letters: number): boolean {
+  if (digits >= 6 && letters <= 4) return true;
+  if (digits >= 4 && digits > letters) return true;
+  return false;
+}
+
+function hasOrgToken(normalized: string): boolean {
+  for (const word of normalized.split(" ")) {
+    if (ORG_NAME_TOKEN_SET.has(word)) return true;
+  }
+  return false;
+}
+
+/**
+ * Person unless the string is clearly an organization, an invoice-like label, or too short to be a name.
+ * Mixed case, four-word names, JR/SR/II/III, ampersands, and a few digits still count as people.
+ * The stored is_person_name flag is not the authority for hidden reads.
+ */
 export function looksLikePersonName(name: string): boolean {
-  const trimmed = name.trim().replace(/\s+/g, " ");
-  if (trimmed.length < 5 || trimmed.length > 40) return false;
-  if (/\d|&|\//.test(trimmed)) return false;
-  if (ORG_WORD.test(trimmed)) return false;
-  if (/^[A-Z][A-Z'.-]*,\s+[A-Z][A-Z'.-]*(?:\s+[A-Z][A-Z'.-]*)?$/.test(trimmed)) return true;
-  return /^[A-Z][A-Z'.-]*(?:\s+[A-Z][A-Z'.-]*){1,2}$/.test(trimmed);
+  const trimmed = name.trim();
+  if (trimmed.length < 3) return false;
+  const normalized = normalizePartyName(trimmed);
+  if (normalized.length < 3) return false;
+  const { digits, letters } = digitLetterCounts(normalized);
+  if (isDigitsHeavyName(digits, letters)) return false;
+  if (letters < 2) return false;
+  if (INVOICE_PREFIX.test(normalized) && digits >= 3) return false;
+  if (hasOrgToken(normalized)) return false;
+  return true;
+}
+
+function sqlReplace(expr: string, from: string, to: string): string {
+  return `replace(${expr}, '${from}', '${to}')`;
+}
+
+/** Same normalization as normalizePartyName, as a SQLite expression. The column name is not user input. */
+function sqlNormalizedParty(column: string): string {
+  let expr = `upper(trim(${column}))`;
+  expr = sqlReplace(expr, ".", "");
+  expr = sqlReplace(expr, "&", " ");
+  expr = sqlReplace(expr, ",", " ");
+  expr = sqlReplace(expr, "/", " ");
+  expr = sqlReplace(expr, "#", " ");
+  expr = sqlReplace(expr, "-", " ");
+  expr = `replace(${expr}, char(39), ' ')`;
+  return expr;
+}
+
+function sqlStripChars(expr: string, chars: string): string {
+  let out = expr;
+  for (const char of chars) out = `replace(${out}, '${char}', '')`;
+  return out;
+}
+
+function sqlCountChars(expr: string, chars: string): string {
+  return `(length(${expr}) - length(${sqlStripChars(expr, chars)}))`;
+}
+
+/**
+ * SQLite expression, 1 when the column is a person under looksLikePersonName.
+ * Hidden reads use this instead of the stored is_person_name flag.
+ */
+export function sqlIsPersonName(column: string): string {
+  const norm = sqlNormalizedParty(column);
+  const padded = `(' ' || ${norm} || ' ')`;
+  const digits = sqlCountChars(norm, "0123456789");
+  const letters = sqlCountChars(norm, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+  const org = ORG_NAME_TOKENS.map((token) => `${padded} LIKE '% ${token} %'`).join(" OR ");
+  const invoice = ["INV", "INVOICE", "PO", "VOUCHER", "CHK", "CHECK", "BILL", "ACCT", "ACCOUNT", "ORDER"]
+    .map((token) => `(${norm} = '${token}' OR ${norm} LIKE '${token} %')`)
+    .join(" OR ");
+  return `CASE
+    WHEN ${column} IS NULL OR length(trim(${column})) < 3 THEN 0
+    WHEN ${digits} >= 6 AND ${letters} <= 4 THEN 0
+    WHEN ${digits} >= 4 AND ${digits} > ${letters} THEN 0
+    WHEN ${letters} < 2 THEN 0
+    WHEN (${invoice}) AND ${digits} >= 3 THEN 0
+    WHEN ${org} THEN 0
+    ELSE 1
+  END`;
 }
 
 export function foldedPayrollNote(count: number): string {

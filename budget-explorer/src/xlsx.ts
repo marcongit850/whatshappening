@@ -4,6 +4,8 @@ export const XLSX_MAX_ENTRY_BYTES = 2_000_000;
 export const XLSX_MAX_TOTAL_BYTES = 8_000_000;
 /** Compressed .xlsx cap. Rejected before any unzip. */
 export const XLSX_MAX_COMPRESSED_BYTES = 2_000_000;
+/** Push this much compressed input at a time so a forged size can be stopped early. */
+export const ZIP_PUSH_BYTES = 4096;
 
 export interface ZipLimits {
   entry: number;
@@ -63,6 +65,24 @@ function concatChunks(chunks: Uint8Array[]): Uint8Array {
 }
 
 /**
+ * Feed the unzipper a few kilobytes at a time. One push of the whole buffer
+ * inflates that whole buffer before the size check can run. A 4 KB slice
+ * bounds how far inflation gets after a forged uncompressed size is noticed.
+ * The final flag is set only on the last slice.
+ */
+function pushSliced(unzipper: Unzip, buffer: Uint8Array): void {
+  const size = buffer.length;
+  if (size === 0) {
+    unzipper.push(buffer, true);
+    return;
+  }
+  for (let offset = 0; offset < size; offset += ZIP_PUSH_BYTES) {
+    const end = Math.min(offset + ZIP_PUSH_BYTES, size);
+    unzipper.push(buffer.subarray(offset, end), end === size);
+  }
+}
+
+/**
  * Unzip with a hard stop. The compressed buffer is capped by the caller.
  * Declared sizes are checked before inflate. Actual output is counted and
  * aborted when it passes the declared size or the total cap.
@@ -99,7 +119,7 @@ export function unzipChecked(buffer: Uint8Array, limits: ZipLimits): Record<stri
     };
     file.start();
   };
-  unzipper.push(buffer, true);
+  pushSliced(unzipper, buffer);
   const files: Record<string, Uint8Array> = {};
   for (const [name, chunks] of out) files[name] = concatChunks(chunks);
   return files;
