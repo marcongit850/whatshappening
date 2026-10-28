@@ -3,6 +3,7 @@ import {
   accountLines,
   buildQuestionContext,
   showVendorLines,
+  scrubLastFirstPersons,
   finalizeAnswer,
   personNamesUpdatedAt,
   platLines,
@@ -14,7 +15,7 @@ import {
 } from "./access";
 import { directAnswer, publicFactText } from "./answers";
 import { loadBudgetFacts, loadCapitalAccounts, loadCategorySpend, loadFundRollups, loadLargestPayments, loadOfficePaymentCents, loadTopAccounts, loadTopVendors, loadVendorNames } from "./budget";
-import { buildVendorIndex, withDisplayNames } from "./vendors";
+import { buildVendorIndex, mergeDescribed, withDisplayNames } from "./vendors";
 import type { SessionPayload } from "./auth";
 import {
   FORM_COOKIE,
@@ -68,7 +69,7 @@ import {
   saveChart,
   saveImport,
   unmatchedCodes,
-  vendorSlices,
+  vendorWhy,
   type SearchFilters,
   type VendorSort,
 } from "./db";
@@ -220,7 +221,7 @@ app.get("/", async (c) => {
     fundNameMap(c.env.DB, current.id),
     fundRollups(c.env.DB, current.id),
     monthlyParts(c.env.DB, current.id, asOf),
-    organizationVendors(c.env.DB, current.id, asOf, 40),
+    organizationVendors(c.env.DB, current.id, asOf, showNames, 40),
     constitutionalTransferCents(c.env.DB, current.id, asOf),
     landSpendByMonth(c.env.DB, current.id, asOf),
     landSpendByDept(c.env.DB, current.id, asOf),
@@ -499,7 +500,7 @@ app.get("/vendors", async (c) => {
   const pageIndex = pageNumber(c.req.query("page"));
   const pageSize = 25;
   const [found, vendorNames] = await Promise.all([
-    listVendors(c.env.DB, current.id, current.data_as_of || "", query, sort, pageSize, pageIndex * pageSize),
+    listVendors(c.env.DB, current.id, current.data_as_of || "", c.get("showNames"), query, sort, pageSize, pageIndex * pageSize),
     loadVendorNames(c.env.DB, current.id),
   ]);
   return c.html(
@@ -527,23 +528,29 @@ app.get("/vendors/:number", async (c) => {
   const pageIndex = pageNumber(c.req.query("page"));
   const pageSize = 25;
   const asOf = current.data_as_of || "";
-  const vendor = await oneVendor(c.env.DB, current.id, asOf, number);
+  const showNames = c.get("showNames");
+  const vendor = await oneVendor(c.env.DB, current.id, asOf, showNames, number);
   if (!vendor) return c.text("Not found", 404);
-  const [funds, departments, lines, deptRows, names, vendorNames, fundReports] = await Promise.all([
-    vendorSlices(c.env.DB, current.id, asOf, number, "fund_code"),
-    vendorSlices(c.env.DB, current.id, asOf, number, "dept_code"),
-    showVendorLines(c.env.DB, current.id, asOf, number, pageIndex, pageSize, c.get("showNames")),
+  const [why, lines, deptRows, names, vendorNames, fundReports] = await Promise.all([
+    vendorWhy(c.env.DB, current.id, asOf, showNames, number),
+    showVendorLines(c.env.DB, current.id, asOf, number, pageIndex, pageSize, showNames),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     loadVendorNames(c.env.DB, current.id),
     fundNameMap(c.env.DB, current.id),
   ]);
+  const descriptions = mergeDescribed(
+    why.descriptions.map((row) => ({
+      ...row,
+      description: showNames ? row.description : scrubLastFirstPersons(row.description),
+    })),
+  );
   return c.html(
     renderVendorDetail({
       row: current,
       vendor,
-      funds,
-      departments,
+      why: why.rows,
+      descriptions,
       deptRows,
       fundReports,
       names,
@@ -553,7 +560,7 @@ app.get("/vendors/:number", async (c) => {
       pageSize,
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
-      showNames: c.get("showNames"),
+      showNames,
       displayName: buildVendorIndex(vendorNames),
     }),
   );

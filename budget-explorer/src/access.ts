@@ -604,7 +604,7 @@ export async function showVendorLines(
   pageSize: number,
   showNames: boolean,
 ): Promise<{ rows: PaymentRow[]; total: number }> {
-  const found = await vendorPaymentRows(db, importId, asOf, vendorNumber, pageSize, page * pageSize);
+  const found = await vendorPaymentRows(db, importId, asOf, showNames, vendorNumber, pageSize, page * pageSize);
   const raw = found.rows.map((row) => ({ ...row, person_hidden: 0 }));
   return { rows: await present(db, importId, raw, showNames), total: found.total };
 }

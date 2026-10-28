@@ -1,5 +1,6 @@
 import { TRANSFER_OBJECT, factsFromRow, type BudgetFacts, type FundRollup } from "./budget";
 import { moneyExact, moneyWords, spentTerm } from "./format";
+import { directoryPersonSql } from "./parser";
 import { CONSTITUTIONAL_SQL, SHERIFF_FUND_CAPTION, SHERIFF_FUND_LABEL, VENDOR_SOURCES, isSheriffRelease } from "./overview";
 import type { QaRecord } from "./qa";
 import {
@@ -7,6 +8,7 @@ import {
   sumVendorMatches,
   titleCaseVendor,
   vendorCompact,
+  creditCardVendorSql,
   vendorPhrase,
   vendorSpendSql,
   vendorWords,
@@ -146,7 +148,8 @@ async function topOutsideVendor(
            AND source IN (${sources})
            AND object_code != '${TRANSFER_OBJECT}'
            AND trim(COALESCE(vendor_name, '')) != ''
-           AND (? = 1 OR is_person_name = 0)
+           AND ${creditCardVendorSql("vendor_number")}
+           ${directoryPersonSql(showNames, "vendor_name")}
            AND NOT ${CONSTITUTIONAL_SQL}
        )
        SELECT
@@ -164,7 +167,7 @@ async function topOutsideVendor(
        ORDER BY cents DESC
        LIMIT 1`,
     )
-    .bind(importId, showNames ? 1 : 0)
+    .bind(importId)
     .first<{ vendor_name: string; cents: number; lines: number; land_cents: number }>();
   if (!row) return null;
   return {
@@ -187,8 +190,8 @@ export async function lookupVendorSpend(
   const compact = vendorCompact(first);
   if (compact.length < 3) return null;
   const rows = await db
-    .prepare(vendorSpendSql(transfersOnly))
-    .bind(importId, showNames ? 1 : 0, `${compact}%`)
+    .prepare(vendorSpendSql(transfersOnly, showNames))
+    .bind(importId, `${compact}%`)
     .all<{ vendor_name: string; cents: number; lines: number; pay_refs: string | null }>();
   const totals = sumVendorMatches(rows.results || [], phrase);
   if (!totals) return null;

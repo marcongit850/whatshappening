@@ -284,6 +284,48 @@ export function looksLikePersonName(name: string): boolean {
   return true;
 }
 
+/**
+ * Vendor-directory person check. A person is a Last, First name: a comma, letters on both
+ * sides, and no business word. A business whose county report name was cut at 20 characters
+ * has no comma and is not a person, even when the stored is_person_name flag says otherwise.
+ * Payroll and payment search still use looksLikePersonName.
+ */
+export function isCommaPersonName(name: string): boolean {
+  const trimmed = name.trim();
+  const comma = trimmed.indexOf(",");
+  if (comma <= 0) return false;
+  const left = trimmed.slice(0, comma).trim();
+  const right = trimmed.slice(comma + 1).trim();
+  if (left.length < 2 || right.length < 2) return false;
+  if (!/[A-Za-z].*[A-Za-z]/.test(left) || !/[A-Za-z].*[A-Za-z]/.test(right)) return false;
+  const normalized = normalizePartyName(trimmed);
+  const { digits, letters } = digitLetterCounts(normalized);
+  if (isDigitsHeavyName(digits, letters)) return false;
+  if (letters < 4) return false;
+  if (hasOrgToken(normalized)) return false;
+  return true;
+}
+
+/** Hidden vendor lists use this. Shown lists omit it so businesses and people both stay. */
+export function directoryPersonSql(showNames: boolean, column = "vendor_name"): string {
+  if (showNames) return "";
+  return `AND NOT ${commaPersonSql(column)}`;
+}
+
+/** SQLite form of isCommaPersonName. The column name is not user input. */
+export function commaPersonSql(column: string): string {
+  const left = `trim(substr(${column}, 1, instr(${column}, ',') - 1))`;
+  const right = `trim(substr(${column}, instr(${column}, ',') + 1))`;
+  let padded = `upper(trim(${column}))`;
+  padded = sqlReplace(padded, ",", " ");
+  padded = sqlReplace(padded, ".", " ");
+  padded = sqlReplace(padded, "-", " ");
+  padded = `replace(${padded}, char(39), ' ')`;
+  const bag = `(' ' || ${padded} || ' ')`;
+  const org = ORG_NAME_TOKENS.map((token) => `${bag} LIKE '% ${token} %'`).join(" OR ");
+  return `(instr(${column}, ',') > 0 AND length(${left}) >= 2 AND length(${right}) >= 2 AND upper(${left}) GLOB '*[A-Z]*[A-Z]*' AND upper(${right}) GLOB '*[A-Z]*[A-Z]*' AND NOT (${org}))`;
+}
+
 function sqlReplace(expr: string, from: string, to: string): string {
   return `replace(${expr}, '${from}', '${to}')`;
 }

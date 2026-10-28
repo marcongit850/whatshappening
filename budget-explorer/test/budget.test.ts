@@ -5,10 +5,10 @@ import { describe, expect, it } from "vitest";
 import app from "../src/app";
 import { newSession, signSession } from "../src/auth";
 import { BUDGET_FACTS_SQL, PAYMENT_SCOPE_SQL, TOP_VENDOR_SQL, capitalLinesCovering, factsFromRow, loadCategorySpend, loadLargestPayments, netPaymentReversals, sqlExpressionDepth } from "../src/budget";
-import { publishImport, saveImport } from "../src/db";
+import { publishImport, saveImport, vendorDirectoryWhereSql } from "../src/db";
 import { leftLabel } from "../src/format";
 import { CONSTITUTIONAL_SQL, isCountyOfficeVendor } from "../src/overview";
-import { parseReport, sqlIsPersonName } from "../src/parser";
+import { isCommaPersonName, parseReport, sqlIsPersonName } from "../src/parser";
 import { collapsePayments, disambiguatedDepartmentNames, paymentWho, renderFund, renderOverview } from "../src/view";
 import { vendorSpendAnswer } from "../src/answers";
 import {
@@ -18,7 +18,9 @@ import {
   sumVendorMatches,
   titleCaseVendor,
   vendorNameMatches,
+  reversalNote,
   vendorPhrase,
+  vendorPurposeSentence,
   vendorSpendSql,
 } from "../src/vendors";
 
@@ -236,7 +238,7 @@ describe("net of transfers SQL", () => {
     const lowes = vendors.find((vendor) => vendor.vendor_name.includes("LOWE"));
     expect(lowes?.cents).toBe(80000);
 
-    const matched = raw.prepare(vendorSpendSql(false)).all(1, 1, "lowes%") as {
+    const matched = raw.prepare(vendorSpendSql(false)).all(1, "lowes%") as {
       vendor_name: string;
       cents: number;
       lines: number;
@@ -498,6 +500,26 @@ describe("expression depth, reversals, land, and the money left card", () => {
     expect(PAYMENT_SCOPE_SQL).not.toContain("LIKE '% LLC %'");
     const scopeDepth = sqlExpressionDepth(PAYMENT_SCOPE_SQL);
     expect(scopeDepth).toBeLessThanOrEqual(100);
+    const shownVendors = vendorDirectoryWhereSql(true);
+    expect(shownVendors).not.toContain("is_person_name");
+    expect(shownVendors).not.toContain("LIKE '% LLC %'");
+    expect(shownVendors).toContain("'999999'");
+    expect(shownVendors).toContain("'999995'");
+    expect(sqlExpressionDepth(shownVendors)).toBeLessThanOrEqual(100);
+    const hiddenVendors = vendorDirectoryWhereSql(false);
+    expect(hiddenVendors).not.toContain("is_person_name");
+    expect(sqlExpressionDepth(hiddenVendors)).toBeLessThanOrEqual(100);
+    expect(isCommaPersonName("PUBLIC, JANE Q")).toBe(true);
+    expect(isCommaPersonName("WASTE MANAGEMENT")).toBe(false);
+    expect(isCommaPersonName("JM PHELPS CONSTRUCTI")).toBe(false);
+    expect(isCommaPersonName("SMITH, JOHN LLC")).toBe(false);
+    expect(isCommaPersonName("LOWE'S HOME CENTERS,")).toBe(false);
+    expect(reversalNote(17_000_000, -1_000_000)).toContain("$170,000.00 in payments");
+    expect(reversalNote(17_000_000, -1_000_000)).toContain("$10,000.00 in reversals and credits");
+    expect(reversalNote(100, 0)).toBe("");
+    expect(vendorPurposeSentence(160_000_00, { department: "Parks Maintenance", expense: "Operating (account 534000)", cents: 140_000_00 }, { text: "SMITH, MARY rent", payments: 1, cents: 150_000_00 })).toBe(
+      'Most of this money, $140,000.00, was paid by the Parks Maintenance department for Operating (account 534000). The most common description on the payment lines is "SMITH, MARY rent" (1 line, $150,000.00).',
+    );
     const crowded = `import_id = ?
          AND after_cutoff = 0
          AND object_code != '591000'

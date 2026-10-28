@@ -16,7 +16,7 @@ import {
   showPersonNames,
   showPersonNamesFromForm,
 } from "../src/access";
-import { looksLikePersonName, sqlIsPersonName } from "../src/parser";
+import { commaPersonSql, isCommaPersonName, looksLikePersonName, sqlIsPersonName } from "../src/parser";
 import app from "../src/app";
 import { newSession, signSession } from "../src/auth";
 import { publishImport, saveImport } from "../src/db";
@@ -269,6 +269,31 @@ describe("person check at read time", () => {
     }
     expect(MIN_HIDDEN_PAYROLL_LINES).toBe(3);
     expect(MIN_HIDDEN_PAYROLL_CENTS).toBeGreaterThanOrEqual(50_000);
+    const commaSamples: [string, boolean][] = [
+      ["PUBLIC, JANE Q", true],
+      ["Holmes, Casey S.", true],
+      ["WASTE MANAGEMENT", false],
+      ["ZEHNDER COMMUNICATIO", false],
+      ["JM PHELPS CONSTRUCTI", false],
+      ["ADKINSON LAW FIRM", false],
+      ["SMITH, JOHN LLC", false],
+      ["LOWE'S HOME CENTERS,", false],
+      ["ACME, INC", false],
+      ["Jane Q Public", false],
+      ["FLORIDA DEPARTMENT O", false],
+      ["C.W. ROBERTS CONTRAC", false],
+    ];
+    const { raw } = openDb();
+    raw.exec("CREATE TABLE comma_party (name TEXT)");
+    const read = raw.prepare(`SELECT ${commaPersonSql("name")} AS person FROM comma_party`);
+    const insert = raw.prepare("INSERT INTO comma_party (name) VALUES (?)");
+    for (const [name, person] of commaSamples) {
+      expect(isCommaPersonName(name), name).toBe(person);
+      insert.run(name);
+      const row = read.get() as { person: number };
+      expect(Boolean(row.person), name).toBe(person);
+      raw.exec("DELETE FROM comma_party");
+    }
   });
 
   it("uses the same person rule in SQL, including rows stored with the flag at 0", async () => {
