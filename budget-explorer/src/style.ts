@@ -912,6 +912,124 @@ body.door .btn { min-height: 48px; font-size: 16px; border-radius: 8px; }
 @media (max-width: 400px) {
   .card, .panel, .metric { padding: 12px; }
 }
+
+/* Compact rows and list amounts. Footer rules above are unchanged. */
+.card, .panel, .metric, .info-card, .login-card, .feature-panel, .step, .picker, body.door .door-login { padding: 12px 14px; }
+.kpi { padding: 10px 12px; }
+.card .cap, .ask-hero .cap { margin: 0 0 8px; }
+.hero { gap: 24px; margin: 8px 0 16px; }
+.hero h1 { font-size: clamp(22px, 2.4vw, 28px); }
+.kpis, .grid2, .grid2b, .metrics { gap: 10px; margin-bottom: 14px; }
+.pace .row { margin-bottom: 10px; }
+.page-intro { margin: 4px 0 14px; }
+.look { gap: 12px; }
+.login-card h1 { font-size: 28px; }
+.pay-find h2, .ask-hero h2 { font-size: 22px; }
+.pay-find .btn, .ask-row input { min-height: 44px; font-size: 16px; padding: 8px 14px; }
+.feature-panel h2, .info-card h2 { font-size: clamp(22px, 3vw, 28px); }
+.feature-panel p, .door-section .body-copy { font-size: 16px; }
+.door-section { padding: 20px 0 4px; }
+.door-section h2 { font-size: clamp(24px, 3vw, 32px); }
+.choice label { min-height: 48px; font-size: 16px; padding: 8px 12px; }
+.county-list a, .state-pills a { min-height: 44px; font-size: 16px; padding: 8px 12px; }
+.steps, .card-row, .see-grid, .finder, .door-hero-grid { gap: 12px; }
+.step { padding: 14px 16px; }
+.step b { font-size: 18px; }
+.kpi .n, .kpi a.n, .plat .n, .plat .n a, .figure-n, .metric-value, .pace .t b, a.item .big { font-size: 24px; font-weight: 650; line-height: 1.15; }
+.stat-grid .n, .stat-grid .kpi .n, .cmp .figure-n { font-size: 16px; font-weight: 600; }
+a.item h3 { font-size: 16px; margin: 0 0 4px; }
+a.item .big { margin: 0 0 4px; }
+.vv, .paid-list .vv, .vv b, .paid-list .vv b, .bval b, .dnum b, td.num, .holder-list b, .reserve-amt, .transfer-row b {
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+.paid-list .vv, .vv { overflow-wrap: normal; white-space: nowrap; text-align: right; }
+.vv { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
+.row-cap { display: inline; margin: 0; font-family: var(--sans); font-size: 12px; font-weight: 500; line-height: 1.2; color: var(--muted); white-space: nowrap; }
+.cmp p:has(> span):has(> b) > b { font-size: 16px; font-weight: 600; }
+a.vrow {
+  grid-template-columns: minmax(16rem, 2.1fr) minmax(36px, 0.55fr) max-content 1rem;
+  gap: 4px 10px;
+  align-items: center;
+  min-height: 40px;
+  padding: 2px 0;
+  padding-right: 0;
+}
+.paid-list a.vrow { padding: 2px 0; min-height: 40px; }
+.vn { font-size: 15px; line-height: 1.2; gap: 8px; }
+.vt, .btrack, .dplot { height: 8px; }
+.meter, .stackbar, .splitbar { height: 8px; }
+a.brow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1rem;
+  column-gap: 8px;
+  align-items: center;
+  min-height: 40px;
+  padding: 4px 0;
+  padding-right: 0;
+}
+a.brow > .btop, a.brow > .btrack, a.brow > .cap { grid-column: 1; }
+a.brow .cap { margin: 0; font-size: 13px; }
+a.brow::after { grid-column: 2; grid-row: 1 / span 3; }
+.btop { margin-bottom: 4px; gap: 8px; }
+.bval { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+a.drow {
+  grid-template-columns: minmax(12rem, 1.35fr) minmax(48px, 1fr) max-content auto 1rem;
+  gap: 4px 10px;
+  min-height: 40px;
+  padding: 4px 0;
+}
+.dname b { font-size: 15px; line-height: 1.2; }
+.dname span { display: block; font-size: 12px; line-height: 1.2; }
+.dnum b { display: inline; margin-right: 6px; }
+.dnum span, .bval span { font-size: 12px; line-height: 1.2; }
+a.drow .pill { margin-right: 0; }
+a.drow::after { grid-column: 5; grid-row: 1; }
+.reserve-link { padding-right: 0; align-items: center; min-height: 40px; gap: 8px; }
+.reserve-fund, .cmp { padding: 6px 0; }
+a.lg { min-height: 36px; padding: 2px 0; }
+.holder-list li { align-items: baseline; min-height: 40px; padding: 4px 0; gap: 4px 8px; }
+.holder-list span { flex-basis: auto; font-size: 12px; }
+th { padding: 8px 10px; }
+td { padding: 8px 10px; line-height: 1.2; }
+a.vrow::after, a.brow::after, a.drow::after, .reserve-link::after {
+  position: static;
+  top: auto;
+  right: auto;
+  transform: none;
+  justify-self: end;
+  align-self: center;
+  flex: none;
+}
+@media (max-width: 760px) {
+  .paid-list a.vrow, a.vrow, a.brow, a.drow, .reserve-link, .holder-list li, .transfer-row, a.lg, .cmp, .pager a {
+    min-height: 44px;
+  }
+  a.vrow {
+    grid-template-columns: minmax(0, 1fr) max-content 1rem;
+    gap: 4px 8px;
+    padding-right: 0;
+  }
+  .vt { grid-column: 1 / -1; grid-row: 2; height: 6px; }
+  .vv { grid-column: 2; grid-row: 1; }
+  a.vrow::after { grid-column: 3; grid-row: 1; }
+  a.drow { grid-template-columns: minmax(0, 1fr) max-content 1rem; gap: 4px 8px; }
+  .dname { grid-column: 1; grid-row: 1; }
+  .dnum { grid-column: 2; grid-row: 1; }
+  a.drow::after { grid-column: 3; grid-row: 1; }
+  .dplot { grid-column: 1 / -1; grid-row: 2; }
+  .dstat { grid-column: 1 / -1; grid-row: 3; }
+  .btop { flex-direction: row; align-items: baseline; }
+  .bval { text-align: right; }
+  .kpi .n, .figure-n, .plat .n, .plat .n a { font-size: 22px; }
+  .state-pills a, .county-list a, .pay-find .btn, .ask-row input, .btn { min-height: 44px; }
+}
+@media (max-width: 800px) {
+  .state-pills a { min-height: 44px; font-size: 16px; }
+}
 `;
 
 export const CLIENT_JS = `

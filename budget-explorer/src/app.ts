@@ -71,7 +71,6 @@ import {
   unmatchedCodes,
   vendorWhy,
   type SearchFilters,
-  type VendorSort,
 } from "./db";
 import { adminPasswordSet, publicBase, type AppEnv } from "./env";
 import { csvAmount, csvCell, displayDate, isoDate } from "./format";
@@ -505,17 +504,16 @@ app.get("/vendors", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
   const query = (c.req.query("q") || "").replace(/[%_]/g, " ").trim().slice(0, 80);
-  const sort: VendorSort = c.req.query("sort") === "count" ? "count" : "total";
   const pageIndex = pageNumber(c.req.query("page"));
   const pageSize = 25;
-  const found = await listVendors(c.env.DB, current.id, current.data_as_of || "", c.get("showNames"), query, sort, pageSize, pageIndex * pageSize);
+  // sort in the query string, including sort=count, is ignored. Highest total paid is always first.
+  const found = await listVendors(c.env.DB, current.id, current.data_as_of || "", c.get("showNames"), query, "total", pageSize, pageIndex * pageSize);
   return c.html(
     renderVendors({
       row: current,
       vendors: found.rows,
       total: found.total,
       query,
-      sort,
       pageIndex,
       pageSize,
       csrf: c.get("session").csrf,

@@ -204,6 +204,9 @@ describe("overview dashboard", () => {
     expect(who).toContain("Waste Management");
     expect(who).toContain("PUBLIC, JANE Q");
     expect(who).toContain("Total paid");
+    expect(who.match(/Total paid/g)).toEqual(["Total paid"]);
+    expect(who).toContain("2 payments");
+    expect(who).toContain('title="North Builders LLC"');
     expect(who).not.toContain("Total received");
     expect(who).not.toContain("Sheriff");
     expect(who).not.toContain("Late Vendor");
@@ -395,11 +398,16 @@ describe("vendors who were paid", () => {
     const list = await (await app.request("http://localhost/vendors", { headers }, env)).text();
     expect(list).toContain("North Builders LLC");
     expect(list).toContain('href="/vendors/1001"');
+    expect(list).toContain(">Search</button>");
     expect(list).toContain("Total paid");
     expect(list).toContain("Sorted by total paid.");
+    expect(list).toContain("3 payments");
+    expect(list).toContain('title="Jm Phelps Constructi. Name shortened in the county report."');
+    expect(list).not.toContain("Number of payments");
+    expect(list).not.toContain("sort=count");
+    expect(list).not.toContain("Sorted by number of payments.");
     expect(list).not.toContain("Total received");
     expect(list).not.toContain("total received");
-    expect(list).toContain("Number of payments");
     expect(list).toContain("Reversals and re-posts are listed as separate lines.");
     expect(list).toContain("7 vendors");
     expect(list).toContain("Waste Management");
@@ -418,8 +426,20 @@ describe("vendors who were paid", () => {
     expect(list.indexOf("/vendors/1001")).toBeLessThan(list.indexOf("/vendors/1008"));
 
     const byCount = await (await app.request("http://localhost/vendors?sort=count", { headers }, env)).text();
-    expect(byCount.indexOf("/vendors/1008")).toBeLessThan(byCount.indexOf("/vendors/1001"));
+    expect(byCount.indexOf("/vendors/1001")).toBeLessThan(byCount.indexOf("/vendors/1008"));
+    expect(byCount).toContain("Sorted by total paid.");
+    expect(byCount).not.toContain("Sorted by number of payments.");
+    expect(byCount).not.toContain('href="/vendors?sort=count"');
     expect(byCount).toContain("Platform Services INC");
+    const css = await (await app.request("http://localhost/assets/app.css", {}, env)).text();
+    const paidAmount = css.match(/\.vv, \.paid-list \.vv, \.vv b[\s\S]*?\}/)?.[0] ?? "";
+    expect(paidAmount).toContain("font-size: 16px");
+    expect(paidAmount).toContain("font-weight: 600");
+    expect(css).toContain("grid-template-columns: minmax(16rem, 2.1fr) minmax(36px, 0.55fr) max-content 1rem");
+    expect(css).toContain("minmax(0, 1fr) max-content 1rem");
+    expect(css).toContain(".paid-list a.vrow, a.vrow, a.brow, a.drow, .reserve-link, .holder-list li, .transfer-row, a.lg, .cmp, .pager a {\n    min-height: 44px;");
+    expect(css).toContain("a.vrow::after, a.brow::after, a.drow::after, .reserve-link::after {\n  position: static;");
+    expect(css).toContain(".footer-grid { display: flex; align-items: flex-start;");
 
     const found = await (await app.request("http://localhost/vendors?q=1002", { headers }, env)).text();
     expect(found).toContain("Acme Widget Co");

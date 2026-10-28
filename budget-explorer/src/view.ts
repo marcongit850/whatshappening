@@ -1,6 +1,6 @@
 import type { AccountSpend, BudgetFacts, CapitalLine, CategorySpend, VendorSpendRow } from "./budget";
 import { TRANSFER_OBJECT, capitalLinesCovering, factsFromRow } from "./budget";
-import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters, VendorDescription, VendorDetail, VendorSort, VendorSummary, VendorWhyRow } from "./db";
+import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters, VendorDescription, VendorDetail, VendorSummary, VendorWhyRow } from "./db";
 import { LIMIT_GROWTH_NOTE } from "./answers";
 import type { QaRecord } from "./qa";
 import {
@@ -421,6 +421,11 @@ function vendorPageHref(vendor: OrgVendor, fiscal: { fyStart: string; asOf: stri
   return `/search?vendor=${encodeURIComponent(vendor.vendor_name)}&from=${fiscal.fyStart}&to=${fiscal.asOf}`;
 }
 
+function nameAttr(label: VendorLabel): string {
+  const text = label.shortened ? `${label.text}. Name shortened in the county report.` : label.text;
+  return ` title="${esc(text)}"`;
+}
+
 function whoPaidCard(vendors: OrgVendor[], fiscal: { fyStart: string; asOf: string }, displayName: (raw: string) => VendorLabel, showNames: boolean): string {
   const shown = vendors.slice(0, 10);
   const max = Math.max(shown[0]?.cents || 0, 1);
@@ -429,13 +434,13 @@ function whoPaidCard(vendors: OrgVendor[], fiscal: { fyStart: string; asOf: stri
     .map((vendor, index) => {
       const width = max ? (vendor.cents / max) * 100 : 0;
       const label = displayName(vendor.vendor_name);
-      const title = label.shortened ? ` title="Name shortened in the county report"` : "";
+      const title = nameAttr(label);
       const count = `${vendor.payments.toLocaleString("en-US")} payment${vendor.payments === 1 ? "" : "s"}`;
-      return `<a class="vrow" href="${esc(vendorPageHref(vendor, fiscal))}"><div class="vn"><span class="rk">${index + 1}</span><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span><span class="row-cap">Total paid</span></div></a>`;
+      return `<a class="vrow" href="${esc(vendorPageHref(vendor, fiscal))}"><div class="vn"><span class="rk">${index + 1}</span><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span></div></a>`;
     })
     .join("");
   return `<section class="card paid-list"><div class="eyebrow">Who was paid</div><h2>Who was paid the most money${infoTip("who-paid", through)}</h2>
-<p class="cap">${esc(through)} Payments to other county offices are not in these bars.</p>
+<p class="cap">Total paid. ${esc(through)} Payments to other county offices are not in these bars.</p>
 ${rows || `<p class="cap">No vendor payments are in this import.</p>`}
 <p class="mnote">${esc(vendorListNote(showNames))}</p>
 <a class="btn" href="/vendors">See all vendors</a></section>`;
@@ -610,7 +615,7 @@ function vendorCard(
       const width = max ? (vendor.cents / max) * 100 : 0;
       const label = displayName(vendor.vendor_name);
       const href = `/search?vendor=${encodeURIComponent(vendor.vendor_name)}&from=${fiscal.fyStart}&to=${fiscal.asOf}`;
-      const title = label.shortened ? ` title="Name shortened in the county report"` : "";
+      const title = nameAttr(label);
       return `<a class="vrow" href="${esc(href)}"><div class="vn"><span class="rk">${index + 1}</span><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv">${esc(moneyCompact(vendor.cents))}</div></a>`;
     })
     .join("");
@@ -871,7 +876,7 @@ function whereMoneyWent(opts: {
   const vendors = vendorRows
     .map((vendor) => {
       const label = opts.displayName(vendor.vendor_name);
-      const title = label.shortened ? ` title="Name shortened in the county report"` : "";
+      const title = nameAttr(label);
       const width = (vendor.cents / max) * 100;
       return `<a class="vrow" href="${vendorSearch(opts.scope, vendor.vendor_name)}"><div class="vn"><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(1)}%"></div></div><div class="vv">${esc(money(vendor.cents))}</div></a>`;
     })
@@ -883,7 +888,7 @@ function whereMoneyWent(opts: {
     .slice(0, 5)
     .map((item) => {
       const who = paymentWho(item.row.vendor_name, opts.displayName);
-      const title = who.shortened ? ` title="Name shortened in the county report"` : "";
+      const title = nameAttr(who);
       const copies = item.lines > 1 ? `<div class="hint">Recorded on ${item.lines} account lines of one payment.</div>` : "";
       const href = `/departments/${esc(item.row.dept_code)}/${esc(item.row.object_code)}/${esc(item.row.project_code || "_")}`;
       return `<tr><td>${esc(displayDate(item.row.pay_date))}</td><td><span${title}>${esc(who.text)}</span>${copies}</td><td class="num">${moneyExact(item.row.amount_cents)}</td><td><a href="${href}">Payment lines</a></td></tr>`;
@@ -1276,10 +1281,9 @@ function pager(pageIndex: number, pages: number, href: (index: number) => string
   return `<div class="pager">${prev}<span>Page ${pageIndex + 1} of ${pages}</span>${next}</div>`;
 }
 
-function vendorListHref(query: string, sort: VendorSort, page = 1): string {
+function vendorListHref(query: string, page = 1): string {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
-  if (sort === "count") params.set("sort", "count");
   if (page > 1) params.set("page", String(page));
   const text = params.toString();
   return text ? `/vendors?${text}` : "/vendors";
@@ -1290,7 +1294,6 @@ export function renderVendors(opts: {
   vendors: VendorSummary[];
   total: number;
   query: string;
-  sort: VendorSort;
   pageIndex: number;
   pageSize: number;
   csrf: string;
@@ -1305,13 +1308,12 @@ export function renderVendors(opts: {
   const rows = opts.vendors
     .map((vendor) => {
       const label = opts.displayName(vendor.vendor_name);
-      const title = label.shortened ? ` title="Name shortened in the county report"` : "";
+      const title = nameAttr(label);
       const width = max ? (vendor.cents / max) * 100 : 0;
       const count = `${vendor.payments.toLocaleString("en-US")} payment${vendor.payments === 1 ? "" : "s"}`;
-      return `<a class="vrow" href="/vendors/${esc(vendor.vendor_number)}"><div class="vn"><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span><span class="row-cap">Total paid</span></div></a>`;
+      return `<a class="vrow" href="/vendors/${esc(vendor.vendor_number)}"><div class="vn"><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span></div></a>`;
     })
     .join("");
-  const sortNote = opts.sort === "count" ? "Sorted by number of payments." : "Sorted by total paid.";
   const heading = vendorCountLabel(opts.total);
   const hiddenPeople = opts.showNames ? "" : " Person names written as Last, First are not listed.";
   const body = `
@@ -1320,24 +1322,18 @@ export function renderVendors(opts: {
 <p class="lede">${esc(through)} ${esc(VENDOR_DIRECTORY_CAPTION)}</p>
 <section class="panel">
 <form method="get" action="/vendors">
-${opts.sort === "count" ? `<input type="hidden" name="sort" value="count">` : ""}
 <div class="ask-row">
 <label class="sr" for="vendor-q">Vendor name or vendor number</label>
 <input id="vendor-q" name="q" type="search" maxlength="80" placeholder="Vendor name or vendor number" value="${esc(opts.query)}">
 <button class="btn" type="submit">Search</button>
 </div>
 </form>
-<div class="sort-row">
-<a class="btn${opts.sort === "total" ? "" : " secondary"}" href="${esc(vendorListHref(opts.query, "total"))}">Total paid</a>
-<a class="btn${opts.sort === "count" ? "" : " secondary"}" href="${esc(vendorListHref(opts.query, "count"))}">Number of payments</a>
-</div>
-<p class="cap">${sortNote}</p>
 </section>
 <section class="panel paid-list">
-<h2>${esc(heading)}${infoTip("vendor-count", sortNote)}</h2>
-<p class="cap">${sortNote} Reversals and re-posts are listed as separate lines. ${esc(VENDOR_DIRECTORY_CAPTION)}${esc(hiddenPeople)}</p>
+<h2>${esc(heading)}${infoTip("vendor-count", "Sorted by total paid.")}</h2>
+<p class="cap">Total paid. Sorted by total paid. Reversals and re-posts are listed as separate lines. ${esc(VENDOR_DIRECTORY_CAPTION)}${esc(hiddenPeople)}</p>
 ${rows || `<p class="empty">No vendors match these filters.</p>`}
-${pager(opts.pageIndex, pages, (index) => vendorListHref(opts.query, opts.sort, index + 1))}
+${pager(opts.pageIndex, pages, (index) => vendorListHref(opts.query, index + 1))}
 <p class="note">Lines dated after ${esc(displayDate(opts.row.data_as_of))} are stored and excluded. ${esc(vendorListNote(opts.showNames))}</p>
 </section>`;
   return page({
@@ -1424,7 +1420,7 @@ export function renderVendorDetail(opts: {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const through = `Vendors paid from October 1 through ${displayDate(opts.row.data_as_of)}.`;
   const label = opts.displayName(opts.vendor.vendor_name);
-  const title = label.shortened ? ` title="Name shortened in the county report"` : "";
+  const title = nameAttr(label);
   const number = opts.vendor.vendor_number;
   const vendorQuery = encodeURIComponent(opts.vendor.vendor_name);
   const searchHref = `/search?vendor=${vendorQuery}&from=${fiscal.fyStart}&to=${fiscal.asOf}`;
