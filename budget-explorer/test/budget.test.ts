@@ -269,7 +269,7 @@ describe("county offices, categories, and payment lines", () => {
     expect(isCountyOfficeVendor("SHERIF'S MARKET")).toBe(false);
     expect(leftLabel(100_000, 150_000)).toEqual({ title: "Over budget by", value: "$500", over: true, unbudgeted: false });
     expect(leftLabel(0, 25_000).value).toBe("No budget set in the county report");
-    expect(paymentWho("", () => ({ text: "ignored", shortened: false })).text).toBe("Not listed in the county report");
+    expect(paymentWho("", () => ({ text: "ignored", shortened: false })).text).toBe("Payee not shown in the county report");
     const collapsed = collapsePayments([
       { pay_date: "2026-04-03", amount_cents: 100, vendor_name: "", check_number: "", journal: "J1", object_code: "534000" },
       { pay_date: "2026-04-03", amount_cents: 1_248_750_000, vendor_name: "ADKINSON LAW FIRM", check_number: "1", journal: "J2", object_code: "534000" },
@@ -356,12 +356,13 @@ describe("budget pages", () => {
     expect(overview).toContain("Budget passed by commissioners");
     expect(overview).toContain("Commissioners adopted a $3,000 budget for FY2026");
     expect(overview).toContain("the county's books show");
-    expect(overview).toContain("paid out");
-    expect(overview).toContain("about $192M");
+    expect(overview).toContain("spent");
+    expect(overview).toContain("$185.4M");
+    expect(overview).not.toContain("about $192M");
     expect(overview).toContain("Resolution 2025-82");
     expect(overview).toContain("budget limit after mid-year changes");
     expect(overview).toContain("Share of the mid-year limit: 39.2%");
-    expect(overview).toContain("Paid out is 39.2% of the mid-year limit, and 96% of the year is gone.");
+    expect(overview).toContain("Spent (posted in the county&#39;s books through 9/15/2026) is 39.2% of the mid-year limit, and 96% of the year is gone.");
     expect(overview).not.toContain("under the year's progress");
     expect(overview).not.toContain("ahead of the year's progress");
     expect(overview).not.toContain("of its $3,700");
@@ -391,11 +392,11 @@ describe("budget pages", () => {
 
     const fund = await (await app.request("http://localhost/funds/111", { headers }, env)).text();
     expect(fund.indexOf("Adopted budget")).toBeLessThan(fund.indexOf("Where the money went"));
-    expect(fund).toContain("Paid out");
+    expect(fund).toContain("Spent (posted in the county&#39;s books through 9/15/2026)");
     expect(fund).not.toContain("$800</b><span>$800");
     expect(fund).toContain("Lowe&#39;s Home Centers");
     expect(fund).toContain("$500.00");
-    expect(fund).toContain("Money left");
+    expect(fund).toContain("Not yet spent or promised");
     expect(fund).toContain("$1,500");
     expect(fund).toContain("$800");
     expect(fund).toContain('href="/departments/11101000"');
@@ -443,7 +444,8 @@ describe("budget pages", () => {
     expect(most).not.toContain("SHERIF");
     const budget = await ask("What is the county budget?");
     expect(budget).toContain("Commissioners adopted a $3,000 budget");
-    expect(budget).toContain("about $192M");
+    expect(budget).toContain("$185.4M");
+    expect(budget).not.toContain("about $192M");
     expect(budget).not.toContain("current budget");
     expect(budget).not.toContain("$200M");
     expect(budget).not.toContain("$151M");
@@ -664,7 +666,7 @@ describe("expression depth, reversals, land, and the money left card", () => {
     const card = overviewHtml.slice(overviewHtml.indexOf("kpi k4"), overviewHtml.indexOf("kpi k4") + 400);
     expect(card).toContain("$169.1M");
     expect(card).not.toContain("169,117,878");
-    expect(overviewHtml).toContain("Paid out is 5.6% of the mid-year limit");
+    expect(overviewHtml).toContain("Spent (posted in the county&#39;s books through 9/15/2026) is 5.6% of the mid-year limit");
     expect(overviewHtml).not.toContain("under the year's progress");
     expect(overviewHtml).not.toContain("$663.8M");
     expect(overviewHtml).not.toContain("$468.3M");

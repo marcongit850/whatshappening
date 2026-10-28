@@ -138,7 +138,7 @@ describe("person names switch", () => {
 
     const shownDrill = await app.request("http://localhost/departments/00101000/512000/_", { headers: headers(reader.header) }, env);
     const shownDrillHtml = await shownDrill.text();
-    expect(shownDrillHtml).toContain("unmatched");
+    expect(shownDrillHtml).toContain("name from county report");
     expect(shownDrillHtml).toContain("JANE Q PUBLIC");
     expect(shownDrillHtml).toContain("JOHN Q SMITH");
     expect(shownDrillHtml).toContain("$100.00");

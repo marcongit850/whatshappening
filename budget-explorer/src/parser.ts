@@ -174,32 +174,39 @@ export function parseVendorRest(rest: string): VendorParts | null {
     checkNumber = check.check;
     tail = check.rest;
   }
-  let invoice = "";
-  let body = tail;
-  const split = gapSplit(tail);
-  if (split) {
-    invoice = split.left;
-    body = split.right;
-  } else {
-    const space = tail.indexOf(" ");
-    invoice = space > 0 ? tail.slice(0, space) : tail;
-    body = space > 0 ? tail.slice(space).trim() : "";
-  }
+  const invoicePart = takeInvoice(tail);
+  let invoice = invoicePart.field;
+  let body = invoicePart.rest;
   if (/^\d{6,9}$/.test(body) && !checkNumber) {
     checkNumber = body;
     body = "";
   }
-  let vendorName = body;
-  let description = "";
-  const named = gapSplit(body);
-  if (named) {
-    vendorName = named.left;
-    description = named.right;
-  } else if (body.length > 20) {
-    vendorName = body.slice(0, 20).trim();
-    description = body.slice(20).trim();
-  }
-  return { vendorNumber, invoice, vendorName, description, checkNumber };
+  const named = takeVendor(body);
+  return { vendorNumber, invoice, vendorName: named.field, description: named.rest, checkNumber };
+}
+
+/**
+ * The invoice column is 20 characters. A shorter invoice is padded, so a double space
+ * ends the field. An invoice that fills all 20 characters has one space, then the vendor.
+ */
+function takeInvoice(value: string): { field: string; rest: string } {
+  if (!value) return { field: "", rest: "" };
+  const split = gapSplit(value);
+  if (split && split.left.length <= 20) return { field: split.left, rest: split.right };
+  if (value.length > 20 && value[20] === " ") return { field: value.slice(0, 20).trim(), rest: value.slice(21).trim() };
+  const space = value.indexOf(" ");
+  if (space > 0) return { field: value.slice(0, space), rest: value.slice(space).trim() };
+  return { field: value.trim(), rest: "" };
+}
+
+/** The vendor column is also 20 characters, then the description. */
+function takeVendor(value: string): { field: string; rest: string } {
+  if (!value) return { field: "", rest: "" };
+  const split = gapSplit(value);
+  if (split && split.left.length <= 20) return { field: split.left, rest: split.right };
+  if (value.length > 20 && value[20] === " ") return { field: value.slice(0, 20).trim(), rest: value.slice(21).trim() };
+  if (value.length > 20) return { field: value.slice(0, 20).trim(), rest: value.slice(20).trim() };
+  return { field: value.trim(), rest: "" };
 }
 
 /**

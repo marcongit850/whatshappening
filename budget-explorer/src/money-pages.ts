@@ -62,14 +62,13 @@ ${termList(TRANSFER_TERMS)}
 
 export function reservesDocument(ledger: PublishedLedger, fundCodes: Set<string>): string {
   const reserves = ledger.reserves;
-  const months = reserves.policy.months.toFixed(1);
   return `<p class="crumb"><a href="/">Overview</a> / Savings</p>
 <h1>Savings the county held</h1>
 <p class="lead page-intro">Audited year-end balance, not a live balance. The FY2026 year-end balance will exist after the spring 2027 audit.</p>
 <section class="kpis">
 <a class="card kpi k1" href="#by-type"><div class="l">September 30, 2025</div><div class="n">${esc(moneyCompact(reserves.totalCents))}</div><div class="s">Savings in all governmental funds. A year earlier it was ${esc(moneyCompact(reserves.priorCents))}.</div></a>
 <a class="card kpi k2" href="#class-unassigned"><div class="l">Free to spend</div><div class="n">${esc(moneyCompact(reserves.classes.find((item) => item.key === "unassigned")?.cents || 0))}</div><div class="s">General Fund money with no purpose set. The rest is already spoken for.</div></a>
-<a class="card kpi k4" href="#policy"><div class="l">Policy cushion</div><div class="n">${esc(months)} mo</div><div class="s">Project calculation. The rule asks for at least two months of General Fund spending.</div></a>
+<a class="card kpi k4" href="#policy"><div class="l">Policy cushion</div><div class="n">about 5 months</div><div class="s">Project calculation. The rule asks for at least two months of General Fund spending.</div></a>
 </section>
 <section class="card" id="by-type">
 <div class="eyebrow">Audited year-end balance</div>
@@ -116,7 +115,7 @@ ${sourceLine("FY2025 audited financial report", reserves.sourceUrl, reserves.sou
 <div class="eyebrow">Project calculation</div>
 <h2>General Fund reserve policy</h2>
 <p class="figure-n">${esc(moneyCompact(reserves.policy.unrestrictedCents))}</p>
-<p class="cap">About ${esc(months)} months of General Fund spending. The rule says at least two months. This months figure is the project's calculation.</p>
+<p class="cap">About 5 months of General Fund spending. The rule says at least two months. This months figure is the project's calculation.</p>
 <p>${esc(reserves.policy.detail)}</p>
 <p>Two months of the actual spending and transfers out used here is ${esc(money(reserves.policy.twoMonthsCents))}. The policy's word "unrestricted" adds committed, assigned, and free to spend. It is wider than the free-to-spend amount alone.</p>
 ${whatIs("Fund balance", "Fund balance is the savings left in a fund at the end of the year. It is not a pile of cash you can spend tomorrow.")}
@@ -243,7 +242,10 @@ ${rows
     const a = actual(needle);
     const b = budgetItem(y2026, needle);
     const c = budgetItem(y2027, needle);
-    return `<article class="cmp"><h3>${esc(label)}</h3>${line(a?.cents, "Audited actual, FY2025")}${line(b?.cents, "Budget, FY2026")}${line(c?.cents, "Budget, FY2027")}</article>`;
+    const permitNote = label === "Permits"
+      ? `<p>FY2025 $7.41M includes $4.16M of Building Department permits. The FY2026 and FY2027 budgets show no building permit revenue, so these rows are not comparable.</p>`
+      : "";
+    return `<article class="cmp"><h3>${esc(label)}</h3>${line(a?.cents, "Audited actual, FY2025")}${line(b?.cents, "Tentative budget, FY2026")}${line(c?.cents, "Budget, FY2027")}${permitNote}</article>`;
   })
   .join("")}
 ${ledger.budgets
@@ -263,7 +265,7 @@ ${pack.aside
     (item) => `<article class="cmp"><h3>${esc(item.label)}</h3><p class="figure-n">${esc(moneyCompact(item.cents))}</p><p class="cap">Not income. ${esc(item.detail)}</p></article>`,
   )
   .join("")}
-${sourceLine(pack.fiscalYear === 2026 ? "FY2026 tentative budget in brief" : "FY2027 county revenue file", pack.sourceUrl, pack.sourcePages)}
+${sourceLine(pack.fiscalYear === 2026 ? "FY2026 tentative budget in brief" : "Agenda packet, 9/28/2026", pack.sourceUrl, pack.sourcePages)}
 </div>`;
   })
   .join("")}

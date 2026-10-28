@@ -309,9 +309,10 @@ for (const state of states) {
   const width = 720;
   const spanX = src.maxX - src.minX || 1;
   const spanY = src.maxY - src.minY || 1;
+  const topPad = state.slug === "florida" ? 36 : pad;
   const scale = (width - pad * 2) / spanX;
-  const height = Math.round(spanY * scale + pad * 2);
-  const project = ([x, y]) => [Math.round((x - src.minX) * scale + pad), Math.round((y - src.minY) * scale + pad)];
+  const height = Math.round(spanY * scale + topPad + pad);
+  const project = ([x, y]) => [Math.round((x - src.minX) * scale + pad), Math.round((y - src.minY) * scale + topPad)];
 
   const taken = new Set();
   const ordered = [...rows].sort((a, b) => {
@@ -339,14 +340,15 @@ for (const state of states) {
     if (slug === "walton") {
       const midX = Math.round((drawn.minX + drawn.maxX) / 2);
       const midY = Math.round((drawn.minY + drawn.maxY) / 2);
-      county.label = { x: midX, y: Math.max(18, drawn.minY - 6) };
-      county.hit = { cx: midX, cy: midY, r: 56 };
+      const labelY = Math.max(16, drawn.minY - 16);
+      county.label = { x: midX, y: labelY, ax: midX, ay: drawn.minY };
+      const span = Math.max(drawn.maxX - drawn.minX, drawn.maxY - drawn.minY);
+      county.hit = { cx: midX, cy: midY, r: Math.max(22, Math.round(span * 0.7)) };
     }
     counties.push(county);
   }
   counties.sort((a, b) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug));
-  const compact = state.slug === "florida" ? compactFlorida(counties) : null;
-  const payload = compact || { viewBox: `0 0 ${width} ${height}`, counties };
+  const payload = { viewBox: `0 0 ${width} ${height}`, counties };
   const file = join(countyDir, `${state.slug}.json`);
   const json = JSON.stringify(payload);
   writeFileSync(file, json);
@@ -383,100 +385,6 @@ ${mapLines}
 };
 `;
 writeFileSync(join(geoDir, "registry.ts"), registry);
-
-function decodeRings(d) {
-  const rings = [];
-  let current = null;
-  let x = 0;
-  let y = 0;
-  const re = /([MLZ])([^MLZ]*)/gi;
-  let match;
-  while ((match = re.exec(d))) {
-    const cmd = match[1].toUpperCase();
-    const nums = match[2].trim() ? match[2].trim().split(/[\s,]+/).map(Number) : [];
-    if (cmd === "M") {
-      if (current) rings.push(current);
-      x = nums[0];
-      y = nums[1];
-      current = [[x, y]];
-    } else if (cmd === "L") {
-      x += nums[0];
-      y += nums[1];
-      current.push([x, y]);
-    } else if (cmd === "Z") {
-      if (current) rings.push(current);
-      current = null;
-    }
-  }
-  if (current) rings.push(current);
-  return rings;
-}
-
-function unionBox(items) {
-  return {
-    minX: Math.min(...items.map((item) => item.box.minX)),
-    minY: Math.min(...items.map((item) => item.box.minY)),
-    maxX: Math.max(...items.map((item) => item.box.maxX)),
-    maxY: Math.max(...items.map((item) => item.box.maxY)),
-  };
-}
-
-/** Place the panhandle above the peninsula so the Gulf is not an empty hole. */
-function compactFlorida(counties) {
-  const decoded = counties.map((county) => {
-    const rings = decodeRings(county.d);
-    return { county, rings, box: bboxOf(rings) };
-  });
-  const pan = [];
-  const pen = [];
-  for (const item of decoded) {
-    const cy = (item.box.minY + item.box.maxY) / 2;
-    if (item.box.maxX < 430 && cy < 180) pan.push(item);
-    else pen.push(item);
-  }
-  if (!pan.length || !pen.length) return null;
-  const pBox = unionBox(pen);
-  const hBox = unionBox(pan);
-  const targetW = pBox.maxX - pBox.minX || 1;
-  const scale = targetW / (hBox.maxX - hBox.minX || 1);
-  const labelRoom = 56;
-  const gap = 18;
-  const panH = (hBox.maxY - hBox.minY) * scale;
-  const panTop = pBox.minY - gap - panH - labelRoom;
-  for (const item of pan) {
-    item.rings = item.rings.map((ring) => ring.map(([x, y]) => [
-      Math.round(pBox.minX + (x - hBox.minX) * scale),
-      Math.round(panTop + labelRoom + (y - hBox.minY) * scale),
-    ]));
-  }
-  const all = [...pan, ...pen];
-  for (const item of all) item.box = bboxOf(item.rings);
-  const bounds = unionBox(all);
-  const padX = 18;
-  const padTop = 36;
-  const padBottom = 16;
-  const shifted = all.map((item) => {
-    const rings = item.rings.map((ring) => ring.map(([x, y]) => [
-      x - bounds.minX + padX,
-      y - bounds.minY + padTop,
-    ]));
-    const box = bboxOf(rings);
-    const next = { ...item.county, d: encode(rings) };
-    delete next.label;
-    delete next.hit;
-    if (item.county.slug === "walton") {
-      const cx = Math.round((box.minX + box.maxX) / 2);
-      const cy = Math.round((box.minY + box.maxY) / 2);
-      next.label = { x: cx, y: Math.max(34, box.minY - 18) };
-      next.hit = { cx, cy, r: Math.max(26, Math.round(Math.max(box.maxX - box.minX, box.maxY - box.minY))) };
-    }
-    return next;
-  });
-  shifted.sort((a, b) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug));
-  const width = Math.round(bounds.maxX - bounds.minX + padX * 2);
-  const height = Math.round(bounds.maxY - bounds.minY + padTop + padBottom);
-  return { viewBox: `0 0 ${width} ${height}`, counties: shifted };
-}
 
 function ident(slug) {
   return slug.replace(/-([a-z])/g, (_m, letter) => letter.toUpperCase());

@@ -524,23 +524,37 @@ export async function organizationVendors(db: D1Database, importId: number, asOf
   const sources = VENDOR_SOURCES.map((source) => `'${source}'`).join(", ");
   const rows = await db
     .prepare(
-      `SELECT CASE WHEN vendor_number = '' THEN vendor_name ELSE vendor_number END AS vendor_key,
-              MAX(vendor_number) AS vendor_number,
-              MAX(vendor_name) AS vendor_name,
-              SUM(amount_cents) AS cents,
+      `WITH scoped AS (
+         SELECT
+           CASE WHEN trim(COALESCE(vendor_number, '')) = '' THEN vendor_name ELSE vendor_number END AS vendor_key,
+           vendor_number,
+           vendor_name,
+           amount_cents,
+           object_code
+         FROM payments
+         WHERE import_id = ?
+           AND after_cutoff = 0
+           AND pay_date <= ?
+           AND source IN (${sources})
+           AND vendor_name IS NOT NULL
+           AND trim(vendor_name) != ''
+           AND object_code != '${TRANSFER_OBJECT}'
+           AND is_person_name = 0
+           AND NOT ${CONSTITUTIONAL_SQL}
+       )
+       SELECT s.vendor_key AS vendor_key,
+              MAX(s.vendor_number) AS vendor_number,
+              (
+                SELECT s2.vendor_name FROM scoped s2
+                WHERE s2.vendor_key = s.vendor_key AND trim(COALESCE(s2.vendor_name, '')) != ''
+                ORDER BY length(trim(s2.vendor_name)) DESC, s2.vendor_name DESC
+                LIMIT 1
+              ) AS vendor_name,
+              SUM(s.amount_cents) AS cents,
               COUNT(*) AS payments,
-              SUM(CASE WHEN object_code = '561000' THEN amount_cents ELSE 0 END) AS land_cents
-       FROM payments
-       WHERE import_id = ?
-         AND after_cutoff = 0
-         AND pay_date <= ?
-         AND source IN (${sources})
-         AND vendor_name IS NOT NULL
-         AND trim(vendor_name) != ''
-         AND object_code != '${TRANSFER_OBJECT}'
-         AND is_person_name = 0
-         AND NOT ${CONSTITUTIONAL_SQL}
-       GROUP BY vendor_key
+              SUM(CASE WHEN s.object_code = '561000' THEN s.amount_cents ELSE 0 END) AS land_cents
+       FROM scoped s
+       GROUP BY s.vendor_key
        ORDER BY cents DESC
        LIMIT ?`,
     )
@@ -579,7 +593,7 @@ export async function landSpendByMonth(db: D1Database, importId: number, asOf: s
       `SELECT substr(pay_date, 1, 7) AS ym, SUM(amount_cents) AS cents
        FROM payments
        WHERE import_id = ? AND after_cutoff = 0 AND pay_date <= ?
-         AND object_code = '561000' AND source NOT IN ('GEN','GCR')
+         AND object_code = '561000'
        GROUP BY ym`,
     )
     .bind(importId, cutoffDate(asOf))
@@ -587,18 +601,48 @@ export async function landSpendByMonth(db: D1Database, importId: number, asOf: s
   return (rows.results || []).filter((row) => row.ym).map((row) => ({ ym: row.ym, cents: Number(row.cents) }));
 }
 
-export async function landSpendByDept(db: D1Database, importId: number, asOf: string): Promise<Map<string, number>> {
+/** Account year-to-date for Land (561000), including journal lines. Matches the department page and the county report. */
+export async function landSpendByDept(db: D1Database, importId: number, _asOf: string): Promise<Map<string, number>> {
   const rows = await db
     .prepare(
-      `SELECT dept_code, SUM(amount_cents) AS cents
-       FROM payments
-       WHERE import_id = ? AND after_cutoff = 0 AND pay_date <= ?
-         AND object_code = '561000' AND source NOT IN ('GEN','GCR')
+      `SELECT dept_code, SUM(ytd_cents) AS cents
+       FROM accounts
+       WHERE import_id = ? AND object_code = '561000'
        GROUP BY dept_code`,
     )
-    .bind(importId, cutoffDate(asOf))
+    .bind(importId)
     .all<{ dept_code: string; cents: number }>();
   return new Map((rows.results || []).map((row) => [row.dept_code, Number(row.cents)]));
+}
+
+/** Board budget releases to the Sheriff, vendor 000400, including descriptions such as OCT25 BUDGET R. */
+export async function sheriffReleaseByMonth(db: D1Database, importId: number, asOf: string): Promise<{ ym: string; cents: number }[]> {
+  const rows = await db
+    .prepare(
+      `SELECT substr(pay_date, 1, 7) AS ym, SUM(amount_cents) AS cents
+       FROM payments
+       WHERE import_id = ? AND after_cutoff = 0 AND pay_date <= ?
+         AND (
+           vendor_number = '000400'
+           OR vendor_number = '400'
+           OR (
+             fund_code = '107'
+             AND upper(COALESCE(description, '')) LIKE '%BUDGET R%'
+           )
+         )
+       GROUP BY ym`,
+    )
+    .bind(importId, cutoffDate(asOf))
+    .all<{ ym: string; cents: number }>();
+  return (rows.results || []).filter((row) => row.ym).map((row) => ({ ym: row.ym, cents: Number(row.cents) }));
+}
+
+export async function afterCutoffCents(db: D1Database, importId: number): Promise<number> {
+  const row = await db
+    .prepare("SELECT COALESCE(SUM(amount_cents), 0) AS cents FROM payments WHERE import_id = ? AND after_cutoff = 1")
+    .bind(importId)
+    .first<{ cents: number }>();
+  return Number(row?.cents || 0);
 }
 
 export async function monthlyCents(db: D1Database, importId: number): Promise<{ ym: string; cents: number }[]> {

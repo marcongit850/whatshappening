@@ -1025,7 +1025,7 @@ function buildIncome(revenue: unknown): { totalCents: number; income: AmountItem
       label: "Permits and licenses",
       dollars: permits,
       status: "Audited actual",
-      detail: `Permits and licenses total ${dollars(permits)}. Building Department permits are ${dollars(buildingPermits)} of that, in the smaller funds. Beach vending is not its own line in the audit. The FY2027 budget lists it separately below.`,
+      detail: `Permits and licenses total ${dollars(permits)}. FY2025 $7.41M includes $4.16M of Building Department permits (${dollars(buildingPermits)}). The FY2026 and FY2027 budgets show no building permit revenue, so these rows are not comparable. Beach vending is not its own line in the audit. The FY2027 budget lists it separately below.`,
     },
     {
       key: "other-taxes",
@@ -1233,7 +1233,7 @@ function buildBudgets(revenue: unknown): BudgetYear[] {
   const grouped2027 = new Map<string, { cents: number; income: boolean }>();
   for (const item of rollup.income) grouped2027.set(item.label, { cents: item.cents, income: true });
   for (const item of rollup.notIncome) grouped2027.set(item.label, { cents: item.cents, income: false });
-  const year2027 = budgetYear(2027, "Budget", adopted2027.amount * 100, adopted2027.amount * 100, str(fy2027.source, "FY2027 source"), "", grouped2027, "This is the adopted FY2027 budget, built from the county revenue file. Transfers between funds and the self-insurance fund are left out. The file then matches the adopted total to the dollar. These figures are a budget, not money already collected. Savings brought forward are shown apart from income.");
+  const year2027 = budgetYear(2027, "Budget", adopted2027.amount * 100, adopted2027.amount * 100, str(fy2027.source, "FY2027 source"), "", grouped2027, "Adopted at the September 28, 2026 hearing. The figure is from the county's agenda packet. The signed resolution is not posted yet.");
   return [year2026, year2027];
 }
 
@@ -1546,7 +1546,7 @@ function buildReserves(reserves: unknown, revenue: unknown): PublishedLedger["re
       twoMonthsCents: twoMonths * 100,
       spendingCents: spending * 100,
       sourceUrl: str(policy.source, "policy source"),
-      detail: `Resolution 2012-59 says the General Fund should hold at least two months of that fund's budgeted spending and transfers out. Unrestricted, in that policy, means committed plus assigned plus free to spend. That was ${dollars(unrestricted)}, about ${computedMonths.toFixed(1)} months of actual spending and transfers out. The months figure is the project's calculation. The policy says to use the budget, and this calculation uses actual spending.`,
+      detail: `Resolution 2012-59 says the General Fund should hold at least two months of that fund's budgeted spending and transfers out. Unrestricted, in that policy, means committed plus assigned plus free to spend. That was ${dollars(unrestricted)}, about 5 months of actual spending and transfers out. The months figure is the project's calculation. The policy says to use the budget, and this calculation uses actual spending.`,
     },
     sheriff: {
       dueCents: due * 100,

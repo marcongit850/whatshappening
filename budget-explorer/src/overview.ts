@@ -3,8 +3,26 @@ import { pace, type Pace } from "./format";
 /** Departments that move money between funds. Left out of the pace chart. */
 export function isTransferDepartment(reportName: string, chartName = ""): boolean {
   const blob = `${reportName} ${chartName}`.toUpperCase();
-  return blob.includes("INTERFUND") || blob.includes("GROUP TRAN");
+  if (blob.includes("INTERFUND") || blob.includes("GROUP TRAN")) return true;
+  return blob.includes("SOLID WASTE") && blob.includes("TRANSFER");
 }
+
+/** Fund 107 and the Sheriff department. The report shows Board releases, not Sheriff spending. */
+export function isSheriffRelease(name: string, fundCode = ""): boolean {
+  if (fundCode === "107") return true;
+  const blob = name.toUpperCase();
+  return blob.includes("SHERIFF") || blob.includes("FINE & FORFEITURE") || blob.includes("FINE AND FORFEITURE");
+}
+
+/** Clerk of Court and Tax Collector are paid on a schedule. */
+export function isScheduledOffice(name: string): boolean {
+  const blob = name.toUpperCase();
+  return blob.includes("CLERK OF COURT") || blob.includes("CLERK OF THE COURT") || blob.includes("TAX COLLECTOR");
+}
+
+export const SHERIFF_FUND_LABEL = "Fine and Forfeiture fund (pays the Sheriff)";
+export const SHERIFF_FUND_CAPTION =
+  "The county report shows the Board's monthly budget releases to the Sheriff. It does not show the Sheriff's own spending.";
 
 /**
  * Sheriff, Clerk, Property Appraiser, and Supervisor of Elections.
@@ -20,7 +38,7 @@ export function isCountyOfficeVendor(name: string): boolean {
   if (!normalized.startsWith("WALTON COUNTY")) return false;
   const rest = normalized.slice("WALTON COUNTY".length).trim();
   if (!rest) return true;
-  return /^(SHERIF|PROPER|PROPERTY|APPRAIS|TAX|CLERK|SUPERVIS|ELECTION|BOARD|COMMISSION|BCC)\b/.test(rest);
+  return /^(SHERIF|PROPER|PROPERTY|APPRAIS|TAX|CLERK|SUPERV|ELECTION|BOARD|COMMISSION|BCC)/.test(rest);
 }
 
 export function isConstitutionalOffice(name: string): boolean {
@@ -42,7 +60,7 @@ export const CONSTITUTIONAL_SQL = `(
       OR upper(vendor_name) LIKE 'WALTON COUNTY APPRAIS%'
       OR upper(vendor_name) LIKE 'WALTON COUNTY TAX%'
       OR upper(vendor_name) LIKE 'WALTON COUNTY CLERK%'
-      OR upper(vendor_name) LIKE 'WALTON COUNTY SUPERVIS%'
+      OR upper(vendor_name) LIKE 'WALTON COUNTY SUPERV%'
       OR upper(vendor_name) LIKE 'WALTON COUNTY ELECTION%'
       OR upper(vendor_name) LIKE 'WALTON COUNTY BOARD%'
       OR upper(vendor_name) LIKE 'WALTON COUNTY COMMISSION%'

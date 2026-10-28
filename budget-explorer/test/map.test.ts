@@ -34,6 +34,13 @@ describe("census map geometry", () => {
     expect(countyHref(countyByPath("florida", "walton")!)).toBe("/walton");
     expect(countyByPath("florida", "okaloosa")?.live).toBe(false);
     expect(countyHref(countyByPath("florida", "okaloosa")!)).toBe("/florida/okaloosa");
+    const [boxW, boxH] = florida.viewBox.replace("0 0 ", "").split(" ").map(Number);
+    expect(boxW).toBeGreaterThan(boxH);
+    const walton = florida.counties.find((county) => county.slug === "walton");
+    const monroe = florida.counties.find((county) => county.slug === "monroe");
+    expect(walton?.label?.ax).toBeTypeOf("number");
+    expect(walton?.hit?.r).toBeGreaterThan(10);
+    expect((monroe?.d.length || 0)).toBeGreaterThan(80);
     for (const slug of ["texas", "alaska", "hawaii", "louisiana", "virginia", "district-of-columbia"]) {
       expect(COUNTY_MAPS[slug], slug).toBeUndefined();
       expect(countiesIn(slug), slug).toEqual([]);
