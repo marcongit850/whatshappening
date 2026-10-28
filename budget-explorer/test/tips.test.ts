@@ -1,7 +1,7 @@
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { infoTip } from "../src/format";
-import { CLIENT_JS } from "../src/style";
+import { CLIENT_JS, CSS } from "../src/style";
 
 const HARNESS = `
 const listeners = { document: Object.create(null), window: Object.create(null) };
@@ -242,6 +242,24 @@ describe("info tip markup", () => {
     expect(html).not.toContain('aria-expanded="true"');
     expect(html).not.toMatch(/\u2014|\u2013/);
     expect(infoTip("empty", "n/a")).toBe("");
+  });
+});
+
+describe("info tip css", () => {
+  it("keeps a closed tip hidden when a card legend span is display flex", () => {
+    const hidden = CSS.match(/\.tip-pop\[hidden\]\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(hidden).toMatch(/display:\s*none\s*!important/);
+    const legend = CSS.match(/\.card \.legend span[^{]*\{/)?.[0] ?? "";
+    expect(legend).toContain(":not(.tip)");
+    expect(legend).toContain(":not(.tip-pop)");
+    const button = CSS.match(/\.tip-btn \{[^}]+\}/)?.[0] ?? "";
+    expect(button).toContain("width: 20px");
+    expect(button).toContain("height: 20px");
+    const hit = CSS.match(/\.tip-btn::after \{[^}]+\}/)?.[0] ?? "";
+    expect(hit).toContain("width: 44px");
+    expect(hit).toContain("height: 44px");
+    expect(CSS).not.toMatch(/\.tip[^{]*:hover[^{]*\.tip-pop/);
+    expect(CSS).not.toMatch(/:focus-within[^{]*\.tip-pop/);
   });
 });
 

@@ -400,6 +400,41 @@ describe("overview dashboard", () => {
   });
 });
 
+describe("Ask AI header link", () => {
+  it("points every dashboard page at the question box and highlights Ask AI there", async () => {
+    const { raw, db } = openDb();
+    seed(raw);
+    const env = envFor(db, []);
+    const session = await signed();
+    const headers = { cookie: session.header };
+    const paths = ["/", "/vendors", "/search", "/revenue", "/reserves", "/about"];
+    for (const path of paths) {
+      const response = await app.request(`http://localhost${path}`, { headers }, env);
+      expect(response.status, path).toBe(200);
+      const html = await response.text();
+      const nav = html.slice(html.indexOf('aria-label="Primary"'), html.indexOf("</nav>"));
+      expect(nav, path).toContain('href="/ask">Ask AI</a>');
+      expect(nav, path).not.toContain('class="on" href="/ask"');
+      expect(nav.indexOf('href="/about">About</a>'), path).toBeLessThan(nav.indexOf('href="/ask">Ask AI</a>'));
+      expect(nav.indexOf('href="/ask">Ask AI</a>'), path).toBeLessThan(nav.indexOf(">Log out<"));
+      expect(nav, path).not.toContain(">Admin<");
+      expect(nav, path).not.toMatch(/\u2014|\u2013/);
+      const footer = html.slice(html.indexOf("<footer"));
+      expect(footer, path).not.toContain("Ask AI");
+    }
+
+    const ask = await (await app.request("http://localhost/ask", { headers }, env)).text();
+    const askNav = ask.slice(ask.indexOf('aria-label="Primary"'), ask.indexOf("</nav>"));
+    expect(askNav).toContain('class="on" href="/ask">Ask AI</a>');
+    expect(askNav.indexOf('href="/about">About</a>')).toBeLessThan(askNav.indexOf('class="on" href="/ask">Ask AI</a>'));
+    expect(askNav.indexOf('class="on" href="/ask">Ask AI</a>')).toBeLessThan(askNav.indexOf(">Log out<"));
+    expect(ask).toContain('id="question"');
+    expect(ask).toContain("<h1>Ask a question</h1>");
+    expect(ask.slice(ask.indexOf("<footer"))).not.toContain("Ask AI");
+    expect(ask).not.toMatch(/\u2014|\u2013/);
+  });
+});
+
 describe("vendors who were paid", () => {
   it("lists vendors and opens one vendor without people, offices, or lines after the cutoff", async () => {
     const { raw, db } = openDb();
@@ -638,7 +673,7 @@ describe("question facts", () => {
 describe("ranked bar alignment", () => {
   it("lines up bar tracks at 1280 and 390", async () => {
     const { mkdirSync } = await import("node:fs");
-    const { chromium } = await import("playwright-core");
+    const { chromium } = await import("playwright");
     const { raw, db } = openDb();
     seed(raw);
     const env = envFor(db, []);

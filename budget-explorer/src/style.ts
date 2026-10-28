@@ -317,7 +317,8 @@ a.card:hover { border-color: #cfc6b4; }
 .g3 { grid-template-columns: 2fr 1fr; }
 .grid2b { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; margin-bottom: 24px; min-width: 0; }
 .card .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 15px; color: var(--muted); margin: -6px 0 20px; }
-.card .legend span { display: flex; align-items: center; gap: 8px; }
+/* Color swatches only. .tip and .tip-pop stay out so display cannot force a closed popup open. */
+.card .legend span:not(.tip):not(.tip-pop) { display: flex; align-items: center; gap: 8px; }
 .card .legend i { width: 16px; height: 12px; border-radius: 3px; display: inline-block; }
 .swatch-enc { background: repeating-linear-gradient(135deg, var(--teal3) 0 4px, #d4e6e9 4px 8px); }
 .swatch-hatch { background: repeating-linear-gradient(135deg, #777 0 3px, #eee 3px 7px); }
@@ -511,7 +512,7 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
   box-shadow: 0 10px 28px rgba(14, 26, 35, 0.28);
   white-space: normal;
 }
-.tip-pop[hidden] { display: none; }
+.tip-pop[hidden] { display: none !important; }
 .kpi .l, .metric-label { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; }
 .kpi a.n { color: inherit; text-decoration: none; display: block; }
 .reserve-name a, a.reserve-amt { color: inherit; text-decoration: none; }
