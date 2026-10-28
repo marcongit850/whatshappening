@@ -45,7 +45,9 @@ import {
   fundNameMap,
   fundRollups,
   getImport,
+  afterCutoffCents,
   landSpendByDept,
+  sheriffReleaseByMonth,
   landSpendByMonth,
   latestPublished,
   listImports,
@@ -204,7 +206,7 @@ app.get("/", async (c) => {
   if (!current) return c.html(renderEmpty(session.csrf, isAdmin(c), c.get("showNames")));
   const showNames = c.get("showNames");
   const asOf = current.data_as_of || "";
-  const [departments, names, funds, rollups, months, vendors, officeCents, landMonths, landDepts, platMonths, facts, vendorNames, ledger] = await Promise.all([
+  const [departments, names, funds, rollups, months, vendors, officeCents, landMonths, landDepts, sheriffMonths, laterCents, platMonths, facts, vendorNames, ledger] = await Promise.all([
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
@@ -214,6 +216,8 @@ app.get("/", async (c) => {
     constitutionalTransferCents(c.env.DB, current.id, asOf),
     landSpendByMonth(c.env.DB, current.id, asOf),
     landSpendByDept(c.env.DB, current.id, asOf),
+    sheriffReleaseByMonth(c.env.DB, current.id, asOf),
+    afterCutoffCents(c.env.DB, current.id),
     monthlyParts(c.env.DB, current.id, asOf, "114"),
     loadBudgetFacts(c.env.DB, current.id),
     loadVendorNames(c.env.DB, current.id),
@@ -231,6 +235,8 @@ app.get("/", async (c) => {
       officeCents,
       landByMonth: landMonths,
       landByDept: landDepts,
+      sheriffByMonth: sheriffMonths,
+      afterCutoffCents: laterCents,
       platMonths,
       facts,
       displayName: buildVendorIndex(vendorNames),

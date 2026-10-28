@@ -40,7 +40,6 @@ export function renderPublicHome(): string {
 <p class="eyebrow">County budgets, in plain words</p>
 <h1>See how your county spends your tax dollars</h1>
 <p class="explainer">Pick a state. Then pick a county. When a county is live, you can read the budget it passed and the money it has paid out.</p>
-<p class="caption">One county at a time. Walton County, Florida is the one live county today.</p>
 ${pickerForm()}
 </div>
 ${stateMap()}
@@ -48,7 +47,6 @@ ${stateMap()}
 <main><div class="door-wrap">
 <section class="door-section" id="what">
 <h2>What you can see</h2>
-<p class="caption">These are the pages on a live county. No other county has them yet.</p>
 <div class="see-grid">
 <article class="info-card">
 <h3>Budget and spending</h3>
@@ -74,7 +72,6 @@ ${stateMap()}
 </section>
 <section class="door-section" id="how">
 <h2>How it works</h2>
-<p class="caption">Public records only. Nothing here is made up.</p>
 <div class="steps">
 <article class="step"><b>1. Public records</b><p class="caption">A live page is built from budget records the county has already published.</p></article>
 <article class="step"><b>2. Plain words</b><p class="caption">The same records are shown in large type, with short labels.</p></article>
@@ -83,12 +80,10 @@ ${stateMap()}
 </section>
 <section class="door-section" id="trust">
 <h2>Built from public records</h2>
-<p class="body-copy">Built from public records. Unofficial. No county seal used.</p>
 <p class="caption">This is not a county website and it is not endorsed by a county government. Walton County figures come from public records provided by the Walton County Clerk and Comptroller.</p>
 </section>
 <section class="door-section" id="coming">
 <h2>Coming to your county</h2>
-<p class="body-copy">The same kind of page can be built for another county from its public records. Tell us which county you want to see.</p>
 <p class="coming-cta"><a class="btn gold" href="/request">Request your county</a></p>
 </section>
 </div></main>`,
@@ -108,7 +103,7 @@ export function renderStatePage(state: UsState): string {
     body: `<section class="door-hero florida-hero" id="content"><div class="door-wrap florida-wrap">
 <p class="eyebrow">${esc(state.name)}</p>
 <h1>${esc(title)}</h1>
-<p class="explainer">${esc(stateIntro(state))}</p>
+${stateIntro(state) ? `<p class="explainer">${esc(stateIntro(state))}</p>` : ""}
 <div class="map-card florida-map">
 ${countyMap(state)}
 <p class="caption map-note">Walton County is marked. The other counties are outlines.</p>
@@ -137,7 +132,6 @@ export function renderAboutSite(): string {
 <section class="door-section">
 <h2>What is live</h2>
 <p class="body-copy">${esc(liveCountyLine())} The Walton County pages use public records provided by the Walton County Clerk and Comptroller. Access is currently private. No other county has budget pages yet.</p>
-<p class="caption">Built from public records. Unofficial. No county seal used.</p>
 </section>
 <section class="door-section">
 <h2>What a live county shows</h2>
@@ -193,13 +187,12 @@ export function renderWaltonLanding(formToken: string): string {
     body: `<section class="door-hero" id="content"><div class="door-wrap">
 <p class="eyebrow">Walton County, Florida</p>
 <h1>Walton County budget</h1>
-<p class="explainer">This is an unofficial look at how Walton County spends county money. It is built from public records provided by the Walton County Clerk and Comptroller. It is not a county website. Access is currently private.</p>
+<p class="explainer">It is built from public records provided by the Walton County Clerk and Comptroller.</p>
 <p class="caption">A password is required before any county figures are shown.</p>
 </div></section>
 <main><div class="door-wrap">
 <section class="door-section">
 <h2>Sign in</h2>
-<p class="caption">One shared password opens the Walton County pages.</p>
 <form class="door-login" method="post" action="/walton/login" data-busy>
 <input type="hidden" name="next" value="/walton">
 <input type="hidden" name="form_token" value="${esc(formToken)}">
@@ -248,9 +241,7 @@ function stateDescription(state: UsState): string {
 }
 
 function stateIntro(state: UsState): string {
-  if (state.slug === "florida") {
-    return "Walton County is live. Open it to read the budget, the spending, the income, and the savings. Every other Florida county is coming soon.";
-  }
+  if (state.slug === "florida") return "";
   return `${state.name} does not have county budget pages yet.`;
 }
 
@@ -271,7 +262,6 @@ function stateOptions(): string {
 function pickerForm(): string {
   return `<form class="picker" id="picker" method="get" action="/pick">
 <h2>Pick a state</h2>
-<p class="caption">Choose a state and press Go. The county choice is only for Florida.</p>
 <div>
 <label for="pick-state">State</label>
 <select id="pick-state" name="state" required>
@@ -503,12 +493,10 @@ ${json}
 </head>
 <body class="door">
 <a class="skip" href="#content">Skip to content</a>
-<div class="door-note">Unofficial. Not a county website.</div>
 <header class="door-bar"><div class="door-wrap bar-inner">
 <a class="door-brand" href="/">How They Spend My Taxes</a>
 <nav class="door-nav" aria-label="Primary">
 <a class="door-bar-link" href="/#picker">Pick a state</a>
-<a class="door-bar-link" href="/florida">Florida</a>
 <a class="door-bar-link" href="/about-this-site">About</a>
 </nav>
 </div></header>
@@ -553,7 +541,6 @@ function stateMap(): string {
 <div class="map-legend"><span class="swatch live"></span> Live <span class="swatch soon"></span> Coming soon</div>
 <p class="map-label" data-map-label data-default="Florida is live. Other states are coming soon.">Florida is live. Other states are coming soon.</p>
 <p class="map-action"><a class="btn gold" id="map-open" href="/florida">Open Florida</a></p>
-<p class="caption map-note">Alaska and Hawaii are shown as insets. The District of Columbia is enlarged at the right. On a phone, tap a state, then Open.</p>
 </div>`;
 }
 
@@ -581,7 +568,7 @@ function countyMap(state: UsState): string {
       const name = county?.name || shape.name;
       const hit = shape.hit ? `<circle class="hit" cx="${shape.hit.cx}" cy="${shape.hit.cy}" r="${shape.hit.r}"></circle>` : "";
       const label = shape.label
-        ? `<text class="place-label" font-size="30" x="${shape.label.x}" y="${shape.label.y}" text-anchor="middle">Walton</text>`
+        ? `${shape.label.ax != null && shape.label.ay != null ? `<line class="place-leader" x1="${shape.label.x}" y1="${shape.label.y + 4}" x2="${shape.label.ax}" y2="${shape.label.ay}"></line>` : ""}<text class="place-label" font-size="18" x="${shape.label.x}" y="${shape.label.y}" text-anchor="middle">Walton</text>`
         : "";
       return `<a class="live" href="${esc(county?.href || "/walton")}" aria-label="${esc(name)}, live"><title>${esc(name)}, live</title><path fill-rule="evenodd" d="${shape.d}"></path>${hit}${label}</a>`;
     })

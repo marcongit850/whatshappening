@@ -5,7 +5,6 @@ import { LIMIT_GROWTH_NOTE } from "./answers";
 import type { QaRecord } from "./qa";
 import {
   PACE_LABEL,
-  PACE_PILL,
   Pace,
   accountKey,
   displayDate,
@@ -20,9 +19,23 @@ import {
   nameFor,
   pace,
   pct,
+  spentTerm,
 } from "./format";
 import { fundSavings, incomeCard, reservesDocument, reservesEmpty, revenueDocument, revenueEmpty } from "./money-pages";
-import { FUND_COLORS, axisPercent, fundSlices, isCountyOfficeVendor, isTransferDepartment, lookPicks, paceDepartments, type SpendRow } from "./overview";
+import {
+  FUND_COLORS,
+  SHERIFF_FUND_CAPTION,
+  SHERIFF_FUND_LABEL,
+  axisPercent,
+  fundSlices,
+  isCountyOfficeVendor,
+  isScheduledOffice,
+  isSheriffRelease,
+  isTransferDepartment,
+  lookPicks,
+  paceDepartments,
+  type SpendRow,
+} from "./overview";
 import type { AmountItem, PublishedLedger, ReserveFund } from "./published";
 import { mergeVendorSpend, titleCaseVendor, type VendorLabel } from "./vendors";
 
@@ -64,9 +77,7 @@ export function page(opts: ShellOpts): string {
     !opts.bare && opts.csrf
       ? `<form method="post" action="/logout" style="display:inline"><input type="hidden" name="csrf" value="${esc(opts.csrf)}"><button class="linkish" type="submit">Log out</button></form>`
       : "";
-  const payrollFooter = opts.showNames
-    ? "Payroll rows can include employee names and individual pay."
-    : "Payroll is shown as batch totals. Person names and individual pay are hidden.";
+  const payrollFooter = "Payroll lines in this report are batch totals. No employee names appear.";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -103,11 +114,20 @@ function metric(label: string, value: string, note: string): string {
 }
 
 function badge(unmatched: boolean): string {
-  return unmatched ? `<span class="tag">unmatched</span>` : "";
+  return unmatched ? `<span class="tag">name from county report</span>` : "";
 }
 
-function pill(status: Pace): string {
-  return `<span class="pill ${status}" title="${esc(PACE_LABEL[status])}">${PACE_PILL[status]}</span>`;
+function pill(status: Pace, text = PACE_LABEL[status], klass: Pace = status): string {
+  return `<span class="pill ${klass}" title="${esc(text)}">${esc(text)}</span>`;
+}
+
+function statusView(name: string, fundCode: string, status: Pace, chartName = ""): { text: string; klass: Pace } {
+  if (isTransferDepartment(name, chartName)) return { text: "Transfer, not spending", klass: "gray" };
+  if (isSheriffRelease(name, fundCode) && (status === "green" || status === "yellow")) {
+    return { text: "Releases to the Sheriff", klass: "gray" };
+  }
+  if (isScheduledOffice(name) && status === "yellow") return { text: "Paid on schedule", klass: "green" };
+  return { text: PACE_LABEL[status], klass: status };
 }
 
 function plainDate(iso: string | null | undefined): string {
@@ -123,10 +143,10 @@ function limitNote(facts: BudgetFacts): string {
 }
 
 /** Short figure for the overview card. Full dollars stay in the count section. */
-function kpiLeftValue(revCents: number, ytdCents: number): string {
-  const left = leftLabel(revCents, ytdCents);
+function kpiLeftValue(revCents: number, ytdCents: number, encCents = 0): string {
+  const left = leftLabel(revCents, ytdCents, encCents);
   if (left.unbudgeted) return left.value;
-  return moneyCompact(Math.abs(revCents - ytdCents));
+  return moneyCompact(Math.abs(revCents - ytdCents - Math.max(encCents, 0)));
 }
 
 function capitalObjectName(code: string, title: string | null): string {
@@ -223,6 +243,9 @@ function deptName(row: { code: string; report_name?: string | null }, names: Nam
 }
 
 function fundLabel(code: string, report: string, names: NameMaps): { primary: string; unmatched: boolean } {
+  if (code === "107" || isSheriffRelease(report, code)) {
+    return { primary: SHERIFF_FUND_LABEL, unmatched: false };
+  }
   const named = nameFor(names.fund.get(code), report, code);
   return { ...named, primary: readableLabel(named.primary) };
 }
@@ -269,6 +292,8 @@ export function renderOverview(opts: {
   officeCents: number;
   landByMonth: { ym: string; cents: number }[];
   landByDept: Map<string, number>;
+  sheriffByMonth?: { ym: string; cents: number }[];
+  afterCutoffCents?: number;
   platMonths: MonthParts[];
   facts: BudgetFacts;
   displayName: (raw: string) => VendorLabel;
@@ -281,9 +306,10 @@ export function renderOverview(opts: {
   const facts = opts.facts;
   const limitShare = facts.spentOfCurrentPct;
   const yearShown = Math.round(fiscal.elapsedPct);
+  const spentLabel = spentTerm(opts.row.data_as_of);
   const paceSentence =
     facts.current > 0
-      ? `Paid out is ${limitShare.toFixed(1)}% of the mid-year limit, and ${yearShown}% of the year is gone.`
+      ? `${spentLabel} is ${limitShare.toFixed(1)}% of the mid-year limit, and ${yearShown}% of the year is gone.`
       : "No mid-year limit is set in the county report.";
   const fundRows = opts.funds.map((fund) => netSpendRow(fund.code, fund.code, fund.report_name, fund));
   const deptRows: SpendRow[] = opts.departments.map((dept) => netSpendRow(dept.code, dept.fund_code, dept.report_name, dept));
@@ -306,7 +332,7 @@ ${askBox(opts.csrf)}
 <section class="hero">
 <div>
 <div class="eyebrow">Fiscal year ${esc(fiscal.fyLabel)} &middot; Oct 1, ${esc(fiscal.fyStart.slice(0, 4))} to Sep 30, ${esc(fiscal.fyEnd.slice(0, 4))}</div>
-<h1>Commissioners adopted a ${esc(moneyCompact(facts.adopted))} budget for FY${esc(fiscal.fyLabel)}. Through ${esc(plainDate(opts.row.data_as_of))} the county's books show <em><a href="/search">${esc(moneyCompact(facts.spent))}</a></em> paid out.</h1>
+<h1>Commissioners adopted a ${esc(moneyCompact(facts.adopted))} budget for FY${esc(fiscal.fyLabel)}. Through ${esc(plainDate(opts.row.data_as_of))} the county's books show <em><a href="/search">${esc(moneyCompact(facts.spent))}</a></em> spent.</h1>
 <p class="lead">From the county's year to date report. These totals leave out money moved between county funds.</p>
 ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 </div>
@@ -317,7 +343,7 @@ ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 <div class="added" style="width:${addedWidth.toFixed(2)}%"></div>
 <i class="paid" style="left:${paidMark.toFixed(2)}%"></i>
 </div>
-<div class="legend"><span><i style="background:var(--teal)"></i>Adopted budget</span><span><i style="background:#d5e4e8"></i>Added to the limit</span><span><i style="background:var(--ink)"></i>Paid out</span></div>
+<div class="legend"><span><i style="background:var(--teal)"></i>Adopted budget</span><span><i style="background:#d5e4e8"></i>Added to the limit</span><span><i style="background:var(--ink)"></i>${esc(spentLabel)}</span></div>
 <p class="cap">Share of the mid-year limit: ${limitShare.toFixed(1)}%. The limit is a ceiling, not a spending plan.</p>
 <div class="row"><div class="t"><span>Year gone (day ${fiscal.elapsedDays} of ${fiscal.totalDays})</span><b>${fiscal.elapsedPct.toFixed(1)}%</b></div><div class="meter"><div style="width:${Math.min(fiscal.elapsedPct, 100).toFixed(2)}%;background:var(--gold)"></div></div></div>
 <p class="note">${esc(paceSentence)} Another ${esc(moneyCompact(facts.encumbered))} is promised but not paid yet.</p>
@@ -325,11 +351,11 @@ ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 </section>
 <section class="kpis">
 <a class="card kpi k1" href="/departments"><div class="l">Budget passed by commissioners</div><div class="n">${esc(moneyCompact(facts.adopted))}</div><div class="s">The budget the commissioners voted on</div></a>
-<a class="card kpi k2" href="/search"><div class="l">Paid out</div><div class="n">${esc(moneyCompact(facts.spent))}</div><div class="s">Share of the mid-year limit: ${limitShare.toFixed(1)}%</div></a>
+<a class="card kpi k2" href="/search"><div class="l">${esc(spentLabel)}</div><div class="n">${esc(moneyCompact(facts.spent))}</div><div class="s">Share of the mid-year limit: ${limitShare.toFixed(1)}%</div></a>
 <a class="card kpi k3" href="/departments?sort=enc"><div class="l">Promised, not paid</div><div class="n">${esc(moneyCompact(facts.encumbered))}</div><div class="s">Committed to open orders and contracts</div></a>
-<a class="card kpi k4" href="/departments?sort=avail"><div class="l">${esc(leftLabel(facts.current, facts.spent).title)}</div><div class="n">${esc(kpiLeftValue(facts.current, facts.spent))}</div><div class="s">Budget limit after mid-year changes ${esc(moneyCompact(facts.current))}</div></a>
+<a class="card kpi k4" href="/departments?sort=avail"><div class="l">${esc(leftLabel(facts.current, facts.spent, facts.encumbered).title)}</div><div class="n">${esc(kpiLeftValue(facts.current, facts.spent, facts.encumbered))}</div><div class="s">Mid-year limit minus paid out minus open orders. This matches the county's own Available Budget.</div></a>
 </section>
-${countCard(facts)}
+${countCard(facts, opts.row.data_as_of)}
 <section class="grid2 spend-row">
 <div class="card">
 <div class="eyebrow">By fund</div>
@@ -340,7 +366,7 @@ ${fundBars(slices)}
 </div>
 <div class="card">
 <div class="eyebrow">Share of spending</div>
-<h2>Who spends the most</h2>
+<h2>Where the money goes</h2>
 <p class="cap">Each fund's share of the ${esc(moneyCompact(facts.spent))} spent so far. Money moved between funds is not in this chart.</p>
 ${shareDonut(slices, facts.spent)}
 </div>
@@ -348,14 +374,14 @@ ${incomeCard(opts.income?.items ?? null, opts.income?.totalCents ?? 0)}
 </section>
 ${paceSection(paced, opts, fiscal.elapsedPct, facts.transfer, deptLabels)}
 <section class="grid2b">
-${monthCard(fyMonths, monthIndex, opts.landByMonth, opts.row)}
+${monthCard(fyMonths, monthIndex, opts.landByMonth, opts.sheriffByMonth || [], opts.row)}
 ${vendorCard(opts.vendors, opts.officeCents, facts.transfer, fiscal, opts.displayName)}
 </section>
 <section class="grid2 g3">
 ${lookCard(looks)}
 ${platCard(opts.funds, opts.names, fyMonths, platIndex, opts.row.data_as_of || "")}
 </section>
-<p class="sources"><b>Sources.</b> Walton County year to date budget report, data as of ${esc(displayDate(opts.row.data_as_of))}, as provided by the Walton County Clerk and Comptroller. Money moved between county funds is shown on its own and is not included in the spent total. ${opts.row.after_cutoff_count === 1 ? "1 payment line" : `${opts.row.after_cutoff_count.toLocaleString("en-US")} payment lines`} dated after ${esc(displayDate(opts.row.data_as_of))} ${opts.row.after_cutoff_count === 1 ? "is" : "are"} left out of the monthly chart and vendor totals.</p>`;
+<p class="sources"><b>Sources.</b> Walton County year to date budget report, data as of ${esc(displayDate(opts.row.data_as_of))}, as provided by the Walton County Clerk and Comptroller. Money moved between county funds is shown on its own and is not included in the spent total. ${laterLinesSentence(opts.row, opts.afterCutoffCents || 0)}</p>`;
   return page({
     title: "Overview. Budget Explorer",
     active: "overview",
@@ -448,6 +474,7 @@ function paceSection(
   const list = rows
     .map((row) => {
       const status = pace(row.rev_cents, row.ytd_cents, row.enc_cents, elapsedPct);
+      const shown = statusView(row.report_name, row.fund_code, status, opts.names.department.get(row.code) || "");
       const spent = row.rev_cents ? (row.ytd_cents / row.rev_cents) * 100 : 0;
       const enc = row.rev_cents ? (Math.max(row.enc_cents, 0) / row.rev_cents) * 100 : 0;
       const spentPos = axisPercent(spent);
@@ -455,14 +482,14 @@ function paceSection(
       const named = labels.get(row.code) || deptName({ code: row.code, report_name: row.report_name }, opts.names).primary;
       const fund = fundLabel(row.fund_code, opts.fundReports.get(row.fund_code) || "", opts.names);
       return `<a class="drow" href="/departments/${esc(row.code)}"><div class="dname"><b>${esc(named)}</b><span>${esc(fund.primary)}</span></div>
-<div class="dplot"><div class="pm" style="left:${marker.toFixed(2)}%"></div><div class="dbar ${status}" style="width:${spentPos.toFixed(2)}%"></div><div class="denc ${status}" style="left:${spentPos.toFixed(2)}%;width:${encPos.toFixed(2)}%"></div></div>
+<div class="dplot"><div class="pm" style="left:${marker.toFixed(2)}%"></div><div class="dbar ${shown.klass}" style="width:${spentPos.toFixed(2)}%"></div><div class="denc ${shown.klass}" style="left:${spentPos.toFixed(2)}%;width:${encPos.toFixed(2)}%"></div></div>
 <div class="dnum"><b>${Math.round(spent)}%</b><span>${row.ytd_cents > row.rev_cents ? `Over budget by ${esc(moneyCompact(row.ytd_cents - row.rev_cents))}` : `${esc(moneyCompact(row.ytd_cents))} of ${esc(moneyCompact(row.rev_cents))}`}</span></div>
-<div class="dstat">${pill(status)}</div></a>`;
+<div class="dstat">${pill(shown.klass, shown.text)}</div></a>`;
     })
     .join("");
   return `<section class="card pace-card"><div class="eyebrow">By department</div><h2>Are departments spending on pace?</h2>
 <p class="cap">The ${rows.length} departments with the largest budgets. The dark line is ${yearShown}% of the year. In line means within 1 percentage point of that. Spending more than the year's progress is higher than that. Under is lower.</p>
-<div class="legend"><span><i style="background:var(--g)"></i>In line</span><span><i style="background:var(--teal2)"></i>Under</span><span><i style="background:var(--y)"></i>Spending more than the year's progress</span><span><i style="background:var(--r)"></i>Over budget</span><span><i class="swatch-hatch"></i>Promised, not paid</span></div>
+<div class="legend"><span><i style="background:var(--g)"></i>In line</span><span><i style="background:var(--teal2)"></i>Under</span><span><i style="background:var(--y)"></i>Spending more than the year's progress</span><span><i style="background:var(--r)"></i>Over budget</span><span><i class="swatch-hatch"></i>Promised, not paid</span><span>Releases to the Sheriff</span><span>Paid on schedule</span></div>
 <div class="plotarea"><div class="axis top"></div><div class="pacew"><div class="tag" style="left:${marker.toFixed(2)}%">Year ${yearShown}%</div>${guides}</div>
 ${list}
 <div class="axis">${axis}</div></div>
@@ -470,7 +497,24 @@ ${list}
 <p class="mnote">The percent is money spent so far divided by that department's budget. <span class="transfer-row"><span>Money moved between county funds</span> <b>${esc(moneyCompact(transferCents))}</b></span> is left out of this chart.</p></section>`;
 }
 
-function monthCard(months: { ym: string; label: string; short: string }[], index: Map<string, MonthParts>, land: { ym: string; cents: number }[], row: ImportRow): string {
+function monthBits(items: { ym: string; cents: number }[], months: { ym: string; label: string }[]): string[] {
+  return items
+    .filter((item) => item.cents > 0)
+    .sort((a, b) => b.cents - a.cents)
+    .slice(0, 2)
+    .map((item) => {
+      const label = months.find((month) => month.ym === item.ym)?.label || item.ym;
+      return `${moneyCompact(item.cents)} of ${label}`;
+    });
+}
+
+function monthCard(
+  months: { ym: string; label: string; short: string }[],
+  index: Map<string, MonthParts>,
+  land: { ym: string; cents: number }[],
+  sheriff: { ym: string; cents: number }[],
+  row: ImportRow,
+): string {
   const totals = months.map((month) => {
     const parts = index.get(month.ym) || { ym: month.ym, vendor_cents: 0, payroll_cents: 0, other_cents: 0, journal_cents: 0 };
     return { ...month, ...parts, shown: parts.vendor_cents + parts.payroll_cents + parts.other_cents };
@@ -487,20 +531,23 @@ function monthCard(months: { ym: string; label: string; short: string }[], index
     })
     .join("");
   const journal = totals.reduce((sum, month) => sum + month.journal_cents, 0);
-  const landNote = land
-    .filter((item) => item.cents > 0)
-    .sort((a, b) => b.cents - a.cents)
-    .slice(0, 2)
-    .map((item) => {
-      const label = months.find((month) => month.ym === item.ym)?.label || item.ym;
-      return `${moneyCompact(item.cents)} of ${label}`;
-    });
+  const landNote = monthBits(land, months);
+  const sheriffNote = monthBits(sheriff, months);
+  const december = months.find((month) => month.ym.endsWith("-12"));
+  const decemberLand = december ? land.find((item) => item.ym === december.ym)?.cents || 0 : 0;
+  const decemberSheriff = december ? sheriff.find((item) => item.ym === december.ym)?.cents || 0 : 0;
+  const decemberSentence =
+    december && (decemberLand > 0 || decemberSheriff > 0)
+      ? `December includes ${decemberLand > 0 ? `${moneyCompact(decemberLand)} coded to Land (account 561000)` : ""}${decemberLand > 0 && decemberSheriff > 0 ? " and " : ""}${decemberSheriff > 0 ? `${moneyCompact(decemberSheriff)} in budget releases to the Sheriff` : ""}. `
+      : "";
   const landSentence = landNote.length ? `Land purchases coded to account 561000 account for ${landNote.join(" and ")}. ` : "";
+  const sheriffSentence = sheriffNote.length ? `Budget releases to the Sheriff account for ${sheriffNote.join(" and ")}. ` : "";
+  const asOf = displayDate(row.data_as_of);
   return `<div class="card"><div class="eyebrow">Over time</div><h2>Spending by month</h2>
-<p class="cap">Payments and payroll posted each month, October through ${esc(displayDate(row.data_as_of))}.</p>
+<p class="cap">Payments and payroll posted each month, October through ${esc(asOf)}.</p>
 <div class="legend"><span><i style="background:var(--teal)"></i>Vendor payments</span><span><i style="background:var(--gold)"></i>Payroll batches</span><span><i style="background:#9aa7b0"></i>Other</span></div>
 <div class="mchart">${columns}</div>
-<p class="mnote">${esc(landSentence)}Excludes ${esc(moneyCompact(journal))} of internal journal entries and transfers between funds. Payroll shows batch totals only. Lines dated after ${esc(displayDate(row.data_as_of))} are left out.</p></div>`;
+<p class="mnote">${esc(decemberSentence)}${esc(landSentence)}${esc(sheriffSentence)}These bars leave out ${esc(moneyCompact(journal))} of internal journal entries and transfers between funds. Lines dated after ${esc(asOf)} are left out. Journal entries and payroll batches are included in the spent total.</p></div>`;
 }
 
 function vendorCard(
@@ -539,13 +586,16 @@ function lookCard(picks: ReturnType<typeof lookPicks>): string {
       if (pick.kind === "committed") {
         return `<a class="item i3" href="${esc(pick.href)}"><span class="tagl">Committed</span><h3>${esc(pick.title)}</h3><div class="big">${esc(moneyCompact(pick.enc))}</div><div class="vs">encumbered</div><p>That is ${pick.encShare.toFixed(0)}% of all encumbrances countywide, against ${esc(moneyCompact(pick.spent))} spent so far.</p></a>`;
       }
+      const beach = /beach\s*tram/i.test(pick.title) || pick.href.endsWith("/11141090");
       const landCovers = pick.land > 0 && pick.budget > 0 && pick.spent > pick.budget && pick.land >= pick.spent - pick.budget;
-      const detail = pick.land > 0
-        ? `Includes ${moneyCompact(pick.land)} coded to Land (account 561000).`
-        : pick.enc > 0
-          ? `Another ${moneyCompact(pick.enc)} is encumbered.`
-          : "";
-      const tag = landCovers ? "Land" : "Over budget";
+      const detail = beach && pick.land > 0
+        ? `Includes ${moneyCompact(pick.land)} coded to Land (account 561000), the Sandy Lane land purchase. The county report has no budget for land in this department.`
+        : pick.land > 0
+          ? `Includes ${moneyCompact(pick.land)} coded to Land (account 561000).`
+          : pick.enc > 0
+            ? `Another ${moneyCompact(pick.enc)} is encumbered.`
+            : "";
+      const tag = beach && pick.land > 0 ? "Land" : landCovers ? "Land" : "Over budget";
       return `<a class="item" href="${esc(pick.href)}"><span class="tagl">${tag}</span><h3>${esc(pick.title)}</h3><div class="big">${esc(moneyCompact(pick.spent))}</div><div class="vs">spent vs ${esc(moneyCompact(pick.budget))} budget</div>${detail ? `<p>${esc(detail)}</p>` : ""}</a>`;
     })
     .join("");
@@ -588,7 +638,7 @@ function platCard(funds: FundRollup[], names: NameMaps, months: { ym: string; la
 <div class="n"><a href="/search?fund=114">${esc(moneyCompact(net.spent))}</a></div>
 <div class="s">spent of ${esc(moneyCompact(net.current))} budget</div>
 <div class="meter" style="margin:16px 0 8px"><div style="width:${Math.min(used, 100).toFixed(1)}%"></div></div>
-<div class="s">${used.toFixed(1)}% used &middot; ${esc(moneyCompact(net.encumbered))} promised, not paid &middot; ${available < 0 ? `Over budget by ${esc(moneyCompact(-available))}` : `${esc(moneyCompact(available))} left`}</div>
+<div class="s">${used.toFixed(1)}% used &middot; ${esc(moneyCompact(net.encumbered))} promised, not paid &middot; ${available < 0 ? `Over budget by ${esc(moneyCompact(-available))}` : `${esc(moneyCompact(available))} not yet spent or promised`}</div>
 <div class="pcs">${bars}</div>
 <a class="plat-btn" href="/plat">See Plat Fee detail</a></div>`;
 }
@@ -612,34 +662,64 @@ function netSpendRow(
   return { code, fund_code: fundCode, report_name: reportName, rev_cents: net.current, ytd_cents: net.spent, enc_cents: net.encumbered };
 }
 
-function countCard(facts: BudgetFacts): string {
-  const left = leftLabel(facts.current, facts.spent);
-  const leftSentence = left.over ? `Paid out is over the mid-year limit by ${left.value}.` : left.unbudgeted ? "No budget is set in the county report." : `${left.value} remains under the mid-year limit.`;
+function laterLinesSentence(row: ImportRow, cents: number): string {
+  const count = row.after_cutoff_count;
+  const dated = displayDate(row.data_as_of);
+  const lines = count === 1 ? "1 payment line" : `${count.toLocaleString("en-US")} payment lines`;
+  const verb = count === 1 ? "is" : "are";
+  const dollars = count > 0 ? `, totaling ${money(cents)},` : "";
+  return `${lines} dated after ${dated}${dollars} ${verb} left out of the monthly chart, vendor totals, and search. The spent total is the year-to-date column in the county's books${count > 0 ? ", which still includes those later lines" : ""}.`;
+}
+
+function countCard(facts: BudgetFacts, asOf: string | null | undefined): string {
+  const left = leftLabel(facts.current, facts.spent, facts.encumbered);
+  const leftSentence = left.over
+    ? `${spentTerm(asOf)} is over the mid-year limit by ${left.value} after open orders.`
+    : left.unbudgeted
+      ? "No budget is set in the county report."
+      : `${left.value} is not yet spent or promised. That is the mid-year limit minus what the books show minus open orders.`;
   const raised = limitNote(facts);
   return `<section class="card count-card" id="how-we-count">
 <h2>How we count the budget</h2>
-<p>Commissioners adopted ${money(facts.adopted)}. The books show ${money(facts.spent)} paid out. The budget limit after mid-year changes is ${money(facts.current)}. ${leftSentence}</p>
+<p>Commissioners adopted ${money(facts.adopted)}. The books show ${money(facts.spent)} spent. The budget limit after mid-year changes is ${money(facts.current)}. ${leftSentence}</p>
 ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 <div class="transfer-row"><span>Money moved between county funds</span> <b>${money(facts.transfer)}</b></div>
-<p class="cap">A transfer moves cash from one county fund to another. The raw report counts that move twice. This site counts it once and shows the transfer amount on its own. The report has no transfers coming in. <a href="https://walton.civicweb.net/document/511445/">Commission budget vote</a>. <a href="https://midbaynews.com/post/walton-county-passes-328m-budget-in-narrow-3-2-vote">News report of the vote</a>. <a href="https://walton.civicweb.net/document/509733/">Carry-forward resolution</a>. <a href="https://walton.civicweb.net/document/520074/">Minutes</a>.</p>
+<p class="cap">The report lists the transfer out of one fund. The fund that receives it then spends or releases the money, so adding both would count the same dollars twice. This site counts it once and shows the transfer amount on its own. <a href="https://walton.civicweb.net/document/511445/">Minutes of the 9/22/2025 final hearing</a>. <a href="https://midbaynews.com/post/walton-county-passes-328m-budget-in-narrow-3-2-vote">Mid Bay News, 9/24/2025</a>. <a href="https://walton.civicweb.net/document/509733/">Carry-forward resolution</a>. <a href="https://walton.civicweb.net/document/520074/">Minutes</a>.</p>
 </section>`;
 }
 
-function budgetHead(net: BudgetFacts, elapsedPct: number, capital: CapitalLine[] | null = null): string {
-  const left = leftLabel(net.current, net.spent);
+function budgetHead(
+  net: BudgetFacts,
+  elapsedPct: number,
+  capital: CapitalLine[] | null = null,
+  asOf: string | null = null,
+  release = false,
+  statusText = "",
+): string {
+  const left = leftLabel(net.current, net.spent, net.encumbered);
   const status = net.current <= 0 && net.spent > 0 ? "gray" : pace(net.current, net.spent, net.encumbered, elapsedPct);
   const cover = capital ? capitalCoverText(capital) : "";
-  const note = cover ? "From the object code on the account report." : left.unbudgeted ? `${money(net.spent)} paid out` : left.over ? "Paid out is higher than the mid-year limit" : "Mid-year limit minus money paid out";
-  const statusLabel = capital?.length ? capitalStatusText(capital) : PACE_PILL[status];
-  const statusNote = cover ? cover : `${Math.round(elapsedPct)}% of the year is gone. ${PACE_LABEL[status]}.`;
+  const posted = release ? "released" : "spent";
+  const note = cover
+    ? "From the object code on the account report."
+    : left.unbudgeted
+      ? `${money(net.spent)} ${posted}`
+      : left.over
+        ? `${release ? "Released" : "Spent"} is higher than the mid-year limit after open orders`
+        : release
+          ? "Mid-year limit minus released minus open orders."
+          : "Mid-year limit minus spent minus open orders.";
+  const statusLabel = statusText || (capital?.length ? capitalStatusText(capital) : PACE_LABEL[status]);
+  const statusNote = cover ? cover : `${Math.round(elapsedPct)}% of the year is gone. ${statusLabel}.`;
+  const books = release ? spentTerm(asOf, "Released") : spentTerm(asOf);
   return `<section class="metrics">
 ${metric("Adopted budget", net.adopted <= 0 ? "No budget set in the county report" : money(net.adopted), "Passed by commissioners")}
 ${metric("Budget limit after mid-year changes", net.current <= 0 ? "No budget set in the county report" : money(net.current), "A ceiling, not a spending plan")}
-${metric("Paid out", money(net.spent), net.current <= 0 ? "n/a" : `${pct(net.spent, net.current)} share of the mid-year limit`)}
+${metric(books, money(net.spent), net.current <= 0 ? "n/a" : `${pct(net.spent, net.current)} share of the mid-year limit`)}
 ${metric(cover ? "Account" : left.title, cover || left.value, note)}
 ${metric("Status", statusLabel, statusNote)}
 </section>
-<p class="cap">The adopted budget is what commissioners passed. The budget limit after mid-year changes is a ceiling, not a spending plan. Paid out is what the books show.</p>`;
+<p class="cap">The adopted budget is what commissioners passed. The budget limit after mid-year changes is a ceiling, not a spending plan. ${esc(books)} is what the books show.</p>`;
 }
 
 function overAmount(row: { orig_cents: number; rev_cents: number; ytd_cents: number; enc_cents: number; transfer_orig_cents?: number; transfer_rev_cents?: number; transfer_ytd_cents?: number; transfer_enc_cents?: number }): number {
@@ -663,13 +743,14 @@ function departmentMoneyRow(dept: DeptRollup, names: NameMaps, elapsedPct: numbe
   const net = factsFromRow(dept);
   const covered = capitalLinesCovering(net.spent, net.current, capital);
   const status = net.current <= 0 && net.spent > 0 ? "gray" : pace(net.current, net.spent, net.encumbered, elapsedPct);
-  const left = leftLabel(net.current, net.spent);
+  const left = leftLabel(net.current, net.spent, net.encumbered);
   const cover = covered ? capitalCoverText(covered) : "";
   const leftCell = cover ? cover : left.unbudgeted ? "n/a" : left.over ? `Over budget by ${left.value}` : left.value;
   const budgetCell = net.current <= 0 ? "No budget set in the county report" : money(net.current);
+  const shown = statusView(`${primary} ${dept.report_name || ""}`, dept.fund_code, status, names.department.get(dept.code) || "");
   const statusHtml = covered
     ? `<span class="pill gray" title="${esc(cover)}">${esc(capitalStatusText(covered))}</span>`
-    : pill(status);
+    : pill(shown.klass, shown.text);
   return `<tr><td><a class="name" href="/departments/${esc(dept.code)}">${esc(primary)}</a></td><td class="num">${budgetCell}</td><td class="num">${money(net.spent)}</td><td class="num">${esc(leftCell)}</td><td class="num">${net.current <= 0 ? "n/a" : pct(net.spent, net.current)}</td><td>${statusHtml}</td></tr>`;
 }
 
@@ -706,7 +787,7 @@ export function collapsePayments<T extends { pay_date: string | null; amount_cen
 
 export function paymentWho(name: string | null, display: (raw: string) => VendorLabel): VendorLabel {
   const raw = (name || "").trim();
-  if (!raw) return { text: "Not listed in the county report", shortened: false };
+  if (!raw) return { text: "Payee not shown in the county report", shortened: false };
   return display(raw);
 }
 
@@ -805,14 +886,14 @@ export function renderFunds(opts: {
         transfer_enc_cents: fund.transfer_enc_cents || 0,
       });
       const budgetCell = net.current <= 0 ? "No budget set in the county report" : money(net.current);
-      const left = leftLabel(net.current, net.spent);
+      const left = leftLabel(net.current, net.spent, net.encumbered);
       const leftCell = left.unbudgeted ? "n/a" : left.over ? `Over budget by ${left.value}` : left.value;
       return `<tr><td><a class="name" href="/funds/${esc(fund.code)}">${esc(named.primary)}</a></td><td class="mono">${esc(fund.code)}</td><td class="num">${budgetCell}</td><td class="num">${money(net.spent)}</td><td class="num">${leftCell}</td><td class="num">${net.current <= 0 ? "n/a" : pct(net.spent, net.current)}</td></tr>`;
     })
     .join("");
   const body = `<p class="crumb"><a href="/">Overview</a> / Funds</p><h1>Funds</h1><p class="lede">Each fund in the published import. Open a fund to see its budget and what has been spent. Money moved between county funds is left out.</p>
 <p class="hint table-hint">Swipe sideways to see every column.</p>
-<section class="panel"><div class="table-wrap"><table><thead><tr><th>Fund</th><th>Code</th><th class="num">Budgeted</th><th class="num">Money spent so far</th><th class="num">Money left</th><th class="num">% used</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+<section class="panel"><div class="table-wrap"><table><thead><tr><th>Fund</th><th>Code</th><th class="num">Budgeted</th><th class="num">${esc(spentTerm(opts.row.data_as_of))}</th><th class="num">Not yet spent or promised</th><th class="num">% used</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
   return page({ title: "Funds. Budget Explorer", active: "funds", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
 }
 
@@ -853,7 +934,9 @@ export function renderFund(opts: {
     if (capitalLinesCovering(deptNet.spent, deptNet.current, capitalByDept.get(dept.code) || [])) return sum;
     return sum + overAmount(dept);
   }, 0);
-  const overNote = overCents > 0 ? `<p class="note">Departments in this fund are over budget by ${money(overCents)}. Money left above is what remains in the rest of the fund.</p>` : "";
+  const release = isSheriffRelease(named.primary, opts.fund.code);
+  const fundStatus = release ? statusView(named.primary, opts.fund.code, pace(net.current, net.spent, net.encumbered, fiscal.elapsedPct)) : null;
+  const overNote = overCents > 0 ? `<p class="note">Departments in this fund are over budget by ${money(overCents)}. Not yet spent or promised, above, is what remains in the rest of the fund.</p>` : "";
   const fundReports = new Map([[opts.fund.code, opts.fund.report_name]]);
   const deptLabels = disambiguatedDepartmentNames(spendingDepts, opts.names, fundReports);
   const rows = spendingDepts
@@ -862,8 +945,9 @@ export function renderFund(opts: {
   const body = `<p class="crumb"><a href="/">Overview</a> / <a href="/funds">Funds</a> / ${esc(opts.fund.code)}</p>
 <h1>${esc(named.primary)}</h1>
 <p class="lede">Fund ${esc(opts.fund.code)}. <a href="/search?fund=${esc(opts.fund.code)}">Payments in this fund</a></p>
+${release ? `<p class="cap">${esc(SHERIFF_FUND_CAPTION)}</p>` : ""}
 ${opts.reserve ? fundSavings(opts.reserve, opts.reserveAsOf || "") : ""}
-${budgetHead(net, fiscal.elapsedPct)}
+${budgetHead(net, fiscal.elapsedPct, null, opts.row.data_as_of, release, fundStatus?.text || "")}
 ${overNote}
 ${whereMoneyWent({
   categories: opts.categories,
@@ -879,7 +963,7 @@ ${whereMoneyWent({
 <section class="panel"><h2>Departments in this fund</h2>
 <p class="hint table-hint">Swipe sideways to see every column.</p>
 <div class="table-wrap"><table>
-<thead><tr><th>Department</th><th class="num">Budgeted</th><th class="num">Money spent so far</th><th class="num">Money left</th><th class="num">% used</th><th>Status</th></tr></thead>
+<thead><tr><th>Department</th><th class="num">Budgeted</th><th class="num">${esc(spentTerm(opts.row.data_as_of))}</th><th class="num">Not yet spent or promised</th><th class="num">% used</th><th>Status</th></tr></thead>
 <tbody>${rows || `<tr><td colspan="6" class="empty">No departments in this fund.</td></tr>`}</tbody>
 </table></div></section>`;
   return page({ title: `${named.primary}. Budget Explorer`, active: "funds", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
@@ -895,17 +979,19 @@ export function renderDepartments(opts: { row: ImportRow; departments: DeptRollu
       const named = deptName(dept, opts.names);
       const fund = fundLabel(dept.fund_code || "", opts.fundReports.get(dept.fund_code) || "", opts.names);
       const primary = deptLabels.get(dept.code) || named.primary;
+      const chart = opts.names.department.get(dept.code) || "";
+      const shown = statusView(`${dept.report_name || ""} ${chart} ${primary}`, dept.fund_code, status, chart);
       return `<tr>
 <td><a class="name" href="/departments/${esc(dept.code)}">${esc(primary)}</a>${badge(named.unmatched)}<div class="code">${esc(dept.code)} · ${esc(fund.primary)} · ${dept.accounts} accounts</div></td>
 <td class="num">${money(dept.rev_cents)}</td>
 <td class="num">${money(dept.ytd_cents)}</td>
 <td class="num">${money(dept.enc_cents)}</td>
 <td class="num">${pct(dept.ytd_cents, dept.rev_cents)}</td>
-<td>${pill(status)}</td>
+<td>${pill(shown.klass, shown.text)}</td>
 </tr>`;
     })
     .join("");
-  const body = `<h1>Departments</h1><p class="lede">${opts.departments.length} departments in the published import. ${sortNote} Names come from the chart of accounts. A code with no chart name is marked unmatched.</p>
+  const body = `<h1>Departments</h1><p class="lede">${opts.departments.length} departments in the published import. ${sortNote} Names come from the chart of accounts. A code with no chart name is tagged name from county report. Interfund Group Transfer Out and Solid Waste Transfer are tagged Transfer, not spending.</p>
 <section class="panel"><div class="table-wrap"><table>
 <thead><tr><th>Department</th><th class="num">Revised</th><th class="num">Spent</th><th class="num">Encumbered</th><th class="num">% used</th><th>Status</th></tr></thead>
 <tbody>${rows || `<tr><td colspan="6" class="empty">No departments in this import.</td></tr>`}</tbody>
@@ -934,7 +1020,9 @@ export function renderDepartment(opts: {
   const net = factsFromRow(opts.dept);
   const covered = capitalLinesCovering(net.spent, net.current, opts.accounts);
   const status = covered ? "gray" : pace(net.current, net.spent, net.encumbered, fiscal.elapsedPct);
-  const statusPill = covered ? `<span class="pill gray" title="${esc(capitalCoverText(covered))}">${esc(capitalStatusText(covered))}</span>` : pill(status);
+  const release = isSheriffRelease(`${named.primary} ${opts.dept.report_name || ""}`, opts.dept.fund_code);
+  const shown = statusView(`${named.primary} ${opts.dept.report_name || ""}`, opts.dept.fund_code, status);
+  const statusPill = covered ? `<span class="pill gray" title="${esc(capitalCoverText(covered))}">${esc(capitalStatusText(covered))}</span>` : pill(shown.klass, shown.text);
   const rows = opts.accounts
     .filter((account) => account.object_code !== TRANSFER_OBJECT)
     .map((account) => {
@@ -943,7 +1031,7 @@ export function renderDepartment(opts: {
       const objectName = nameFor(opts.names.object.get(account.object_code), account.title || "", account.object_code);
       const project = account.project_code ? `-${account.project_code}` : "";
       const href = `/departments/${esc(account.dept_code)}/${esc(account.object_code)}/${esc(account.project_code || "_")}`;
-      const payroll = account.is_payroll ? `<span class="code">${opts.showNames ? " names and pay" : " batch totals"}</span>` : "";
+      const payroll = account.is_payroll ? `<span class="code"> batch totals</span>` : "";
       return `<tr>
 <td><a class="mono" href="${href}">${esc(account.object_code)}${esc(project)}</a> <a class="name" href="${href}">${esc(objectName.primary)}</a>${badge(objectName.unmatched)}${payroll}</td>
 <td class="num">${account.rev_cents <= 0 ? "No budget set in the county report" : money(account.rev_cents)}</td>
@@ -959,7 +1047,8 @@ export function renderDepartment(opts: {
 <p class="crumb"><a href="/">Overview</a> / <a href="/departments">Departments</a> / ${esc(opts.dept.code)}</p>
 <h1>${esc(named.primary)}${badge(named.unmatched)}</h1>
 <p class="lede">${esc(fund.primary)} · ${opts.accounts.filter((account) => account.object_code !== TRANSFER_OBJECT).length} accounts · ${statusPill}</p>
-${budgetHead(net, fiscal.elapsedPct, covered)}
+${release ? `<p class="cap">${esc(SHERIFF_FUND_CAPTION)}</p>` : ""}
+${budgetHead(net, fiscal.elapsedPct, covered, opts.row.data_as_of, release, covered ? "" : shown.text)}
 ${whereMoneyWent({
   categories: opts.categories,
   vendors: opts.vendors,
@@ -973,7 +1062,7 @@ ${whereMoneyWent({
 })}
 <section class="panel">
 <h2>Accounts in this department</h2>
-<p class="hint">Open an account to see its payments. ${opts.showNames ? "Payroll accounts list employee names and individual pay." : "Payroll accounts list batch totals. Person names and individual pay are hidden."}</p>
+<p class="hint">Open an account to see its payments. Payroll lines in this report are batch totals. No employee names appear.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Account</th><th class="num">Revised budget</th><th class="num">Spent</th><th class="num">Encumbered</th><th>Spent and encumbered vs. budget</th><th class="num">% used</th><th>Status</th></tr></thead>
 <tbody>${rows}</tbody>
@@ -1003,7 +1092,7 @@ export function renderAccount(opts: {
     .map(
       (payment) => `<tr>
 <td>${esc(displayDate(payment.pay_date))}</td>
-<td class="name">${esc(payment.vendor_name || "unmatched")}</td>
+<td class="name">${esc(payment.vendor_name || "Payee not shown in the county report")}</td>
 <td class="mono">${esc(payment.invoice || "")}</td>
 <td>${esc(payment.description || "")}</td>
 <td class="mono">${esc(payment.check_number || "")}</td>
@@ -1013,9 +1102,7 @@ export function renderAccount(opts: {
     .join("");
   const base = `/departments/${opts.account.dept_code}/${opts.account.object_code}/${opts.account.project_code || "_"}`;
   const payrollNote = opts.account.is_payroll
-    ? opts.showNames
-      ? `<p class="note">This is a payroll account. Employee names and individual pay are shown.</p>`
-      : `<p class="note">This is a payroll account. Totals that clear the group minimum are labeled Payroll (batch total). Smaller groups are combined as Other payroll when that total also clears the minimum, and left off this list when it does not. Person names and individual pay are hidden.</p>`
+    ? `<p class="note">Payroll lines in this report are batch totals. No employee names appear.</p>`
     : "";
   const table = `<div class="table-wrap"><table>
 <thead><tr><th>Date</th><th>Vendor</th><th>Invoice number</th><th>Description</th><th>Check number</th><th class="num">Amount</th></tr></thead>
@@ -1088,7 +1175,7 @@ export function renderSearch(opts: {
   const query = searchQuery(opts.filters);
   const body = `
 <h1>Payment search</h1>
-<p class="lede">Search payment lines in the published import. ${opts.showNames ? "Employee names and individual pay are included." : "Payroll is included as batch totals. Person names and individual pay are hidden."} Lines dated after ${esc(displayDate(opts.row.data_as_of))} are stored and excluded.</p>
+<p class="lede">Search payment lines in the published import. Payroll lines in this report are batch totals. No employee names appear. Reversals and re-posts are listed as separate lines. Lines dated after ${esc(displayDate(opts.row.data_as_of))} are stored and excluded.</p>
 <section class="panel">
 <form method="get" action="/search">
 <div class="filters">
@@ -1107,7 +1194,7 @@ export function renderSearch(opts: {
 <section class="panel">
 <h2>${opts.total.toLocaleString("en-US")} payments found, totaling ${moneyExact(opts.totalCents)}</h2>
 <p class="hint">${opts.filters.excludeTransfer === false ? "These results include money moved between county funds." : "Money moved between county funds is not included."} Sorted by amount, largest first. <a href="/search.csv?${query}">Download results (CSV)</a></p>
-<p class="note">The overview paid-out figure is the year-to-date column on the account report, minus money moved between county funds. This total adds payment lines and payroll lines instead. Lines dated after the report date are left out of this search. That is why this total can differ from the overview.</p>
+<p class="note">The overview spent figure is the year-to-date column on the account report, minus money moved between county funds. This total adds payment lines and payroll lines instead. Lines dated after the report date are left out of this search. That is why this total can differ from the overview. Reversals and re-posts are listed as separate lines.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Date</th><th>Vendor</th><th>Invoice</th><th>Description</th><th>Department</th><th>Check</th><th class="num">Amount</th></tr></thead>
 <tbody>${rows || `<tr><td colspan="7" class="empty">No payments match these filters.</td></tr>`}</tbody>
@@ -1219,7 +1306,7 @@ export function renderReserves(opts: {
   });
 }
 
-export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolean, baseUrl = "", showNames = true): string {
+export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolean, _baseUrl = "", showNames = true): string {
   const body = `
 <h1>About the data</h1>
 <p class="lede">This is a private concept prototype. It is not a Walton County website and it does not use the county seal.</p>
@@ -1227,11 +1314,10 @@ export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolea
 <h2>Source</h2>
 <p>Figures come from a year to date budget report produced by the Walton County Clerk and Comptroller, imported by an administrator. The published snapshot is what the pages read. Older imports are kept.</p>
 <p><a href="/revenue">Income</a> and <a href="/reserves">savings</a> are separate. They come from the audited financial report and the adopted budget files, not from the year to date payment report. Transfers between county funds are not treated as income.</p>
-<p>Department and object names come from a chart of accounts when one has been imported. Until then, a code is marked unmatched. Every figure is keyed by fund, department, object, and project codes.</p>
-<p>${showNames ? "Payroll lines keep employee names and individual pay. An administrator can hide both without importing the file again." : "Person names and individual pay are hidden. Payroll is shown as batch totals. The names and amounts stay in the database."} Payment lines dated after the report date are stored, flagged, and left out of search, department payments, and questions.</p>
+<p>Department and object names come from a chart of accounts when one has been imported. Until then, a code is tagged name from county report. Every figure is keyed by fund, department, object, and project codes.</p>
+<p>Payroll lines in this report are batch totals. No employee names appear. Payment lines dated after the report date are stored, flagged, and left out of search, department payments, and questions.</p>
 <p>Status compares spent plus encumbered with the share of the fiscal year that has passed. The fiscal year starts on October 1.</p>
-${row ? `<p class="code">Published import ${row.id}. Data as of ${esc(displayDate(row.data_as_of))}. ${row.account_count.toLocaleString("en-US")} accounts. ${row.payment_count.toLocaleString("en-US")} payment lines.</p>` : `<p>No import has been published yet.</p>`}
-${baseUrl ? `<p>Public base URL: ${esc(baseUrl)}</p>` : `<p>No public base URL is configured. Links stay relative so this prototype can move to another hostname.</p>`}
+${row ? `<p class="code">Published import ${row.id}. Data as of ${esc(displayDate(row.data_as_of))}. ${row.account_count.toLocaleString("en-US")} accounts. ${row.payment_count.toLocaleString("en-US")} payment lines are stored from the county report. ${row.after_cutoff_count.toLocaleString("en-US")} of those lines are dated after ${esc(displayDate(row.data_as_of))} and are left out of payment search. Payroll is ${row.payroll_batch_count.toLocaleString("en-US")} batch totals (${row.payroll_line_count.toLocaleString("en-US")} payroll lines), not employee names.</p>` : `<p>No import has been published yet.</p>`}
 </section>`;
   return page({ title: "About the data. Budget Explorer", active: "about", body, dataAsOf: row?.data_as_of, admin: isAdmin, csrf, fy: row ? fiscalPosition(row.data_as_of).fyLabel : undefined, showNames });
 }
@@ -1239,10 +1325,10 @@ ${baseUrl ? `<p>Public base URL: ${esc(baseUrl)}</p>` : `<p>No public base URL i
 export function renderSheriff(row: ImportRow | null, csrf: string, isAdmin: boolean, showNames = true): string {
   const body = `
 <h1>Sheriff</h1>
-<p class="lede">This section is a placeholder. A separate Sheriff view is not built yet.</p>
+<p class="lede">Releases to the Sheriff are listed under Departments.</p>
 <section class="panel">
-<p>Sheriff activity that appears in the imported budget report is still available through Departments and Payment search, under its department code. This page does not add a second set of figures.</p>
-<p><a class="btn secondary" href="/departments">Browse departments</a></p>
+<p>${esc(SHERIFF_FUND_CAPTION)}</p>
+<p><a class="btn secondary" href="/departments">Departments</a> <a class="btn secondary" href="/funds/107">Fine and Forfeiture fund</a></p>
 </section>`;
   return page({ title: "Sheriff. Budget Explorer", active: "sheriff", body, dataAsOf: row?.data_as_of, admin: isAdmin, csrf, showNames });
 }

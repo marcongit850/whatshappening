@@ -70,7 +70,7 @@ export function factsFromRow(row: FactRow): BudgetFacts {
     current,
     spent,
     encumbered,
-    left: current - spent,
+    left: current - spent - encumbered,
     amendments: current - adopted,
     transfer: transferYtd,
     spentOfCurrentPct: percentOf(row.spent_of_current_tenths, spent, current),
@@ -171,20 +171,36 @@ export interface VendorSpendRow {
 }
 
 export const TOP_VENDOR_SQL = `
-SELECT vendor_name,
-  COALESCE(SUM(amount_cents), 0) AS cents,
+WITH scoped AS (
+  SELECT
+    CASE WHEN trim(COALESCE(vendor_number, '')) = '' THEN vendor_name ELSE vendor_number END AS vendor_key,
+    vendor_name,
+    amount_cents,
+    check_number,
+    object_code
+  FROM payments
+  WHERE import_id = ?
+    AND after_cutoff = 0
+    AND object_code != '${TRANSFER_OBJECT}'
+    AND vendor_name != ''
+    AND NOT ${CONSTITUTIONAL_SQL}
+    AND (? = 1 OR is_person_name = 0)
+    AND (? = '' OR fund_code = ?)
+    AND (? = '' OR dept_code = ?)
+)
+SELECT
+  (
+    SELECT s2.vendor_name FROM scoped s2
+    WHERE s2.vendor_key = s.vendor_key AND trim(COALESCE(s2.vendor_name, '')) != ''
+    ORDER BY length(trim(s2.vendor_name)) DESC, s2.vendor_name DESC
+    LIMIT 1
+  ) AS vendor_name,
+  COALESCE(SUM(s.amount_cents), 0) AS cents,
   COUNT(*) AS lines,
-  COUNT(DISTINCT CASE WHEN check_number != '' THEN check_number END) AS checks
-FROM payments
-WHERE import_id = ?
-  AND after_cutoff = 0
-  AND object_code != '${TRANSFER_OBJECT}'
-  AND vendor_name != ''
-  AND NOT ${CONSTITUTIONAL_SQL}
-  AND (? = 1 OR is_person_name = 0)
-  AND (? = '' OR fund_code = ?)
-  AND (? = '' OR dept_code = ?)
-GROUP BY vendor_name
+  COUNT(DISTINCT CASE WHEN trim(COALESCE(s.check_number, '')) != '' THEN s.check_number END) AS checks,
+  COALESCE(SUM(CASE WHEN s.object_code = '561000' THEN s.amount_cents ELSE 0 END), 0) AS land_cents
+FROM scoped s
+GROUP BY s.vendor_key
 ORDER BY cents DESC
 LIMIT 80
 `;

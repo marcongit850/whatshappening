@@ -239,6 +239,14 @@ ACCOUNTS FOR: 001 GENERAL FUND
     expect(storedText(narrative)).not.toContain("RUN=1");
     const slow = `VND 1 IN ${"A ".repeat(3000)}`;
     expect(parseVendorRest(slow)).toBeNull();
+    const fire = parseVendorRest("VND 000054 IN 2026-04-08 WALT CODE SOUTH WALTON FIRE DI");
+    expect(fire?.invoice).toBe("2026-04-08 WALT CODE");
+    expect(fire?.vendorName).toBe("SOUTH WALTON FIRE DI");
+    expect(fire?.vendorName).not.toBe("WALT CODE SOUTH WALT");
+    const city = parseVendorRest("VND 000105 IN CHRISTMAS REFLECTION CITY OF DEFUNIAK SPR");
+    expect(city?.invoice).toBe("CHRISTMAS REFLECTION");
+    expect(city?.vendorName).toBe("CITY OF DEFUNIAK SPR");
+    expect(city?.vendorName).not.toBe("REFLECTION CITY OF D");
     const huge = `${"Z".repeat(MAX_REPORT_LINE + 50)} MARKERNAME`;
     expect(storedText(parseReport(`${huge}\n`))).not.toContain("MARKERNAME");
   });

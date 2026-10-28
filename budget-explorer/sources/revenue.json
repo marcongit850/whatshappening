@@ -21,13 +21,13 @@
    "pages": "PDF p.47"
   },
   "fy2026_adopted_total_budget": {
-   "amount": 327948088,
-   "status": "verified (Final hearing minutes 9/22/2025: 'less the 350 for the forest road study 327948088')",
+   "amount": 327945088,
+   "status": "verified (county budget report and Mid Bay News, 9/24/2025: 327,945,088)",
    "source": "https://walton.civicweb.net/document/511445/"
   },
   "fy2027_adopted_total_budget": {
    "amount": 345223508,
-   "status": "verified (Resolution adopting final budget, 9/28/2026)",
+   "status": "Adopted at the September 28, 2026 hearing. The figure is from the county agenda packet. The signed resolution is not posted yet.",
    "source": "https://walton.civicweb.net/document/538552/",
    "pages": "Resolution page 2 of 2"
   }
@@ -315,12 +315,12 @@
   }
  },
  "fy2026_budget_by_source": {
-  "basis": "FY2026 TENTATIVE budget (Sept 8, 2025 public hearing), the last revenue-by-source table published before the final hearing. Final adopted total is 327,948,088, about 347,000 lower. At the final hearing the Board cut the county millage from 3.575 to 3.519 (about 2.5M less ad valorem) and replaced it with cash carried forward and other revenue; line-by-line final numbers sit in the county's OpenGov budget book (JavaScript only, no download).",
+  "basis": "FY2026 TENTATIVE budget (Sept 8, 2025 public hearing), the last revenue-by-source table published before the final hearing. Final adopted total is 327,945,088, about 350,000 lower. At the final hearing the Board cut the county millage from 3.575 to 3.519 (about 2.5M less ad valorem) and replaced it with cash carried forward and other revenue; line-by-line final numbers sit in the county's OpenGov budget book (JavaScript only, no download).",
   "source": "https://walton.civicweb.net/document/503742/",
   "pages": "Budget-in-Brief table 'Sources of County Funds' (document pages 11-12 of 12)",
   "final_total_source": "https://walton.civicweb.net/document/511445/",
   "tentative_total": 328295088,
-  "final_total": 327948088,
+  "final_total": 327945088,
   "status": "table verified; category grouping is ours",
   "lines": [
    {

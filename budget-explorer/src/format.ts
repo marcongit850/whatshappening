@@ -152,15 +152,32 @@ export const PACE_PILL: Record<Pace, string> = {
   under: "Under",
 };
 
-/** Money left, or a plain over-budget amount when spending is already past the budget. */
-export function leftLabel(revCents: number, ytdCents: number): { title: string; value: string; over: boolean; unbudgeted: boolean } {
+/**
+ * Not yet spent or promised: mid-year limit minus posted spending minus open orders.
+ * That is the county report's Available Budget column.
+ */
+export function leftLabel(
+  revCents: number,
+  ytdCents: number,
+  encCents = 0,
+): { title: string; value: string; over: boolean; unbudgeted: boolean } {
+  const open = Math.max(encCents, 0);
   if (revCents <= 0) {
-    return { title: "Money left", value: "No budget set in the county report", over: false, unbudgeted: true };
+    return { title: "Not yet spent or promised", value: "No budget set in the county report", over: false, unbudgeted: true };
   }
-  if (ytdCents > revCents) {
-    return { title: "Over budget by", value: money(ytdCents - revCents), over: true, unbudgeted: false };
+  const available = revCents - ytdCents - open;
+  if (available < 0) {
+    return { title: "Over budget by", value: money(-available), over: true, unbudgeted: false };
   }
-  return { title: "Money left", value: money(revCents - ytdCents), over: false, unbudgeted: false };
+  return { title: "Not yet spent or promised", value: money(available), over: false, unbudgeted: false };
+}
+
+/** One label for posted spending. The date is the report date, with no leading zeros. */
+export function spentTerm(asOf: string | null | undefined, verb: "Spent" | "Released" = "Spent"): string {
+  const shown = displayDate(asOf || "");
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(shown);
+  const when = match ? `${Number(match[1])}/${Number(match[2])}/${match[3]}` : "the report date";
+  return `${verb} (posted in the county's books through ${when})`;
 }
 
 export interface FiscalPosition {

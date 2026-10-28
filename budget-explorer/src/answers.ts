@@ -1,6 +1,6 @@
 import { TRANSFER_OBJECT, factsFromRow, type BudgetFacts, type FundRollup } from "./budget";
-import { moneyExact, moneyWords } from "./format";
-import { CONSTITUTIONAL_SQL, VENDOR_SOURCES } from "./overview";
+import { moneyExact, moneyWords, spentTerm } from "./format";
+import { CONSTITUTIONAL_SQL, SHERIFF_FUND_CAPTION, SHERIFF_FUND_LABEL, VENDOR_SOURCES, isSheriffRelease } from "./overview";
 import type { QaRecord } from "./qa";
 import {
   buildVendorIndex,
@@ -38,16 +38,32 @@ export function matchFundQuestion(question: string, funds: { code: string; name:
   }
   const explicit = /\bfund\s+(\d{3})\b/i.exec(question);
   if (explicit) return funds.find((fund) => fund.code === explicit[1]) || null;
+  if (/\bsheriff\b/i.test(question) && /\bfund\b/i.test(question)) {
+    const sheriff = funds.find((fund) => fund.code === "107" || /sheriff|forfeiture/i.test(fund.name));
+    if (sheriff) return sheriff;
+  }
   return null;
+}
+
+export function publicFundName(code: string, reportName: string): string {
+  if (isSheriffRelease(reportName, code)) return SHERIFF_FUND_LABEL;
+  return titleCaseVendor(reportName || `Fund ${code}`);
+}
+
+function availableFact(facts: BudgetFacts): string {
+  if (facts.current <= 0) return "No budget is set in the county report.";
+  if (facts.left < 0) return `Over the mid-year limit by ${moneyExact(-facts.left)} after open orders.`;
+  return `Not yet spent or promised: ${moneyExact(facts.left)}.`;
 }
 
 export function publicFactText(facts: BudgetFacts, asOfLabel: string): string {
   return [
     `Adopted budget passed by commissioners: ${moneyExact(facts.adopted)}.`,
     `Budget limit after mid-year changes: ${moneyExact(facts.current)}. That limit is a ceiling, not a spending plan.`,
-    `Paid out through ${asOfLabel}: ${moneyExact(facts.spent)}.`,
+    `${spentTerm(asOfLabel)}: ${moneyExact(facts.spent)}.`,
     `Share of the mid-year limit: ${facts.spentOfCurrentPct.toFixed(1)}%.`,
-    `Room under the mid-year limit: ${moneyExact(facts.left)}.`,
+    availableFact(facts),
+    `Open orders: ${moneyExact(facts.encumbered)}.`,
     `Transfers between county funds left out of those totals: ${moneyExact(facts.transfer)}.`,
   ].join(" ");
 }
@@ -57,7 +73,7 @@ export const LIMIT_GROWTH_NOTE =
   "The Nov 24, 2025 carry-forward resolution (Resolution 2025-82) totals $185,438,075.92 (about $185.4M): $144,713,465.48 cash carried forward for unfinished projects and open purchase orders plus $40,724,610.44 of grants carried over. About $2.7M of new grants are visible in the report. About $7.3M is not itemized in the records we have. Total growth is $195,495,223.26. The higher limit is a ceiling, not a spending plan.";
 
 export function countyBudgetAnswer(facts: BudgetFacts, asOfLabel: string): string {
-  const takeaway = `Commissioners adopted a ${moneyWords(facts.adopted)} budget. Through ${asOfLabel} the county's books show ${moneyWords(facts.spent)} paid out.`;
+  const takeaway = `Commissioners adopted a ${moneyWords(facts.adopted)} budget. Through ${asOfLabel} the county's books show ${moneyWords(facts.spent)} spent.`;
   const raised =
     facts.current > facts.adopted
       ? ` Budget limits were raised to ${moneyWords(facts.current)} during the year. ${LIMIT_GROWTH_NOTE}`
@@ -68,16 +84,19 @@ export function countyBudgetAnswer(facts: BudgetFacts, asOfLabel: string): strin
 
 export function transferAnswer(facts: BudgetFacts): string {
   const takeaway = `About ${moneyWords(facts.transfer)} moved between county funds.`;
-  const rest = `A transfer moves money from one county fund to another, like moving cash between checking accounts. The raw report counts that move as spending twice. We count it once. Because you asked about transfers, the raw report's revised total is ${moneyWords(facts.grossRev)}, its original total is ${moneyWords(facts.grossOrig)}, and its spent total is ${moneyWords(facts.grossYtd)}. The budget limit after mid-year changes on this site is ${moneyWords(facts.current)}.`;
+  const rest = `The report lists the transfer out of one fund. The fund that receives it then spends or releases the money, so adding both would count the same dollars twice. Because you asked about transfers, the raw report's revised total is ${moneyWords(facts.grossRev)}, its original total is ${moneyWords(facts.grossOrig)}, and its spent total is ${moneyWords(facts.grossYtd)}. The budget limit after mid-year changes on this site is ${moneyWords(facts.current)}.`;
   return `${takeaway} ${rest}`;
 }
 
 export function fundBudgetAnswer(name: string, facts: BudgetFacts, asOfLabel: string): string {
+  const release = isSheriffRelease(name);
+  const verb = release ? "released" : "spent";
   const takeaway = `The adopted budget for ${name} is ${moneyWords(facts.adopted)}.`;
   const current =
     facts.current > facts.adopted ? ` The budget limit after mid-year changes is ${moneyWords(facts.current)}.` : "";
-  const rest = `${current} The books show ${moneyWords(facts.spent)} paid out through ${asOfLabel}.`;
-  return `${takeaway}${rest}`;
+  const rest = `${current} The books show ${moneyWords(facts.spent)} ${verb} through ${asOfLabel}.`;
+  const caption = release ? ` ${SHERIFF_FUND_CAPTION}` : "";
+  return `${takeaway}${rest}${caption}`;
 }
 
 export function vendorSpendAnswer(name: string, totals: VendorMatchTotals): string {
@@ -107,27 +126,53 @@ export function asksWhoIsPaidMost(question: string): boolean {
   return /\b(who|which|what)\b/i.test(question) && /\b(most|largest|biggest|highest)\b/i.test(question) && /\b(paid|pay|vendor|vendors)\b/i.test(question);
 }
 
-async function topOutsideVendor(db: D1Database, importId: number, showNames: boolean): Promise<{ name: string; cents: number; lines: number } | null> {
+async function topOutsideVendor(
+  db: D1Database,
+  importId: number,
+  showNames: boolean,
+): Promise<{ name: string; cents: number; lines: number; landCents: number } | null> {
   const sources = VENDOR_SOURCES.map((source) => `'${source}'`).join(", ");
   const row = await db
     .prepare(
-      `SELECT vendor_name, COALESCE(SUM(amount_cents), 0) AS cents, COUNT(*) AS lines
-       FROM payments
-       WHERE import_id = ?
-         AND after_cutoff = 0
-         AND source IN (${sources})
-         AND object_code != '${TRANSFER_OBJECT}'
-         AND trim(COALESCE(vendor_name, '')) != ''
-         AND (? = 1 OR is_person_name = 0)
-         AND NOT ${CONSTITUTIONAL_SQL}
-       GROUP BY vendor_name
+      `WITH scoped AS (
+         SELECT
+           CASE WHEN trim(COALESCE(vendor_number, '')) = '' THEN vendor_name ELSE vendor_number END AS vendor_key,
+           vendor_name,
+           amount_cents,
+           object_code
+         FROM payments
+         WHERE import_id = ?
+           AND after_cutoff = 0
+           AND source IN (${sources})
+           AND object_code != '${TRANSFER_OBJECT}'
+           AND trim(COALESCE(vendor_name, '')) != ''
+           AND (? = 1 OR is_person_name = 0)
+           AND NOT ${CONSTITUTIONAL_SQL}
+       )
+       SELECT
+         (
+           SELECT s2.vendor_name FROM scoped s2
+           WHERE s2.vendor_key = s.vendor_key
+           ORDER BY length(trim(s2.vendor_name)) DESC, s2.vendor_name DESC
+           LIMIT 1
+         ) AS vendor_name,
+         COALESCE(SUM(s.amount_cents), 0) AS cents,
+         COUNT(*) AS lines,
+         COALESCE(SUM(CASE WHEN s.object_code = '561000' THEN s.amount_cents ELSE 0 END), 0) AS land_cents
+       FROM scoped s
+       GROUP BY s.vendor_key
        ORDER BY cents DESC
        LIMIT 1`,
     )
     .bind(importId, showNames ? 1 : 0)
-    .first<{ vendor_name: string; cents: number; lines: number }>();
+    .first<{ vendor_name: string; cents: number; lines: number; land_cents: number }>();
   if (!row) return null;
-  return { name: displayMatchName([row.vendor_name]), cents: Number(row.cents), lines: Number(row.lines) };
+  return {
+    name: displayMatchName([row.vendor_name]),
+    cents: Number(row.cents),
+    lines: Number(row.lines),
+    landCents: Number(row.land_cents) || 0,
+  };
 }
 
 export async function lookupVendorSpend(
@@ -181,8 +226,9 @@ export async function directAnswer(
   if (asksWhoIsPaidMost(question)) {
     const top = await topOutsideVendor(db, importId, showNames);
     if (top) {
+      const land = top.landCents > 0 && top.landCents * 2 >= top.cents ? " That is mostly land purchases." : "";
       return {
-        answer: `${top.name} was paid the most, ${moneyExact(top.cents)} across ${top.lines.toLocaleString("en-US")} payment lines. That leaves out money moved between county funds and payments to other county offices.`,
+        answer: `${top.name} was paid the most, ${moneyExact(top.cents)} across ${top.lines.toLocaleString("en-US")} payment lines.${land} That leaves out money moved between county funds and payments to other county offices.`,
         records: [{ kind: "total", text: `${top.name}: ${moneyExact(top.cents)}, ${top.lines} lines.` }],
       };
     }
@@ -205,7 +251,7 @@ export async function directAnswer(
     if (row) {
       const fundFacts = factsFromRow(row);
       return {
-        answer: fundBudgetAnswer(titleCaseVendor(fund.name || `Fund ${fund.code}`), fundFacts, asOfLabel),
+        answer: fundBudgetAnswer(publicFundName(fund.code, fund.name || ""), fundFacts, asOfLabel),
         records: [{ kind: "total", text: publicFactText(fundFacts, asOfLabel) }],
       };
     }

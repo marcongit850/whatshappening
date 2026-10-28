@@ -518,7 +518,6 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
 }
 body.door { background: var(--paper); font-size: 18px; }
 body.door main { max-width: none; margin: 0; padding: 0; }
-.door-note { background: #14232f; color: #e4eaf0; text-align: center; font-size: 18px; line-height: 1.4; padding: 12px 16px; }
 .door-bar { background: #0e1a23; color: #f6f4ee; }
 .door-wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
 .door-hero-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr); gap: 36px; align-items: center; }
@@ -580,12 +579,13 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .us-map a.live:focus-visible path, .county-map a.live:focus-visible path { fill: #f0cc6e; stroke: #14232f; stroke-width: 3px; }
 .us-map .hit, .county-map .hit { fill: transparent; stroke: none; }
 .place-label { fill: #14232f; font-weight: 700; font-family: var(--sans); pointer-events: none; }
-.florida-wrap { max-width: 720px; margin: 0 auto; }
-.florida-map { max-width: 640px; margin: 14px auto 0; overflow: visible; }
-.florida-map .county-map { width: min(640px, 100%); max-height: 360px; height: auto; margin: 0 auto; overflow: visible; }
+.place-leader { stroke: #14232f; stroke-width: 1.5px; fill: none; vector-effect: non-scaling-stroke; pointer-events: none; }
+.florida-wrap { max-width: 920px; margin: 0 auto; }
+.florida-map { max-width: 100%; margin: 14px auto 0; overflow: visible; }
+.florida-map .county-map { width: 100%; height: auto; margin: 0 auto; overflow: visible; }
 .florida-map .map-note { margin-top: 20px; }
 .florida-hero { padding-bottom: 16px; }
-.florida-hero .map-action { max-width: 640px; margin: 12px auto 0; }
+.florida-hero .map-action { max-width: 100%; margin: 12px auto 0; }
 .inset-frame { fill: rgba(255, 255, 255, 0.55); stroke: #5d7382; stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
 .inset-label { fill: #14232f; font-size: 20px; font-weight: 700; font-family: var(--sans); pointer-events: none; }
 .map-label { min-height: 1.4em; margin: 10px 0 0; font-size: 20px; font-weight: 650; color: #14232f; }
@@ -670,7 +670,6 @@ body.door .warning { font-size: 20px; }
   .state-pills a { width: 100%; justify-content: center; min-height: 72px; font-size: 18px; text-align: center; }
   .county-list a { width: 100%; }
   .door-actions .btn { width: 100%; }
-  .florida-map .county-map { max-height: 190px; }
   .florida-hero h1 { font-size: 34px; }
   .florida-hero .explainer { font-size: 18px; }
 }
