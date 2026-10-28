@@ -1,6 +1,6 @@
 import type { AccountSpend, BudgetFacts, CapitalLine, CategorySpend, VendorSpendRow } from "./budget";
 import { TRANSFER_OBJECT, capitalLinesCovering, factsFromRow } from "./budget";
-import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters } from "./db";
+import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters, VendorSlice, VendorSort, VendorSummary } from "./db";
 import { LIMIT_GROWTH_NOTE } from "./answers";
 import type { QaRecord } from "./qa";
 import {
@@ -16,6 +16,7 @@ import {
   money,
   moneyCompact,
   moneyExact,
+  isoDate,
   monthBounds,
   nameFor,
   pace,
@@ -53,6 +54,7 @@ export interface ShellOpts {
 
 const NAV = [
   ["overview", "/", "Overview"],
+  ["vendors", "/vendors", "Vendors"],
   ["revenue", "/revenue", "Revenue"],
   ["reserves", "/reserves", "Reserves"],
   ["funds", "/funds", "Funds"],
@@ -66,6 +68,17 @@ const NAV = [
 
 /** Pages a signed-in visitor can open. Tests and crawls should use this list. */
 export const PUBLIC_PATHS = NAV.map((item) => item[1]);
+
+/** Download cap for the payments CSV. The page states this limit. */
+export const PAYMENT_CSV_LIMIT = 2000;
+
+const BUDGET_BOOK_URL = "https://budget-waltoncountyfl.com";
+const BUDGET_BOOK_LINK = "Planned budget (county's budget book)";
+const BUDGET_BOOK_LABEL = "The county's own FY2027 tentative budget book";
+
+function budgetBookLink(): string {
+  return `<a href="${BUDGET_BOOK_URL}">${esc(BUDGET_BOOK_LINK)}</a>`;
+}
 
 export function page(opts: ShellOpts): string {
   const asOf = opts.dataAsOf ? displayDate(opts.dataAsOf) : "the latest published import";
@@ -103,13 +116,14 @@ export function page(opts: ShellOpts): string {
 <div class="nav-scroller"><nav>${nav}${adminLink}${logout}</nav></div>
 </div></header>
 <main>${opts.body}</main>
-<footer class="footer"><div class="footer-inner"><p class="footer-report"><a data-report href="/report">Report a problem or share an idea</a></p><p>Concept prototype for private review. Not affiliated with or endorsed by Walton County government. Figures are unaudited and may change. ${payrollFooter} No county seal is used.</p></div></footer>
+<footer class="footer"><div class="footer-inner"><p class="footer-report"><a data-report href="/report">Report a problem or share an idea</a></p><p class="footer-book">${budgetBookLink()}. ${esc(BUDGET_BOOK_LABEL)}.</p><p>Concept prototype for private review. Not affiliated with or endorsed by Walton County government. Figures are unaudited and may change. ${payrollFooter} No county seal is used.</p></div></footer>
 <script src="/assets/app.js" defer></script>
 </body></html>`;
 }
 
 function metric(id: string, label: string, value: string, note: string): string {
-  const long = value.length > 24 ? " metric-text" : "";
+  const visible = value.replace(/<[^>]+>/g, "");
+  const long = visible.length > 24 ? " metric-text" : "";
   return `<article class="metric"><p class="metric-label"><span>${label}</span>${id ? infoTip(id, note) : ""}</p><p class="metric-value${long}">${value}</p><p class="metric-note">${note}</p></article>`;
 }
 
@@ -328,11 +342,14 @@ export function renderOverview(opts: {
   const platIndex = new Map(opts.platMonths.map((row) => [row.ym, row]));
   const fyMonths = fiscalYearMonths(opts.row.data_as_of);
   const body = `
-${askBox(opts.csrf)}
+${paySearchBox(opts.showNames)}
+${whoPaidCard(opts.vendors, fiscal, opts.displayName)}
 <section class="hero">
 <div>
 <div class="eyebrow">Fiscal year ${esc(fiscal.fyLabel)} &middot; Oct 1, ${esc(fiscal.fyStart.slice(0, 4))} to Sep 30, ${esc(fiscal.fyEnd.slice(0, 4))}</div>
 <h1>Commissioners adopted a ${esc(moneyCompact(facts.adopted))} budget for FY${esc(fiscal.fyLabel)}. Through ${esc(plainDate(opts.row.data_as_of))} the county's books show <em><a href="/search">${esc(moneyCompact(facts.spent))}</a></em> spent.${infoTip("overview-totals", "These totals leave out money moved between county funds.")}</h1>
+<p class="book-link">${budgetBookLink()}</p>
+<p class="book-caption">${esc(BUDGET_BOOK_LABEL)}.</p>
 <p class="lead">From the county's year to date report. These totals leave out money moved between county funds.</p>
 ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 </div>
@@ -381,6 +398,7 @@ ${vendorCard(opts.vendors, opts.officeCents, facts.transfer, fiscal, opts.displa
 ${lookCard(looks)}
 ${platCard(opts.funds, opts.names, fyMonths, platIndex, opts.row.data_as_of || "")}
 </section>
+${askBox(opts.csrf)}
 <p class="sources"><b>Sources.</b> Walton County year to date budget report, data as of ${esc(displayDate(opts.row.data_as_of))}, as provided by the Walton County Clerk and Comptroller. Money moved between county funds is shown on its own and is not included in the spent total. ${laterLinesSentence(opts.row, opts.afterCutoffCents || 0)}</p>`;
   return page({
     title: "Overview. Budget Explorer",
@@ -392,6 +410,49 @@ ${platCard(opts.funds, opts.names, fyMonths, platIndex, opts.row.data_as_of || "
     fy: fiscal.fyLabel,
     showNames: opts.showNames,
   });
+}
+
+function paySearchBox(showNames: boolean): string {
+  const label = showNames ? "Vendor, employee, invoice, check, or description" : "Vendor, invoice, check, or description";
+  return `<section class="ask-hero card pay-find">
+<div class="eyebrow">Who was paid</div>
+<h2>Search any vendor or payment${infoTip("pay-search", "Search payment lines in the published import.")}</h2>
+<p class="cap">Search payment lines in the published import.</p>
+<form method="get" action="/search">
+<div class="ask-row">
+<label class="sr" for="vendor-search">${esc(label)}</label>
+<input id="vendor-search" name="q" type="search" maxlength="80" placeholder="${esc(label)}" autocomplete="off">
+<button class="btn" type="submit">Search</button>
+</div>
+</form>
+<p class="more-links"><a class="btn" href="/vendors">All vendors</a> <a class="btn secondary" href="/search">All payments</a></p>
+</section>`;
+}
+
+function vendorPageHref(vendor: OrgVendor, fiscal: { fyStart: string; asOf: string }): string {
+  const number = (vendor.vendor_number || "").trim();
+  if (/^\d{1,20}$/.test(number)) return `/vendors/${number}`;
+  return `/search?vendor=${encodeURIComponent(vendor.vendor_name)}&from=${fiscal.fyStart}&to=${fiscal.asOf}`;
+}
+
+function whoPaidCard(vendors: OrgVendor[], fiscal: { fyStart: string; asOf: string }, displayName: (raw: string) => VendorLabel): string {
+  const shown = vendors.slice(0, 10);
+  const max = Math.max(shown[0]?.cents || 0, 1);
+  const through = `Outside businesses paid from October 1 through ${displayDate(fiscal.asOf)}.`;
+  const rows = shown
+    .map((vendor, index) => {
+      const width = max ? (vendor.cents / max) * 100 : 0;
+      const label = displayName(vendor.vendor_name);
+      const title = label.shortened ? ` title="Name shortened in the county report"` : "";
+      const count = `${vendor.payments.toLocaleString("en-US")} payment${vendor.payments === 1 ? "" : "s"}`;
+      return `<a class="vrow" href="${esc(vendorPageHref(vendor, fiscal))}"><div class="vn"><span class="rk">${index + 1}</span><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span><span class="row-cap">Total received</span></div></a>`;
+    })
+    .join("");
+  return `<section class="card paid-list"><div class="eyebrow">Who was paid</div><h2>Who received the most money${infoTip("who-paid", through)}</h2>
+<p class="cap">${esc(through)} Payments to other county offices are not in these bars.</p>
+${rows || `<p class="cap">No outside-vendor payments are in this import.</p>`}
+<p class="mnote">People, payroll, and individual pay are not listed. A name cut off at 20 characters in the county report is marked. The rest of the name is not guessed.</p>
+<a class="btn" href="/vendors">See all vendors</a></section>`;
 }
 
 function askBox(csrf: string): string {
@@ -1162,7 +1223,7 @@ export function renderSearch(opts: {
     .join("");
   const query = searchQuery(opts.filters);
   const body = `
-<h1>Payment search</h1>
+<h1>Payments${infoTip("payments-page", "Search payment lines in the published import.")}</h1>
 <p class="lede">Search payment lines in the published import. Payroll lines in this report are batch totals. No employee names appear. Reversals and re-posts are listed as separate lines. Lines dated after ${esc(displayDate(opts.row.data_as_of))} are stored and excluded.</p>
 <section class="panel">
 <form method="get" action="/search">
@@ -1172,6 +1233,7 @@ export function renderSearch(opts: {
 <div><label for="dept">Department</label><select id="dept" name="dept">${options}</select></div>
 <div><label for="vendor">Vendor name</label><input id="vendor" name="vendor" type="text" value="${esc(opts.filters.vendor)}"></div>
 <div><label for="min">Minimum amount</label><input id="min" name="min" type="text" inputmode="decimal" value="${esc(opts.filters.minCents ? (opts.filters.minCents / 100).toString() : "")}"></div>
+<div><label for="max">Maximum amount</label><input id="max" name="max" type="text" inputmode="decimal" value="${esc(opts.filters.maxCents ? (opts.filters.maxCents / 100).toString() : "")}"></div>
 <div><label for="from">From date</label><input id="from" name="from" type="date" value="${esc(opts.filters.from)}"></div>
 <div><label for="to">To date</label><input id="to" name="to" type="date" value="${esc(opts.filters.to)}"></div>
 <div><button class="btn" type="submit">Search</button></div>
@@ -1181,7 +1243,8 @@ export function renderSearch(opts: {
 </section>
 <section class="panel">
 <h2>${opts.total.toLocaleString("en-US")} payments found, totaling ${moneyExact(opts.totalCents)}</h2>
-<p class="hint">${opts.filters.excludeTransfer === false ? "These results include money moved between county funds." : "Money moved between county funds is not included."} Sorted by amount, largest first. <a href="/search.csv?${query}">Download results (CSV)</a></p>
+<p class="cap">Sorted by amount, largest first.</p>
+<p class="hint">${opts.filters.excludeTransfer === false ? "These results include money moved between county funds." : "Money moved between county funds is not included."} Sorted by amount, largest first. <a href="/search.csv?${query}">Download results (CSV)</a>. The file includes at most ${PAYMENT_CSV_LIMIT.toLocaleString("en-US")} lines, largest amounts first.</p>
 <p class="note">The overview spent figure is the year-to-date column on the account report, minus money moved between county funds. This total adds payment lines and payroll lines instead. Lines dated after the report date are left out of this search. That is why this total can differ from the overview. Reversals and re-posts are listed as separate lines.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Date</th><th>Vendor</th><th>Invoice</th><th>Description</th><th>Department</th><th>Check</th><th class="num">Amount</th></tr></thead>
@@ -1190,7 +1253,7 @@ export function renderSearch(opts: {
 ${pager(opts.pageIndex, pages, (index) => `/search?${query}&page=${index + 1}`)}
 <p class="note" style="margin-top:16px">Descriptions are shortened in the Clerk's report. Some departments pay the same vendor through purchase cards, which appear under the card vendor. Payment dates after the report date are excluded here.</p>
 </section>`;
-  return page({ title: "Payment search. Budget Explorer", active: "search", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
+  return page({ title: "Payments. Budget Explorer", active: "search", body, dataAsOf: opts.row.data_as_of, admin: opts.isAdmin, csrf: opts.csrf, fy: fiscal.fyLabel, showNames: opts.showNames });
 }
 
 function searchQuery(filters: SearchFilters): string {
@@ -1200,6 +1263,7 @@ function searchQuery(filters: SearchFilters): string {
   if (filters.dept) params.set("dept", filters.dept);
   if (filters.fund) params.set("fund", filters.fund);
   if (filters.minCents) params.set("min", (filters.minCents / 100).toString());
+  if (filters.maxCents) params.set("max", (filters.maxCents / 100).toString());
   if (filters.from) params.set("from", filters.from);
   if (filters.to) params.set("to", filters.to);
   if (filters.excludeTransfer === false) params.set("transfers", "1");
@@ -1210,6 +1274,185 @@ function pager(pageIndex: number, pages: number, href: (index: number) => string
   const prev = pageIndex > 0 ? `<a href="${esc(href(pageIndex - 1))}">Previous</a>` : `<span></span>`;
   const next = pageIndex + 1 < pages ? `<a href="${esc(href(pageIndex + 1))}">Next</a>` : `<span></span>`;
   return `<div class="pager">${prev}<span>Page ${pageIndex + 1} of ${pages}</span>${next}</div>`;
+}
+
+function vendorListHref(query: string, sort: VendorSort, page = 1): string {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (sort === "count") params.set("sort", "count");
+  if (page > 1) params.set("page", String(page));
+  const text = params.toString();
+  return text ? `/vendors?${text}` : "/vendors";
+}
+
+export function renderVendors(opts: {
+  row: ImportRow;
+  vendors: VendorSummary[];
+  total: number;
+  query: string;
+  sort: VendorSort;
+  pageIndex: number;
+  pageSize: number;
+  csrf: string;
+  isAdmin: boolean;
+  showNames: boolean;
+  displayName: (raw: string) => VendorLabel;
+}): string {
+  const fiscal = fiscalPosition(opts.row.data_as_of);
+  const through = `Outside businesses paid from October 1 through ${displayDate(opts.row.data_as_of)}.`;
+  const pages = Math.max(1, Math.ceil(opts.total / opts.pageSize));
+  const max = Math.max(...opts.vendors.map((vendor) => vendor.cents), 1);
+  const rows = opts.vendors
+    .map((vendor) => {
+      const label = opts.displayName(vendor.vendor_name);
+      const title = label.shortened ? ` title="Name shortened in the county report"` : "";
+      const width = max ? (vendor.cents / max) * 100 : 0;
+      const count = `${vendor.payments.toLocaleString("en-US")} payment${vendor.payments === 1 ? "" : "s"}`;
+      return `<a class="vrow" href="/vendors/${esc(vendor.vendor_number)}"><div class="vn"><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span><span class="row-cap">Total received</span></div></a>`;
+    })
+    .join("");
+  const sortNote = opts.sort === "count" ? "Sorted by number of payments." : "Sorted by total received.";
+  const body = `
+<p class="crumb"><a href="/">Overview</a> / Vendors</p>
+<h1>Vendors${infoTip("vendor-list", through)}</h1>
+<p class="lede">${esc(through)} Payments to other county offices are not in these bars.</p>
+<section class="panel">
+<form method="get" action="/vendors">
+${opts.sort === "count" ? `<input type="hidden" name="sort" value="count">` : ""}
+<div class="ask-row">
+<label class="sr" for="vendor-q">Vendor name or vendor number</label>
+<input id="vendor-q" name="q" type="search" maxlength="80" placeholder="Vendor name or vendor number" value="${esc(opts.query)}">
+<button class="btn" type="submit">Search</button>
+</div>
+</form>
+<div class="sort-row">
+<a class="btn${opts.sort === "total" ? "" : " secondary"}" href="${esc(vendorListHref(opts.query, "total"))}">Total received</a>
+<a class="btn${opts.sort === "count" ? "" : " secondary"}" href="${esc(vendorListHref(opts.query, "count"))}">Number of payments</a>
+</div>
+<p class="cap">${sortNote}</p>
+</section>
+<section class="panel paid-list">
+<h2>${opts.total.toLocaleString("en-US")} vendors${infoTip("vendor-count", sortNote)}</h2>
+<p class="cap">${sortNote} Reversals and re-posts are listed as separate lines.</p>
+${rows || `<p class="empty">No vendors match these filters.</p>`}
+${pager(opts.pageIndex, pages, (index) => vendorListHref(opts.query, opts.sort, index + 1))}
+<p class="note">Lines dated after ${esc(displayDate(opts.row.data_as_of))} are stored and excluded. People, payroll, and individual pay are not listed.</p>
+</section>`;
+  return page({
+    title: "Vendors. Budget Explorer",
+    active: "vendors",
+    body,
+    dataAsOf: opts.row.data_as_of,
+    admin: opts.isAdmin,
+    csrf: opts.csrf,
+    fy: fiscal.fyLabel,
+    showNames: opts.showNames,
+  });
+}
+
+export function renderVendorDetail(opts: {
+  row: ImportRow;
+  vendor: VendorSummary;
+  funds: VendorSlice[];
+  departments: VendorSlice[];
+  deptRows: DeptRollup[];
+  fundReports: Map<string, string>;
+  names: NameMaps;
+  payments: PaymentRow[];
+  total: number;
+  pageIndex: number;
+  pageSize: number;
+  csrf: string;
+  isAdmin: boolean;
+  showNames: boolean;
+  displayName: (raw: string) => VendorLabel;
+}): string {
+  const fiscal = fiscalPosition(opts.row.data_as_of);
+  const through = `Outside businesses paid from October 1 through ${displayDate(opts.row.data_as_of)}.`;
+  const label = opts.displayName(opts.vendor.vendor_name);
+  const title = label.shortened ? ` title="Name shortened in the county report"` : "";
+  const number = opts.vendor.vendor_number;
+  const vendorQuery = encodeURIComponent(opts.vendor.vendor_name);
+  const searchHref = `/search?vendor=${vendorQuery}&from=${fiscal.fyStart}&to=${fiscal.asOf}`;
+  const deptLabels = disambiguatedDepartmentNames(opts.deptRows, opts.names, opts.fundReports);
+  const pages = Math.max(1, Math.ceil(opts.total / opts.pageSize));
+  const dayHref = (iso: string) => {
+    const day = isoDate(iso);
+    return day ? `/search?vendor=${vendorQuery}&from=${day}&to=${day}` : searchHref;
+  };
+  const fundItems = opts.funds
+    .map((item) => {
+      const named = fundLabel(item.code, opts.fundReports.get(item.code) || "", opts.names);
+      const count = `${item.payments.toLocaleString("en-US")} payment${item.payments === 1 ? "" : "s"}`;
+      return `<li><a href="/funds/${esc(item.code)}">${esc(named.primary)}</a> <a href="/search?fund=${esc(item.code)}&amp;vendor=${vendorQuery}"><b>${esc(moneyExact(item.cents))}</b></a> <span>${count}. Total received.</span></li>`;
+    })
+    .join("");
+  const deptItems = opts.departments
+    .map((item) => {
+      const row = opts.deptRows.find((dept) => dept.code === item.code);
+      const named = deptLabels.get(item.code) || deptName({ code: item.code, report_name: row?.report_name || "" }, opts.names).primary;
+      const count = `${item.payments.toLocaleString("en-US")} payment${item.payments === 1 ? "" : "s"}`;
+      return `<li><a href="/departments/${esc(item.code)}">${esc(named)}</a> <a href="/search?dept=${esc(item.code)}&amp;vendor=${vendorQuery}"><b>${esc(moneyExact(item.cents))}</b></a> <span>${count}. Total received.</span></li>`;
+    })
+    .join("");
+  const lineRows = opts.payments
+    .map((payment) => {
+      const project = payment.project_code || "_";
+      const accountHref = `/departments/${payment.dept_code}/${payment.object_code}/${project}`;
+      const accountText = payment.project_code ? `${payment.object_code} / ${payment.project_code}` : payment.object_code;
+      const deptNameText = deptLabels.get(payment.dept_code) || nameFor(opts.names.department.get(payment.dept_code), "", payment.dept_code).primary;
+      const fundNameText = fundLabel(payment.fund_code, opts.fundReports.get(payment.fund_code) || "", opts.names).primary;
+      return `<tr>
+<td><a href="${esc(dayHref(payment.pay_date || ""))}">${esc(displayDate(payment.pay_date))}</a></td>
+<td class="num"><a href="${esc(accountHref)}">${moneyExact(payment.amount_cents)}</a></td>
+<td><a href="/funds/${esc(payment.fund_code)}">${esc(fundNameText)}</a></td>
+<td><a href="/departments/${esc(payment.dept_code)}">${esc(deptNameText)}</a></td>
+<td class="mono"><a href="${esc(accountHref)}">${esc(accountText)}</a></td>
+<td>${esc(payment.description || "")}</td>
+</tr>`;
+    })
+    .join("");
+  const body = `
+<p class="crumb"><a href="/">Overview</a> / <a href="/vendors">Vendors</a> / ${esc(label.text)}</p>
+<h1><span${title}>${esc(label.text)}</span>${infoTip("vendor-name", through)}</h1>
+<p class="lede">Vendor number ${esc(number)}. ${esc(through)} Payments to other county offices are not in these bars.</p>
+<p class="more-links"><a class="btn" href="${esc(searchHref)}">All payments for this vendor</a> <a class="btn secondary" href="/vendors">All vendors</a></p>
+<section class="metrics">
+${metric("vendor-total", "Total received", `<a href="#payments">${esc(moneyExact(opts.vendor.cents))}</a>`, "Payments to this vendor, added together.")}
+${metric("vendor-count", "Number of payments", `<a href="#payments">${opts.vendor.payments.toLocaleString("en-US")}</a>`, "Reversals and re-posts are listed as separate lines.")}
+${metric("vendor-first", "First payment", `<a href="${esc(dayHref(opts.vendor.first_date))}">${esc(displayDate(opts.vendor.first_date))}</a>`, "The earliest payment date in this list.")}
+${metric("vendor-last", "Last payment", `<a href="${esc(dayHref(opts.vendor.last_date))}">${esc(displayDate(opts.vendor.last_date))}</a>`, "The latest payment date in this list.")}
+</section>
+<section class="panel">
+<h2>By fund${infoTip("vendor-funds", "Payments to this vendor in each fund.")}</h2>
+<p class="cap">Payments to this vendor in each fund.</p>
+<ul class="holder-list">${fundItems || `<li>No fund totals are in this list.</li>`}</ul>
+</section>
+<section class="panel">
+<h2>By department${infoTip("vendor-depts", "Payments to this vendor in each department.")}</h2>
+<p class="cap">Payments to this vendor in each department.</p>
+<ul class="holder-list">${deptItems || `<li>No department totals are in this list.</li>`}</ul>
+</section>
+<section class="panel" id="payments">
+<h2>Payments${infoTip("vendor-lines", "Reversals and re-posts are listed as separate lines.")}</h2>
+<p class="cap">Reversals and re-posts are listed as separate lines.</p>
+<p class="hint">${opts.total.toLocaleString("en-US")} lines. Date, amount, fund, department, account, and description as stored. Lines dated after ${esc(displayDate(opts.row.data_as_of))} are stored and excluded.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Date</th><th class="num">Amount</th><th>Fund</th><th>Department</th><th>Account</th><th>Description</th></tr></thead>
+<tbody>${lineRows || `<tr><td colspan="6" class="empty">No payments on this page.</td></tr>`}</tbody>
+</table></div>
+${pager(opts.pageIndex, pages, (index) => `/vendors/${esc(number)}?page=${index + 1}`)}
+</section>`;
+  return page({
+    title: `${label.text}. Budget Explorer`,
+    active: "vendors",
+    body,
+    dataAsOf: opts.row.data_as_of,
+    admin: opts.isAdmin,
+    csrf: opts.csrf,
+    fy: fiscal.fyLabel,
+    showNames: opts.showNames,
+  });
 }
 
 export function renderAsk(opts: {
@@ -1300,6 +1543,8 @@ export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolea
 <section class="panel about-source">
 <h2>Source</h2>
 <p>Figures come from a year to date budget report produced by the Walton County Clerk and Comptroller, imported by an administrator. The published snapshot is what the pages read. Older imports are kept.</p>
+<p class="book-link">${budgetBookLink()}</p>
+<p class="book-caption">${esc(BUDGET_BOOK_LABEL)}.</p>
 <p><a href="/revenue">Income</a> and <a href="/reserves">savings</a> are separate. They come from the audited financial report and the adopted budget files, not from the year to date payment report. Transfers between county funds are not treated as income.</p>
 <p>Department and object names come from a chart of accounts when one has been imported. Until then, a code is tagged name from county report. Every figure is keyed by fund, department, object, and project codes.</p>
 <p>Payroll lines in this report are batch totals. No employee names appear. Payment lines dated after the report date are stored, flagged, and left out of search, department payments, and questions.</p>

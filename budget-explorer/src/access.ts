@@ -1,5 +1,5 @@
 import { TRANSFER_OBJECT } from "./budget";
-import { departmentRollups, fundRollups, type PaymentRow, type SearchFilters } from "./db";
+import { departmentRollups, fundRollups, vendorPaymentRows, type PaymentRow, type SearchFilters } from "./db";
 import { accountKey, moneyExact, pace } from "./format";
 import { QA_MAX_CHARS } from "./auth";
 import { QA_SYSTEM, mentionedCodes, nameMatchesQuestion, vendorTokens, type QaPack, type QaRecord } from "./qa";
@@ -145,6 +145,10 @@ function paymentBranch(importId: number, filters: SearchFilters | null, showName
     where.push("amount_cents >= ?");
     binds.push(filters.minCents);
   }
+  if (filters && filters.maxCents > 0) {
+    where.push("amount_cents <= ?");
+    binds.push(filters.maxCents);
+  }
   if (filters?.from) {
     where.push("pay_date >= ?");
     binds.push(filters.from);
@@ -207,6 +211,10 @@ function payrollBranch(importId: number, filters: SearchFilters | null, showName
   if (filters?.to) {
     where.push("pay_date <= ?");
     binds.push(filters.to);
+  }
+  if (filters && filters.maxCents > 0) {
+    where.push("amount_cents <= ?");
+    binds.push(filters.maxCents);
   }
   if (showNames) {
     if (filters && filters.minCents > 0) {
@@ -583,7 +591,22 @@ function lineText(row: PaymentRow): string {
 }
 
 function blankFilters(): SearchFilters {
-  return { q: "", vendor: "", dept: "", fund: "", minCents: 0, from: "", to: "" };
+  return { q: "", vendor: "", dept: "", fund: "", minCents: 0, maxCents: 0, from: "", to: "" };
+}
+
+/** Vendor payment lines, with the same name hiding used by payment search. */
+export async function showVendorLines(
+  db: D1Database,
+  importId: number,
+  asOf: string,
+  vendorNumber: string,
+  page: number,
+  pageSize: number,
+  showNames: boolean,
+): Promise<{ rows: PaymentRow[]; total: number }> {
+  const found = await vendorPaymentRows(db, importId, asOf, vendorNumber, pageSize, page * pageSize);
+  const raw = found.rows.map((row) => ({ ...row, person_hidden: 0 }));
+  return { rows: await present(db, importId, raw, showNames), total: found.total };
 }
 
 export function qaSystem(showNames: boolean): string {

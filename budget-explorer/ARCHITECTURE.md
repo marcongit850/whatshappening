@@ -45,6 +45,16 @@ Nav targets come from `PUBLIC_PATHS` in `src/view.ts`. `DASHBOARD_PREFIXES` in `
 
 A request path that starts with two slashes, or with a slash and a backslash, is the public 404. The same is true when the path decodes to one of those, including `%2f%2f` and `%5C`. Trailing-slash redirects stay for ordinary paths such as `/florida/`. Any `Location` built from a request path or a `next` value collapses leading slashes and backslashes first, including inside `taxesTarget` and when a dashboard `Location` is rewritten. The header is a single-slash path on this host. It cannot be scheme-relative or protocol-relative.
 
+## Who was paid
+
+The password-protected dashboard leads with vendors and payments. The chart pages stay.
+
+- On the overview, a search box opens the existing payment search. Under it, "Who received the most money" lists the same outside vendors as the vendor chart: grouped by vendor number, longest stored name, object `591000` left out, county offices left out, person names left out, and lines after the report date left out. Each numbered vendor links to `/vendors/{number}`.
+- `GET /vendors` lists those vendors. It can be searched and sorted by total received or by the number of payment lines.
+- `GET /vendors/{number}` shows total received, the number of payment lines, the first and last payment date, totals by fund and by department, and the payment lines (date, amount, fund, department, account, description) with pages. Reversals and re-posts stay separate lines. Hidden mode uses the same name rules as payment search.
+- `GET /search` is the payments page. Filters are vendor, department, fund, date range, and amount range. `GET /search.csv` downloads the filtered rows, at most 2,000 lines. These routes are the same login gate as the other dashboard pages, including under `/walton` on the taxes host.
+- The footer, About the data, and the overview budget headline link to https://budget-waltoncountyfl.com as the county's own FY2027 tentative budget book. This site does not load FY2027 amounts.
+
 ## Search
 
 Canonical URLs, Open Graph tags, and JSON-LD use `https://howtheyspendmytaxes.com`. The homepage JSON-LD type is `WebSite`. Florida and the Walton landing use `WebPage`. There is no `Organization` node: the site is not a county agency, and the copy does not name a publisher.

@@ -517,11 +517,24 @@ export async function monthlyParts(db: D1Database, importId: number, asOf: strin
 }
 
 /**
- * Organizations only. Person names are excluded in both name-switch modes.
- * The stored is_person_name column is used here so this WHERE stays under D1's expression depth.
+ * Outside organizations only. Same exclusions as the overview vendor chart.
+ * Person names stay out in both name-switch modes. The stored is_person_name
+ * column is used so this WHERE stays under D1's expression depth.
  */
-export async function organizationVendors(db: D1Database, importId: number, asOf: string, limit = 10): Promise<OrgVendor[]> {
+function orgVendorWhereSql(): string {
   const sources = VENDOR_SOURCES.map((source) => `'${source}'`).join(", ");
+  return `import_id = ?
+           AND after_cutoff = 0
+           AND pay_date <= ?
+           AND source IN (${sources})
+           AND vendor_name IS NOT NULL
+           AND trim(vendor_name) != ''
+           AND object_code != '${TRANSFER_OBJECT}'
+           AND is_person_name = 0
+           AND NOT ${CONSTITUTIONAL_SQL}`;
+}
+
+export async function organizationVendors(db: D1Database, importId: number, asOf: string, limit = 10): Promise<OrgVendor[]> {
   const rows = await db
     .prepare(
       `WITH scoped AS (
@@ -532,15 +545,7 @@ export async function organizationVendors(db: D1Database, importId: number, asOf
            amount_cents,
            object_code
          FROM payments
-         WHERE import_id = ?
-           AND after_cutoff = 0
-           AND pay_date <= ?
-           AND source IN (${sources})
-           AND vendor_name IS NOT NULL
-           AND trim(vendor_name) != ''
-           AND object_code != '${TRANSFER_OBJECT}'
-           AND is_person_name = 0
-           AND NOT ${CONSTITUTIONAL_SQL}
+         WHERE ${orgVendorWhereSql()}
        )
        SELECT s.vendor_key AS vendor_key,
               MAX(s.vendor_number) AS vendor_number,
@@ -694,6 +699,8 @@ export interface SearchFilters {
   dept: string;
   fund: string;
   minCents: number;
+  /** 0 means no upper bound. */
+  maxCents: number;
   from: string;
   to: string;
   excludeTransfer?: boolean;
@@ -729,6 +736,208 @@ export interface OrgVendor {
   cents: number;
   payments: number;
   land_cents: number;
+}
+
+export interface VendorSummary {
+  vendor_number: string;
+  vendor_name: string;
+  cents: number;
+  payments: number;
+  first_date: string;
+  last_date: string;
+}
+
+export interface VendorSlice {
+  code: string;
+  cents: number;
+  payments: number;
+}
+
+export type VendorSort = "total" | "count";
+
+function vendorLike(value: string): string {
+  const cleaned = value.replace(/[%_]/g, " ").trim().slice(0, 80);
+  return `%${cleaned.toUpperCase()}%`;
+}
+
+function numberedVendorCte(): string {
+  return `WITH scoped AS (
+    SELECT
+      trim(vendor_number) AS vendor_key,
+      vendor_name,
+      amount_cents,
+      pay_date
+    FROM payments
+    WHERE ${orgVendorWhereSql()}
+      AND trim(COALESCE(vendor_number, '')) != ''
+  ),
+  ranked AS (
+    SELECT
+      vendor_key,
+      vendor_name,
+      SUM(amount_cents) OVER (PARTITION BY vendor_key) AS cents,
+      COUNT(*) OVER (PARTITION BY vendor_key) AS payments,
+      MIN(pay_date) OVER (PARTITION BY vendor_key) AS first_date,
+      MAX(pay_date) OVER (PARTITION BY vendor_key) AS last_date,
+      ROW_NUMBER() OVER (
+        PARTITION BY vendor_key
+        ORDER BY length(trim(vendor_name)) DESC, vendor_name DESC
+      ) AS rn
+    FROM scoped
+  )`;
+}
+
+const VENDOR_MATCH = `(? = 1 OR upper(vendor_key) LIKE ? OR upper(vendor_name) LIKE ? OR vendor_key IN (
+  SELECT s3.vendor_key FROM scoped s3 WHERE upper(s3.vendor_name) LIKE ?
+))`;
+
+function vendorMatchBinds(query: string): (string | number)[] {
+  const pattern = vendorLike(query);
+  return [query.trim() ? 0 : 1, pattern, pattern, pattern];
+}
+
+function vendorOrder(sort: VendorSort): string {
+  return sort === "count" ? "payments DESC, cents DESC, vendor_name COLLATE NOCASE" : "cents DESC, payments DESC, vendor_name COLLATE NOCASE";
+}
+
+/** Vendors with a number, grouped by that number. Longest stored name is shown. */
+export async function listVendors(
+  db: D1Database,
+  importId: number,
+  asOf: string,
+  query: string,
+  sort: VendorSort,
+  limit: number,
+  offset: number,
+): Promise<{ rows: VendorSummary[]; total: number }> {
+  const match = vendorMatchBinds(query);
+  const bounds = [importId, cutoffDate(asOf), ...match];
+  const totals = await db
+    .prepare(
+      `${numberedVendorCte()}
+       SELECT COUNT(*) AS n
+       FROM ranked
+       WHERE rn = 1 AND ${VENDOR_MATCH}`,
+    )
+    .bind(...bounds)
+    .first<{ n: number }>();
+  const rows = await db
+    .prepare(
+      `${numberedVendorCte()}
+       SELECT vendor_key AS vendor_number, vendor_name, cents, payments, first_date, last_date
+       FROM ranked
+       WHERE rn = 1 AND ${VENDOR_MATCH}
+       ORDER BY ${vendorOrder(sort)}
+       LIMIT ? OFFSET ?`,
+    )
+    .bind(...bounds, limit, offset)
+    .all<VendorSummary>();
+  return {
+    total: Number(totals?.n || 0),
+    rows: (rows.results || []).map((row) => ({
+      vendor_number: row.vendor_number || "",
+      vendor_name: (row.vendor_name || "").trim(),
+      cents: Number(row.cents),
+      payments: Number(row.payments),
+      first_date: row.first_date || "",
+      last_date: row.last_date || "",
+    })),
+  };
+}
+
+export async function oneVendor(db: D1Database, importId: number, asOf: string, vendorNumber: string): Promise<VendorSummary | null> {
+  const row = await db
+    .prepare(
+      `WITH scoped AS (
+         SELECT vendor_name, amount_cents, pay_date
+         FROM payments
+         WHERE ${orgVendorWhereSql()}
+           AND trim(COALESCE(vendor_number, '')) = ?
+       ),
+       ranked AS (
+         SELECT
+           vendor_name,
+           SUM(amount_cents) OVER () AS cents,
+           COUNT(*) OVER () AS payments,
+           MIN(pay_date) OVER () AS first_date,
+           MAX(pay_date) OVER () AS last_date,
+           ROW_NUMBER() OVER (ORDER BY length(trim(vendor_name)) DESC, vendor_name DESC) AS rn
+         FROM scoped
+       )
+       SELECT vendor_name, cents, payments, first_date, last_date
+       FROM ranked
+       WHERE rn = 1`,
+    )
+    .bind(importId, cutoffDate(asOf), vendorNumber)
+    .first<VendorSummary>();
+  if (!row || !Number(row.payments)) return null;
+  return {
+    vendor_number: vendorNumber,
+    vendor_name: (row.vendor_name || "").trim(),
+    cents: Number(row.cents),
+    payments: Number(row.payments),
+    first_date: row.first_date || "",
+    last_date: row.last_date || "",
+  };
+}
+
+export async function vendorSlices(
+  db: D1Database,
+  importId: number,
+  asOf: string,
+  vendorNumber: string,
+  column: "fund_code" | "dept_code",
+): Promise<VendorSlice[]> {
+  const rows = await db
+    .prepare(
+      `SELECT ${column} AS code, SUM(amount_cents) AS cents, COUNT(*) AS payments
+       FROM payments
+       WHERE ${orgVendorWhereSql()}
+         AND trim(COALESCE(vendor_number, '')) = ?
+       GROUP BY ${column}
+       ORDER BY cents DESC, code`,
+    )
+    .bind(importId, cutoffDate(asOf), vendorNumber)
+    .all<VendorSlice>();
+  return (rows.results || []).map((row) => ({
+    code: row.code || "",
+    cents: Number(row.cents),
+    payments: Number(row.payments),
+  }));
+}
+
+export async function vendorPaymentRows(
+  db: D1Database,
+  importId: number,
+  asOf: string,
+  vendorNumber: string,
+  limit: number,
+  offset: number,
+): Promise<{ rows: PaymentRow[]; total: number }> {
+  const where = `${orgVendorWhereSql()} AND trim(COALESCE(vendor_number, '')) = ?`;
+  const bounds = [importId, cutoffDate(asOf), vendorNumber];
+  const totals = await db.prepare(`SELECT COUNT(*) AS n FROM payments WHERE ${where}`).bind(...bounds).first<{ n: number }>();
+  const rows = await db
+    .prepare(
+      `SELECT id, import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
+              amount_cents, vendor_number, vendor_name, invoice, description, check_number, after_cutoff, dedupe_key
+       FROM payments
+       WHERE ${where}
+       ORDER BY pay_date DESC, id DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .bind(...bounds, limit, offset)
+    .all<PaymentRow>();
+  return {
+    total: Number(totals?.n || 0),
+    rows: (rows.results || []).map((row) => ({
+      ...row,
+      id: Number(row.id),
+      import_id: Number(row.import_id),
+      amount_cents: Number(row.amount_cents),
+      after_cutoff: Number(row.after_cutoff),
+    })),
+  };
 }
 
 export async function reconAccounts(db: D1Database, importId: number): Promise<AccountRow[]> {

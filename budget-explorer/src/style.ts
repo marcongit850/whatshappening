@@ -139,7 +139,8 @@ h2 { font-family: var(--serif); font-weight: 560; font-size: 28px; letter-spacin
 .metric { padding: 18px 18px 16px; position: relative; overflow: visible; }
 .metric::before { content: ""; position: absolute; left: 18px; right: 18px; top: 0; height: 2px; background: linear-gradient(90deg, var(--gold), transparent); }
 .metric-label { margin: 8px 0 0; color: var(--muted); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
-.metric-value { margin: 6px 0 0; font-weight: 560; font-size: clamp(26px, 2.2vw, 34px); letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums lining-nums; }
+.metric-value { margin: 6px 0 0; font-weight: 560; font-size: clamp(26px, 2.2vw, 34px); letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums lining-nums; overflow-wrap: anywhere; }
+.metric-value a { color: inherit; text-decoration: none; }
 .metric-note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
 .panel { padding: 22px 22px 18px; margin-bottom: 18px; }
 .about-source { margin-top: 20px; }
@@ -187,7 +188,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums lining-nu
 .bar-mark { width: 1px; background: var(--ink); top: -4px; bottom: -4px; }
 .split { display: grid; grid-template-columns: 1.6fr 0.9fr; gap: 18px; }
 .note { background: #f4f7f6; border: 1px solid #d5e3df; border-radius: 12px; padding: 12px 14px; color: #243833; font-size: 14px; }
-.filters { display: grid; grid-template-columns: 1.4fr 0.7fr 1fr 1fr 0.7fr 0.85fr 0.85fr auto; gap: 12px; align-items: end; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 12px; align-items: end; }
 label { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
 input[type="text"], input[type="email"], input[type="password"], input[type="date"], input[type="number"], input[type="search"], select, textarea {
   width: 100%;
@@ -239,11 +240,24 @@ input:hover, select:hover, textarea:hover { border-color: #b7b1a6; }
 .footer { color: var(--muted); font-size: 14.5px; }
 .footer-inner { max-width: 1240px; margin: 0 auto; padding: 12px 40px 56px; border-top: 1px solid var(--line); }
 .footer-report { margin: 0 0 12px; }
+.footer-book { font-size: 18px; margin: 0 0 12px; }
+.footer-book a { font-weight: 650; color: var(--navy); }
 .footer-report a { font-size: 20px; font-weight: 650; color: var(--navy); }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 .donut-row { display: flex; gap: 22px; align-items: center; }
 .icon { width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px; }
 .ask-hero h2 { font-size: 32px; }
+.pay-find, .paid-list { margin-bottom: 22px; }
+.pay-find h2 { font-size: clamp(32px, 4vw, 44px); }
+.pay-find .btn, .sort-row .btn { min-height: 56px; font-size: 18px; padding: 14px 22px; }
+.sort-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.paid-list .vv { font-family: var(--serif); font-size: clamp(22px, 3vw, 32px); line-height: 1.1; text-align: right; overflow-wrap: anywhere; }
+.paid-list a.vrow { padding: 14px 0; }
+.paid-list > .btn { margin-top: 16px; }
+.row-cap { display: block; font-family: var(--sans); font-size: 14px; font-weight: 500; color: var(--muted); }
+.book-link { font-size: 18px; margin: 10px 0 0; }
+.book-link a { font-weight: 650; }
+.book-caption { color: var(--muted); font-size: 16px; margin: 4px 0 12px; }
 .ask-row { display: flex; gap: 12px; align-items: flex-end; }
 .ask-row input { flex: 1; min-height: 56px; font-size: 18px; }
 .ask-hero .cap { color: var(--muted); margin: 0 0 16px; }
@@ -510,7 +524,8 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
   .hero { grid-template-columns: 1fr; gap: 26px; margin-bottom: 26px; }
   .hero h1 { font-size: 33px; }
   .lead { font-size: 17.5px; }
-  .ask-hero h2 { font-size: 28px; }
+  .ask-hero h2, .pay-find h2 { font-size: 28px; }
+  .sort-row .btn, .pay-find .btn { width: 100%; }
   .ask-row { flex-direction: column; align-items: stretch; }
   .card { padding: 22px 20px; }
   .kpis { grid-template-columns: 1fr 1fr; gap: 12px; }

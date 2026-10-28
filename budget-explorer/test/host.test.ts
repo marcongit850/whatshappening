@@ -372,7 +372,14 @@ describe("taxes host public door", () => {
     expect(loginHtml).toContain("Walton County Clerk and Comptroller");
     expect(loginHtml).toContain("Unofficial. Built from public records");
 
-    for (const path of ["/funds/001", "/departments/00133000", "/revenue", "/reserves", "/search?fund=114", "/ask", "/sheriff", "/about", "/plat", "/search.csv"]) {
+    const vendorGate = await app.request(`${TAXES}/walton/vendors`, {}, dbEnv);
+    expect(vendorGate.status).toBe(303);
+    expect(vendorGate.headers.get("Location")).toBe("/walton/login?next=%2Fwalton%2Fvendors");
+    const vendorLine = await app.request(`${TAXES}/walton/vendors/1001`, {}, dbEnv);
+    expect(vendorLine.status).toBe(303);
+    expect(vendorLine.headers.get("Location")).toBe("/walton/login?next=%2Fwalton%2Fvendors%2F1001");
+
+    for (const path of ["/funds/001", "/departments/00133000", "/revenue", "/reserves", "/vendors", "/vendors/1001", "/search?fund=114", "/ask", "/sheriff", "/about", "/plat", "/search.csv"]) {
       const redirected = await app.request(`${TAXES}${path}`, { headers: { cookie } }, dbEnv);
       expect(redirected.status, path).toBe(301);
       const target = path.startsWith("/search.csv") ? "/walton/search.csv" : `/walton${path}`;
