@@ -62,6 +62,7 @@ const DASH_NAV = [
   ["revenue", "/revenue", "Revenue"],
   ["reserves", "/reserves", "Savings"],
   ["about", "/about", "About"],
+  ["ask", "/ask", "Ask AI"],
 ] as const;
 
 function navLink(on: boolean, href: string, label: string): string {
