@@ -439,7 +439,7 @@ describe("vendors who were paid", () => {
     expect(css).toContain("minmax(0, 1fr) max-content 1rem");
     expect(css).toContain(".paid-list a.vrow, a.vrow, a.brow, a.drow, .reserve-link, .holder-list li, .transfer-row, a.lg, .cmp, .pager a {\n    min-height: 44px;");
     expect(css).toContain("a.vrow::after, a.brow::after, a.drow::after, .reserve-link::after {\n  position: static;");
-    expect(css).toContain(".footer-grid { display: grid;");
+    expect(css).toContain(".footer-grid { display: flex; align-items: flex-start;");
 
     const found = await (await app.request("http://localhost/vendors?q=1002", { headers }, env)).text();
     expect(found).toContain("Acme Widget Co");
