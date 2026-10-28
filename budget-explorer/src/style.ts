@@ -872,15 +872,24 @@ a.drow::after, a.vrow::after, a.brow::after, .reserve-link::after {
 .info-card p { font-size: 16px; line-height: 1.45; margin: 0; }
 .see-grid { gap: 12px; }
 .site-footer { background: var(--navy); color: #d7e0e6; }
-.site-footer .footer-inner { max-width: 1240px; margin: 0 auto; padding: 28px 28px 40px; border-top: 0; }
-.footer-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, auto); gap: 22px 28px; }
-.footer-col { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
-.footer-logo img { height: 48px; width: auto; display: block; }
-.footer-mission { margin: 8px 0 0; font-size: 16px; line-height: 1.45; max-width: 36ch; color: #d7e0e6; }
-.footer-label { margin: 0 0 4px; color: #b7e4c7; font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+.site-footer .footer-inner { max-width: 1240px; margin: 0 auto; padding: 18px 28px 12px; border-top: 0; }
+.footer-grid { display: flex; align-items: flex-start; justify-content: flex-start; gap: 28px 40px; }
+.site-footer .footer-col { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 2px; min-width: 0; margin: 0; padding: 0; overflow: visible; }
+.site-footer .footer-brand { flex: 1 1 280px; max-width: 440px; }
+.site-footer nav[aria-label="Sources"] { flex: 0 1 240px; }
+.site-footer nav[aria-label="Request your county"] { flex: 0 1 220px; }
+.footer-logo { display: inline-flex; align-items: center; line-height: 0; }
+.footer-logo img { height: 40px; width: auto; display: block; }
+.site-footer p { margin: 0; }
+.site-footer .footer-mission { margin: 8px 0 0; font-size: 14px; line-height: 1.35; max-width: 36ch; color: #d7e0e6; }
+.site-footer .footer-report { margin: 4px 0 0; }
+.site-footer .footer-label { margin: 0 0 2px; color: #b7e4c7; font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.3; }
 .site-footer a { color: #fff; text-decoration: none; font-weight: 600; }
 .site-footer a:hover { text-decoration: underline; }
-.footer-built, .footer-asof { margin: 18px 0 0; font-size: 16px; color: #d7e0e6; }
+.site-footer .footer-col a { padding: 1px 0; font-size: 14px; font-weight: 600; line-height: 1.35; white-space: normal; }
+.site-footer .footer-col a.footer-logo { padding: 0; }
+.site-footer .footer-built { margin: 12px 0 0; padding-top: 8px; border-top: 1px solid rgba(215, 224, 230, 0.28); font-size: 14px; line-height: 1.3; color: #d7e0e6; }
+.site-footer .footer-asof { margin: 2px 0 0; padding: 0; border: 0; font-size: 14px; line-height: 1.3; color: #d7e0e6; }
 .door-section .body-copy { font-size: 18px; }
 body.door .btn { min-height: 48px; font-size: 16px; border-radius: 8px; }
 .picker select, body.door .door-login input, body.door .door-login select, body.door .door-login textarea { min-height: 48px; font-size: 16px; }
@@ -892,8 +901,11 @@ body.door .btn { min-height: 48px; font-size: 16px; border-radius: 8px; }
   .nav-toggle:checked ~ .nav-scroller { display: block; }
   .site-header nav { flex-direction: column; align-items: stretch; width: 100%; }
   .site-header nav a, .site-header nav button.linkish { min-height: 44px; display: flex; align-items: center; padding: 10px 0; font-size: 16px; }
-  .footer-grid { grid-template-columns: 1fr; }
-  .site-footer .footer-col a { min-height: 44px; display: flex; align-items: center; }
+  .site-footer .footer-inner { padding: 16px 16px 12px; }
+  .footer-grid { flex-direction: column; align-items: stretch; gap: 8px; }
+  .site-footer .footer-brand, .site-footer nav[aria-label="Sources"], .site-footer nav[aria-label="Request your county"] { flex: none; max-width: none; }
+  .footer-logo { min-height: 44px; }
+  .site-footer .footer-col a:not(.footer-logo) { min-height: 44px; display: flex; align-items: center; padding: 0; font-size: 16px; }
   main { padding: 20px 16px 32px; }
   .kpi .n { font-size: 28px; }
 }

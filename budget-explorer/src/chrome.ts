@@ -68,12 +68,6 @@ function navLink(on: boolean, href: string, label: string): string {
   return `<a class="${on ? "on" : ""}" href="${href}">${label}</a>`;
 }
 
-/** Dashboard links stay root-relative so the taxes host can prefix them. */
-function dashHref(mode: ChromeMode, path: string): string {
-  if (mode === "dashboard") return path;
-  return path === "/" ? "/walton" : `/walton${path}`;
-}
-
 /** Public pages stay on this host. Dashboard HTML uses the canonical site so prefixing does not rewrite them. */
 function publicHref(mode: ChromeMode, path: string): string {
   if (mode === "public") return path;
@@ -116,22 +110,11 @@ export function siteFooter(opts: ChromeOpts): string {
   const asOf = opts.dataAsOf ? `<p class="footer-asof">Data as of ${esc(opts.dataAsOf)}.</p>` : "";
   return `<footer class="site-footer"><div class="footer-inner">
 <div class="footer-grid">
-<div class="footer-col">
+<div class="footer-col footer-brand">
 <a class="footer-logo" href="${home}"><img src="${LOGO_DARK}" alt="${esc(BRAND_NAME)}" width="168" height="48"></a>
 <p class="footer-mission">See who county taxes are paid to, and why.</p>
-<p><a data-report href="${esc(opts.reportHref)}">Report a problem or share an idea</a></p>
+<p class="footer-report"><a data-report href="${esc(opts.reportHref)}">Report a problem or share an idea</a></p>
 </div>
-<nav class="footer-col" aria-label="Explore">
-<p class="footer-label">Explore</p>
-<a href="${publicHref(opts.mode, "/")}">State map</a>
-<a href="${publicHref(opts.mode, "/florida")}">Florida</a>
-<a href="${publicHref(opts.mode, "/walton")}">Walton County</a>
-<a href="${dashHref(opts.mode, "/vendors")}">Vendors</a>
-<a href="${dashHref(opts.mode, "/search")}">Payments</a>
-<a href="${dashHref(opts.mode, "/revenue")}">Revenue</a>
-<a href="${dashHref(opts.mode, "/reserves")}">Savings</a>
-<a href="${dashHref(opts.mode, "/about")}">About</a>
-</nav>
 <nav class="footer-col" aria-label="Sources">
 <p class="footer-label">Sources</p>
 <a href="${BUDGET_BOOK_URL}">County budget book</a>
