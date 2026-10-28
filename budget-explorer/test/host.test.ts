@@ -155,7 +155,7 @@ describe("taxes host public door", () => {
     expect(html).toContain('href="/florida">Florida</a>');
     expect(html).toContain("Built from public records");
     expect(html).toContain("Coming to your county");
-    expect(html).toContain(">About<");
+    expect(html).not.toContain(">About<");
     expect(html).toContain("Report a problem or share an idea");
     expect(html).toContain("Request your county");
     expect(html).toContain("<path");
