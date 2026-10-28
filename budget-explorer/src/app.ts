@@ -13,7 +13,7 @@ import {
   showPersonNamesFromForm,
 } from "./access";
 import { directAnswer, publicFactText } from "./answers";
-import { loadBudgetFacts, loadCapitalAccounts, loadCategorySpend, loadFundRollups, loadLargestPayments, loadOfficePaymentCents, loadTopAccounts, loadTopVendors, loadVendorNames } from "./budget";
+import { loadBudgetFacts, loadCapitalAccounts, loadCategorySpend, loadFundRollups, loadLargestPayments, loadOfficePaymentCents, loadTopAccounts, loadTopVendors } from "./budget";
 import { buildVendorIndex, withDisplayNames } from "./vendors";
 import type { SessionPayload } from "./auth";
 import {
@@ -214,7 +214,7 @@ app.get("/", async (c) => {
   if (!current) return c.html(renderEmpty(session.csrf, isAdmin(c), c.get("showNames")));
   const showNames = c.get("showNames");
   const asOf = current.data_as_of || "";
-  const [departments, names, funds, rollups, months, vendors, officeCents, landMonths, landDepts, sheriffMonths, laterCents, platMonths, facts, vendorNames, ledger] = await Promise.all([
+  const [departments, names, funds, rollups, months, vendors, officeCents, landMonths, landDepts, sheriffMonths, laterCents, platMonths, facts, ledger] = await Promise.all([
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
@@ -228,7 +228,6 @@ app.get("/", async (c) => {
     afterCutoffCents(c.env.DB, current.id),
     monthlyParts(c.env.DB, current.id, asOf, "114"),
     loadBudgetFacts(c.env.DB, current.id),
-    loadVendorNames(c.env.DB, current.id),
     loadPublishedLedger(c.env.DB),
   ]);
   return c.html(
@@ -247,7 +246,7 @@ app.get("/", async (c) => {
       afterCutoffCents: laterCents,
       platMonths,
       facts,
-      displayName: buildVendorIndex(vendorNames),
+      displayName: buildVendorIndex(),
       csrf: session.csrf,
       isAdmin: isAdmin(c),
       showNames,
@@ -314,14 +313,13 @@ app.get("/funds/:code", async (c) => {
   const code = c.req.param("code");
   if (!/^\d{3}$/.test(code)) return c.text("Not found", 404);
   const showNames = c.get("showNames");
-  const [funds, departments, names, categories, accounts, vendors, vendorNames, payments, officeCents, capitalByDept, ledger] = await Promise.all([
+  const [funds, departments, names, categories, accounts, vendors, payments, officeCents, capitalByDept, ledger] = await Promise.all([
     fundRollups(c.env.DB, current.id),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     loadCategorySpend(c.env.DB, current.id, { fund: code }),
     loadTopAccounts(c.env.DB, current.id, { fund: code }),
     loadTopVendors(c.env.DB, current.id, { showNames, fund: code }),
-    loadVendorNames(c.env.DB, current.id),
     loadLargestPayments(c.env.DB, current.id, { showNames, fund: code }),
     loadOfficePaymentCents(c.env.DB, current.id, { fund: code }),
     loadCapitalAccounts(c.env.DB, current.id, code),
@@ -343,7 +341,7 @@ app.get("/funds/:code", async (c) => {
       capitalByDept,
       reserve: ledger?.reserves.funds.find((item) => item.fundCode === code) || null,
       reserveAsOf: ledger?.reserves.asOf,
-      displayName: buildVendorIndex(vendorNames),
+      displayName: buildVendorIndex(),
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
       showNames,
@@ -376,13 +374,12 @@ app.get("/departments/:dept", async (c) => {
   const found = departments.find((item) => item.code === dept);
   if (!found) return c.text("Department not found", 404);
   const showNames = c.get("showNames");
-  const [accounts, names, funds, categories, vendors, vendorNames, payments, officeCents] = await Promise.all([
+  const [accounts, names, funds, categories, vendors, payments, officeCents] = await Promise.all([
     accountsForDept(c.env.DB, current.id, dept),
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
     loadCategorySpend(c.env.DB, current.id, { dept }),
     loadTopVendors(c.env.DB, current.id, { showNames, dept }),
-    loadVendorNames(c.env.DB, current.id),
     loadLargestPayments(c.env.DB, current.id, { showNames, dept }),
     loadOfficePaymentCents(c.env.DB, current.id, { dept }),
   ]);
@@ -397,7 +394,7 @@ app.get("/departments/:dept", async (c) => {
       vendors,
       payments,
       officeCents,
-      displayName: buildVendorIndex(vendorNames),
+      displayName: buildVendorIndex(),
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
       showNames,
@@ -416,10 +413,9 @@ app.get("/departments/:dept/:object/:project", async (c) => {
   if (!account) return c.text("Account not found", 404);
   const pageIndex = pageNumber(c.req.query("page"));
   const pageSize = 25;
-  const [payments, names, vendorNames] = await Promise.all([
+  const [payments, names] = await Promise.all([
     accountLines(c.env.DB, current.id, dept, objectCode, project, pageIndex, pageSize, c.get("showNames")),
     loadNames(c.env.DB),
-    loadVendorNames(c.env.DB, current.id),
   ]);
   const departments = await departmentRollups(c.env.DB, current.id);
   const deptRow = departments.find((item) => item.code === dept);
@@ -427,7 +423,7 @@ app.get("/departments/:dept/:object/:project", async (c) => {
     renderAccount({
       row: current,
       account,
-      payments: withDisplayNames(payments.rows, buildVendorIndex(vendorNames)),
+      payments: withDisplayNames(payments.rows, buildVendorIndex()),
       total: payments.total,
       pageIndex,
       pageSize,
@@ -445,11 +441,10 @@ app.get("/search", async (c) => {
   if (current instanceof Response) return current;
   const filters = readFilters(c);
   const pageIndex = pageNumber(c.req.query("page"));
-  const [result, departments, names, vendorNames, funds] = await Promise.all([
+  const [result, departments, names, funds] = await Promise.all([
     searchLines(c.env.DB, current.id, filters, pageIndex, 25, c.get("showNames")),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
-    loadVendorNames(c.env.DB, current.id),
     fundNameMap(c.env.DB, current.id),
   ]);
   return c.html(
@@ -459,7 +454,7 @@ app.get("/search", async (c) => {
       departments,
       fundReports: funds,
       names,
-      payments: withDisplayNames(result.rows, buildVendorIndex(vendorNames)),
+      payments: withDisplayNames(result.rows, buildVendorIndex()),
       total: result.total,
       totalCents: result.totalCents,
       pageIndex,
@@ -475,11 +470,8 @@ app.get("/search.csv", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
   const filters = readFilters(c);
-  const [result, vendorNames] = await Promise.all([
-    searchLines(c.env.DB, current.id, filters, 0, PAYMENT_CSV_LIMIT, c.get("showNames")),
-    loadVendorNames(c.env.DB, current.id),
-  ]);
-  const named = withDisplayNames(result.rows, buildVendorIndex(vendorNames));
+  const result = await searchLines(c.env.DB, current.id, filters, 0, PAYMENT_CSV_LIMIT, c.get("showNames"));
+  const named = withDisplayNames(result.rows, buildVendorIndex());
   const lines = ["date,vendor,invoice,description,department,check,amount"];
   for (const row of named) {
     lines.push(
@@ -498,10 +490,7 @@ app.get("/vendors", async (c) => {
   const sort: VendorSort = c.req.query("sort") === "count" ? "count" : "total";
   const pageIndex = pageNumber(c.req.query("page"));
   const pageSize = 25;
-  const [found, vendorNames] = await Promise.all([
-    listVendors(c.env.DB, current.id, current.data_as_of || "", query, sort, pageSize, pageIndex * pageSize),
-    loadVendorNames(c.env.DB, current.id),
-  ]);
+  const found = await listVendors(c.env.DB, current.id, current.data_as_of || "", query, sort, pageSize, pageIndex * pageSize);
   return c.html(
     renderVendors({
       row: current,
@@ -514,7 +503,7 @@ app.get("/vendors", async (c) => {
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
       showNames: c.get("showNames"),
-      displayName: buildVendorIndex(vendorNames),
+      displayName: buildVendorIndex(),
     }),
   );
 });
@@ -529,15 +518,15 @@ app.get("/vendors/:number", async (c) => {
   const asOf = current.data_as_of || "";
   const vendor = await oneVendor(c.env.DB, current.id, asOf, number);
   if (!vendor) return c.text("Not found", 404);
-  const [funds, departments, lines, deptRows, names, vendorNames, fundReports] = await Promise.all([
+  const [funds, departments, lines, deptRows, names, fundReports] = await Promise.all([
     vendorSlices(c.env.DB, current.id, asOf, number, "fund_code"),
     vendorSlices(c.env.DB, current.id, asOf, number, "dept_code"),
     showVendorLines(c.env.DB, current.id, asOf, number, pageIndex, pageSize, c.get("showNames")),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
-    loadVendorNames(c.env.DB, current.id),
     fundNameMap(c.env.DB, current.id),
   ]);
+  const displayName = buildVendorIndex();
   return c.html(
     renderVendorDetail({
       row: current,
@@ -547,14 +536,14 @@ app.get("/vendors/:number", async (c) => {
       deptRows,
       fundReports,
       names,
-      payments: withDisplayNames(lines.rows, buildVendorIndex(vendorNames)),
+      payments: withDisplayNames(lines.rows, displayName),
       total: lines.total,
       pageIndex,
       pageSize,
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
       showNames: c.get("showNames"),
-      displayName: buildVendorIndex(vendorNames),
+      displayName,
     }),
   );
 });
@@ -644,11 +633,8 @@ app.get("/plat", async (c) => {
   const requested = Number(c.req.query("import") || 0);
   const selected = history.find((item) => item.id === requested) || [...history].reverse().find((item) => item.status === "published") || history[history.length - 1];
   const payments = selected ? await platLines(c.env.DB, selected.id, "114", "11444000", c.get("showNames")) : [];
-  const [names, vendorNames] = await Promise.all([
-    loadNames(c.env.DB),
-    selected ? loadVendorNames(c.env.DB, selected.id) : Promise.resolve([]),
-  ]);
-  const displayName = buildVendorIndex(vendorNames);
+  const names = await loadNames(c.env.DB);
+  const displayName = buildVendorIndex();
   return c.html(renderPlat({ row: current, history, payments: withDisplayNames(payments, displayName), selected: selected?.id ?? null, names, csrf: session.csrf, isAdmin: isAdmin(c), showNames: c.get("showNames") }));
 });
 

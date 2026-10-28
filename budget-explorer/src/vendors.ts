@@ -81,7 +81,7 @@ function keepPersonExact(raw: string): boolean {
 }
 
 /** Title-case the stored name. Do not expand it from another row or drop a word to guess a shorter name. */
-export function buildVendorIndex(_names: string[]): (raw: string) => VendorLabel {
+export function buildVendorIndex(): (raw: string) => VendorLabel {
   const cache = new Map<string, VendorLabel>();
   return (raw: string) => {
     if (!raw) return { text: "", shortened: false };
