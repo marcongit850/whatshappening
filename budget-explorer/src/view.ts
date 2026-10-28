@@ -1,6 +1,7 @@
 import type { AccountSpend, BudgetFacts, CapitalLine, CategorySpend, VendorSpendRow } from "./budget";
 import { TRANSFER_OBJECT, capitalLinesCovering, factsFromRow } from "./budget";
 import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters } from "./db";
+import { LIMIT_GROWTH_NOTE } from "./answers";
 import type { QaRecord } from "./qa";
 import {
   PACE_LABEL,
@@ -116,13 +117,9 @@ function plainDate(iso: string | null | undefined): string {
   return `${Number(match[1])}/${Number(match[2])}/${match[3]}`;
 }
 
-/** Wording for Resolution 2025-82. The $192M figure is from that resolution. Do not replace it with another round number. */
-const RESOLUTION_NOTE =
-  "after commissioners re-approved about $192M of unfinished projects, grants and last-year commitments (Resolution 2025-82). The higher limit is a ceiling, not a spending plan.";
-
 function limitNote(facts: BudgetFacts): string {
   if (facts.current <= facts.adopted) return "";
-  return `Budget limits were raised to ${moneyCompact(facts.current)} during the year ${RESOLUTION_NOTE}`;
+  return `Budget limits were raised to ${moneyCompact(facts.current)} during the year. ${LIMIT_GROWTH_NOTE}`;
 }
 
 /** Short figure for the overview card. Full dollars stay in the count section. */
@@ -624,7 +621,7 @@ function countCard(facts: BudgetFacts): string {
 <p>Commissioners adopted ${money(facts.adopted)}. The books show ${money(facts.spent)} paid out. The budget limit after mid-year changes is ${money(facts.current)}. ${leftSentence}</p>
 ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 <div class="transfer-row"><span>Money moved between county funds</span> <b>${money(facts.transfer)}</b></div>
-<p class="cap">A transfer moves cash from one county fund to another. The raw report counts that move twice. This site counts it once and shows the transfer amount on its own. The report has no transfers coming in. <a href="https://walton.civicweb.net/document/511445/">Commission budget vote</a>. <a href="https://midbaynews.com/post/walton-county-passes-328m-budget-in-narrow-3-2-vote">News report of the vote</a>.</p>
+<p class="cap">A transfer moves cash from one county fund to another. The raw report counts that move twice. This site counts it once and shows the transfer amount on its own. The report has no transfers coming in. <a href="https://walton.civicweb.net/document/511445/">Commission budget vote</a>. <a href="https://midbaynews.com/post/walton-county-passes-328m-budget-in-narrow-3-2-vote">News report of the vote</a>. <a href="https://walton.civicweb.net/document/509733/">Carry-forward resolution</a>. <a href="https://walton.civicweb.net/document/520074/">Minutes</a>.</p>
 </section>`;
 }
 
