@@ -534,13 +534,14 @@ body.door main { max-width: none; margin: 0; padding: 0; }
 .info-card .eyebrow { font-size: 16px; letter-spacing: 0.08em; }
 .info-card .btn { margin-top: 20px; }
 .bar-inner { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; min-width: 0; }
-.door-brand { font-family: var(--serif); font-size: clamp(26px, 3vw, 36px); font-weight: 560; line-height: 1.15; color: #f6f4ee; text-decoration: none; max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.door-brand { font-family: var(--serif); font-size: clamp(26px, 3vw, 36px); font-weight: 560; line-height: 1.15; color: #f6f4ee; text-decoration: none; max-width: 100%; min-width: 0; min-height: 44px; display: inline-flex; align-items: center; overflow-wrap: anywhere; }
 .door-bar a { color: #f6f4ee; }
 .door-bar-link { font-size: 20px; font-weight: 600; text-decoration: none; min-height: 56px; display: inline-flex; align-items: center; }
 .door-hero { background: #0e1a23; color: #f6f4ee; padding: 12px 0 32px; }
-.hero-grid { display: grid; grid-template-columns: minmax(300px, 460px) minmax(0, 1fr); gap: 24px; align-items: start; }
-.hero-copy { min-width: 0; }
+.hero-grid { display: grid; grid-template-columns: minmax(300px, 460px) minmax(0, 1fr); gap: 24px; align-items: stretch; }
+.hero-copy { min-width: 0; display: flex; flex-direction: column; }
 .door-hero h1 { color: #f6f4ee; font-size: clamp(36px, 3.6vw, 52px); max-width: 14em; line-height: 1.05; margin: 0 0 8px; }
+.door-hero .hero-copy h1 { margin-bottom: 18px; }
 .door-hero .eyebrow { color: #e6c46a; }
 .door-hero .explainer { font-size: 20px; line-height: 1.35; max-width: 40rem; color: #e7e1d6; margin: 0; }
 .door-section .body-copy { font-size: 22px; line-height: 1.45; max-width: 40rem; color: var(--ink); margin: 12px 0 0; }
@@ -558,6 +559,7 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .door-section h3 { font-family: var(--serif); font-size: 28px; font-weight: 560; margin: 28px 0 0; }
 .finder { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 22px; align-items: start; margin-top: 28px; }
 .picker { background: #fff; color: var(--ink); border-radius: 20px; padding: 14px 16px 16px; min-width: 0; margin-top: 12px; }
+.hero-copy .picker { flex: 1; }
 .picker h2 { color: var(--ink); font-size: 28px; margin: 0 0 4px; }
 .picker label { display: block; font-size: 20px; font-weight: 650; margin: 10px 0 6px; color: var(--ink); }
 .picker select { width: 100%; max-width: 100%; min-width: 0; min-height: 64px; font-size: 20px; background: #fff; color: var(--ink); border: 2px solid #c9c3b4; border-radius: 12px; padding: 0 14px; }
@@ -569,15 +571,21 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .map-card { position: relative; background: #e7eef2; border: 1px solid var(--line); border-radius: 18px; padding: 12px 12px 14px; margin-top: 0; box-shadow: var(--shadow); overflow: hidden; max-width: 100%; }
 .us-map, .county-map { width: 100%; max-width: 100%; height: auto; display: block; overflow: hidden; }
 .us-map a, .county-map a { outline: none; }
-.us-map a path, .county-map g path { fill: #c5d3dc; stroke: #e7eef2; stroke-width: 1px; vector-effect: non-scaling-stroke; transition: fill 160ms ease; }
-.us-map a path, .county-map a path { fill: #c5d3dc; stroke: #e7eef2; stroke-width: 1px; vector-effect: non-scaling-stroke; transition: fill 160ms ease; }
+.us-map a path, .county-map g path { fill: #7f97a6; stroke: #2f4553; stroke-width: 1.4px; vector-effect: non-scaling-stroke; transition: fill 160ms ease; }
+.us-map a path, .county-map a path { fill: #7f97a6; stroke: #2f4553; stroke-width: 1.4px; vector-effect: non-scaling-stroke; transition: fill 160ms ease; }
 .us-map a.live path, .county-map a.live path { fill: #e0b34d; }
 .us-map a:hover path, .county-map a:hover path { fill: #8ea4b3; stroke: #14232f; stroke-width: 2px; }
 .us-map a.live:hover path, .county-map a.live:hover path { fill: #f0cc6e; stroke: #14232f; }
 .us-map a:focus-visible path, .county-map a:focus-visible path { stroke: #14232f; stroke-width: 3px; }
 .us-map a.live:focus-visible path, .county-map a.live:focus-visible path { fill: #f0cc6e; stroke: #14232f; stroke-width: 3px; }
 .us-map .hit, .county-map .hit { fill: transparent; stroke: none; }
-.place-label { fill: #14232f; font-size: 20px; font-weight: 700; font-family: var(--sans); pointer-events: none; }
+.place-label { fill: #14232f; font-weight: 700; font-family: var(--sans); pointer-events: none; }
+.florida-wrap { max-width: 720px; margin: 0 auto; }
+.florida-map { max-width: 640px; margin: 14px auto 0; overflow: visible; }
+.florida-map .county-map { width: min(640px, 100%); max-height: 360px; height: auto; margin: 0 auto; overflow: visible; }
+.florida-map .map-note { margin-top: 20px; }
+.florida-hero { padding-bottom: 16px; }
+.florida-hero .map-action { max-width: 640px; margin: 12px auto 0; }
 .inset-frame { fill: rgba(255, 255, 255, 0.55); stroke: #5d7382; stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
 .inset-label { fill: #14232f; font-size: 20px; font-weight: 700; font-family: var(--sans); pointer-events: none; }
 .map-label { min-height: 1.4em; margin: 10px 0 0; font-size: 20px; font-weight: 650; color: #14232f; }
@@ -587,7 +595,7 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .map-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 12px; font-size: 18px; color: #14232f; }
 .map-legend .swatch { width: 22px; height: 22px; border-radius: 6px; display: inline-block; }
 .map-legend .swatch.live { background: #e0b34d; }
-.map-legend .swatch.soon { background: #c5d3dc; border: 1px solid #8aa0ae; }
+.map-legend .swatch.soon { background: #7f97a6; border: 1px solid #2f4553; }
 .skip { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .skip:focus { position: fixed; left: 12px; top: 12px; z-index: 20; width: auto; height: auto; margin: 0; padding: 14px 18px; overflow: visible; clip: auto; background: #fff; color: #14232f; border-radius: 12px; font-size: 18px; font-weight: 700; text-decoration: none; outline: 3px solid #14232f; }
 .state-pills, .county-list { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-wrap: wrap; gap: 10px; }
@@ -598,7 +606,11 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
 .step { background: #fff; border: 1px solid var(--line); border-top: 6px solid #b78a2d; border-radius: 18px; padding: 28px 24px; min-width: 0; }
 .step b { display: block; font-family: var(--serif); font-size: 28px; font-weight: 560; line-height: 1.2; margin-bottom: 8px; }
-.coming-cta { margin: 18px 0 0; }
+.coming-cta { margin: 18px 0 0; display: flex; justify-content: center; }
+#coming { text-align: center; }
+#coming .body-copy { margin-left: auto; margin-right: auto; }
+.door-foot { text-align: center; }
+.door-foot-nav { justify-content: center; }
 .state-mark { width: 220px; height: 150px; margin: 0 0 16px; background: #e7eef2; border: 1px solid #d5dde3; border-radius: 16px; padding: 10px; }
 .state-mark svg { width: 100%; height: 100%; display: block; }
 .state-mark path { fill: #c5d3dc; stroke: #5d7382; stroke-width: 2px; vector-effect: non-scaling-stroke; }
@@ -658,6 +670,9 @@ body.door .warning { font-size: 20px; }
   .state-pills a { width: 100%; justify-content: center; min-height: 72px; font-size: 18px; text-align: center; }
   .county-list a { width: 100%; }
   .door-actions .btn { width: 100%; }
+  .florida-map .county-map { max-height: 190px; }
+  .florida-hero h1 { font-size: 34px; }
+  .florida-hero .explainer { font-size: 18px; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

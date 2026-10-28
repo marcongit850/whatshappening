@@ -19,6 +19,7 @@ export interface PublicDoc {
   jsonLd: Record<string, unknown> | null;
   canonical?: boolean;
   requestHref?: string;
+  footerRequest?: boolean;
 }
 
 export function renderPublicHome(): string {
@@ -104,13 +105,13 @@ export function renderStatePage(state: UsState): string {
     index: true,
     jsonLd: webPage(title, description, `/${state.slug}`),
     requestHref: `/${state.slug}/request`,
-    body: `<section class="door-hero" id="content"><div class="door-wrap">
+    body: `<section class="door-hero florida-hero" id="content"><div class="door-wrap florida-wrap">
 <p class="eyebrow">${esc(state.name)}</p>
 <h1>${esc(title)}</h1>
 <p class="explainer">${esc(stateIntro(state))}</p>
-<p class="caption">Walton County is marked on the map. The other counties are outlines.</p>
-<div class="map-card">
+<div class="map-card florida-map">
 ${countyMap(state)}
+<p class="caption map-note">Walton County is marked. The other counties are outlines.</p>
 <div class="map-legend"><span class="swatch live"></span> Live <span class="swatch soon"></span> Coming soon</div>
 </div>
 <p class="map-action"><a class="btn gold" href="/${esc(state.slug)}/request">Request your county</a></p>
@@ -314,9 +315,13 @@ export function renderCountyRequest(opts: {
   const description = locked
     ? `${opts.county?.name} does not have budget pages yet. You can ask for them.`
     : stateRequest
-      ? `Coming soon. We do not have county budget pages for ${opts.state.name} yet.`
+      ? `${opts.state.name} does not have county budget pages yet. You can ask for one.`
       : `Ask for a county in ${opts.state.name}. The state is filled in.`;
   const heading = stateRequest ? "Request this state" : "Request this county";
+  const eyebrow = stateRequest ? opts.state.name : locked ? "Coming soon" : opts.state.name;
+  const explainer = stateRequest
+    ? `We do not have county budget pages for ${opts.state.name} yet. Ask with the form below. We never publish your email.`
+    : `${description} Ask with the form below. We never publish your email.`;
   const countyField = locked
     ? `<p class="locked">County</p><p class="locked-value">${esc(opts.county?.name || "")}</p>`
     : `<div><label for="county_name">County</label><input id="county_name" name="county_name" type="text" autocomplete="organization" required value="${esc(opts.countyName)}"></div>`;
@@ -327,11 +332,12 @@ export function renderCountyRequest(opts: {
     index: false,
     jsonLd: webPage(title, description, opts.action),
     requestHref: `/${opts.state.slug}/request`,
+    footerRequest: !stateRequest,
     body: `<section class="door-hero" id="content"><div class="door-wrap">
 ${stateSilhouette(opts.state)}
-<p class="eyebrow">${locked || stateRequest ? "Coming soon" : esc(opts.state.name)}</p>
+<p class="eyebrow">${esc(eyebrow)}</p>
 <h1>${esc(title)}</h1>
-<p class="explainer">${esc(description)} Ask with the form below. We never publish your email.</p>
+<p class="explainer">${esc(explainer)}</p>
 </div></section>
 <main><div class="door-wrap">
 <section class="door-section">
@@ -473,6 +479,7 @@ function document(opts: PublicDoc): string {
   const canonicalLink = canonical ? `<link rel="canonical" href="${esc(canonical)}">` : "";
   const ogUrl = canonical ? `<meta property="og:url" content="${esc(canonical)}">` : "";
   const requestHref = opts.requestHref || "/request";
+  const requestLink = opts.footerRequest === false ? "" : `<a href="${esc(requestHref)}">Request your county</a>`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -510,7 +517,7 @@ ${opts.body}
 <nav class="door-foot-nav" aria-label="Footer">
 <a href="/about-this-site">About</a>
 <a data-report href="${esc(reportHref(opts.path))}">Report a problem or share an idea</a>
-<a href="${esc(requestHref)}">Request your county</a>
+${requestLink}
 </nav>
 <p>Not a county website. Not affiliated with or endorsed by any county government.</p>
 </div></footer>
@@ -574,7 +581,7 @@ function countyMap(state: UsState): string {
       const name = county?.name || shape.name;
       const hit = shape.hit ? `<circle class="hit" cx="${shape.hit.cx}" cy="${shape.hit.cy}" r="${shape.hit.r}"></circle>` : "";
       const label = shape.label
-        ? `<text class="place-label" x="${shape.label.x}" y="${shape.label.y}" text-anchor="middle">Walton</text>`
+        ? `<text class="place-label" font-size="30" x="${shape.label.x}" y="${shape.label.y}" text-anchor="middle">Walton</text>`
         : "";
       return `<a class="live" href="${esc(county?.href || "/walton")}" aria-label="${esc(name)}, live"><title>${esc(name)}, live</title><path fill-rule="evenodd" d="${shape.d}"></path>${hit}${label}</a>`;
     })

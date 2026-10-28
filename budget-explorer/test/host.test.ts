@@ -204,7 +204,10 @@ describe("taxes host public door", () => {
     expect(soon.status).toBe(200);
     expect(soon.headers.get("X-Robots-Tag")).toContain("noindex");
     expect(soonHtml).toContain("Texas is coming soon");
+    expect(soonHtml).not.toContain(">Coming soon<");
+    expect(soonHtml).not.toContain("Coming soon.");
     expect(soonHtml).toContain("Request this state");
+    expect(soonHtml).not.toContain(">Request your county<");
     expect(soonHtml).toContain('name="county_name"');
     expect(soonHtml).toContain('class="state-mark"');
     expect(soonHtml).not.toContain("Harris County");
