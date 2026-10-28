@@ -92,6 +92,7 @@ describe("host routing helpers", () => {
     expect(prefixPath("/funds/001")).toBe("/walton/funds/001");
     expect(prefixPath("/assets/app.css")).toBe("/assets/app.css");
     expect(prefixPath("/walton/ask")).toBe("/walton/ask");
+    expect(prefixPath("/ask#question")).toBe("/walton/ask#question");
     expect(prefixPath("/reserves#class-general")).toBe("/walton/reserves#class-general");
     expect(prefixHtml(`<a href="/departments">Departments</a><a href="/assets/app.css">css</a><form action="/ask"></form>`, "/walton")).toBe(
       `<a href="/walton/departments">Departments</a><a href="/assets/app.css">css</a><form action="/walton/ask"></form>`,
@@ -156,6 +157,8 @@ describe("taxes host public door", () => {
     expect(html).toContain("Built from public records");
     expect(html).toContain("Coming to your county");
     expect(html).not.toContain(">About<");
+    expect(html).not.toContain(">Ask AI<");
+    expect(html).not.toContain('href="/ask"');
     expect(html).toContain("Report a problem or share an idea");
     expect(html).toContain("Request your county");
     expect(html).toContain("<path");
@@ -419,6 +422,8 @@ describe("taxes host public door", () => {
     expect(dashHtml).toContain('alt="How They Spend My Taxes"');
     expect(dashHtml).toContain('href="/walton/vendors"');
     expect(dashHtml).toContain('href="/walton/about"');
+    expect(dashHtml).toContain('href="/walton/ask">Ask AI</a>');
+    expect(dashHtml.indexOf('href="/walton/about"')).toBeLessThan(dashHtml.indexOf('href="/walton/ask"'));
     expect(dashHtml).toContain('href="/walton/revenue"');
     expect(dashHtml).toContain('href="/walton/reserves"');
     expect(dashHtml).toContain('href="/walton/search"');
