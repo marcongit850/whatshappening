@@ -1,6 +1,7 @@
 import type { AccountSpend, BudgetFacts, CapitalLine, CategorySpend, VendorSpendRow } from "./budget";
 import { TRANSFER_OBJECT, capitalLinesCovering, factsFromRow } from "./budget";
 import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters } from "./db";
+import { LIMIT_GROWTH_NOTE } from "./answers";
 import type { QaRecord } from "./qa";
 import {
   PACE_LABEL,
@@ -136,13 +137,9 @@ function plainDate(iso: string | null | undefined): string {
   return `${Number(match[1])}/${Number(match[2])}/${match[3]}`;
 }
 
-/** Wording for Resolution 2025-82. The $185.4M figure is the amount in that resolution. */
-const RESOLUTION_NOTE =
-  "after commissioners re-approved $185.4M of unfinished projects, grants and last-year commitments (Resolution 2025-82). The higher limit is a ceiling, not a spending plan.";
-
 function limitNote(facts: BudgetFacts): string {
   if (facts.current <= facts.adopted) return "";
-  return `Budget limits were raised to ${moneyCompact(facts.current)} during the year ${RESOLUTION_NOTE}`;
+  return `Budget limits were raised to ${moneyCompact(facts.current)} during the year. ${LIMIT_GROWTH_NOTE}`;
 }
 
 /** Short figure for the overview card. Full dollars stay in the count section. */
@@ -687,7 +684,7 @@ function countCard(facts: BudgetFacts, asOf: string | null | undefined): string 
 <p>Commissioners adopted ${money(facts.adopted)}. The books show ${money(facts.spent)} spent. The budget limit after mid-year changes is ${money(facts.current)}. ${leftSentence}</p>
 ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 <div class="transfer-row"><span>Money moved between county funds</span> <b>${money(facts.transfer)}</b></div>
-<p class="cap">The report lists the transfer out of one fund. The fund that receives it then spends or releases the money, so adding both would count the same dollars twice. This site counts it once and shows the transfer amount on its own. <a href="https://walton.civicweb.net/document/511445/">Minutes of the 9/22/2025 final hearing</a>. <a href="https://midbaynews.com/post/walton-county-passes-328m-budget-in-narrow-3-2-vote">Mid Bay News, 9/24/2025</a>.</p>
+<p class="cap">The report lists the transfer out of one fund. The fund that receives it then spends or releases the money, so adding both would count the same dollars twice. This site counts it once and shows the transfer amount on its own. <a href="https://walton.civicweb.net/document/511445/">Minutes of the 9/22/2025 final hearing</a>. <a href="https://midbaynews.com/post/walton-county-passes-328m-budget-in-narrow-3-2-vote">Mid Bay News, 9/24/2025</a>. <a href="https://walton.civicweb.net/document/509733/">Carry-forward resolution</a>. <a href="https://walton.civicweb.net/document/520074/">Minutes</a>.</p>
 </section>`;
 }
 
