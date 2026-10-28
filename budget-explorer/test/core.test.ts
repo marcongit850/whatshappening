@@ -239,6 +239,9 @@ ACCOUNTS FOR: 001 GENERAL FUND
     expect(storedText(narrative)).not.toContain("RUN=1");
     const slow = `VND 1 IN ${"A ".repeat(3000)}`;
     expect(parseVendorRest(slow)).toBeNull();
+    const whole = parseVendorRest("VND 000054 IN INV-9 ZEHNDER COMMUNICATIONS INC");
+    expect(whole?.vendorName).toBe("ZEHNDER COMMUNICATIONS INC");
+    expect(whole?.vendorName).not.toBe("ZEHNDER COMMUNICATIO");
     const fire = parseVendorRest("VND 000054 IN 2026-04-08 WALT CODE SOUTH WALTON FIRE DI");
     expect(fire?.invoice).toBe("2026-04-08 WALT CODE");
     expect(fire?.vendorName).toBe("SOUTH WALTON FIRE DI");

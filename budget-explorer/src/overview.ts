@@ -85,7 +85,7 @@ export function paceDepartments(rows: SpendRow[], chartNames: Map<string, string
   return rows
     .filter((row) => row.rev_cents > 0 && !isTransferDepartment(row.report_name, chartNames.get(row.code) || ""))
     .sort((a, b) => b.rev_cents - a.rev_cents)
-    .slice(0, 12);
+    .slice(0, 20);
 }
 
 export interface FundSlice {
@@ -103,8 +103,8 @@ export function fundSlices(
   nameOf: (row: SpendRow) => string,
 ): FundSlice[] {
   const ordered = [...funds].sort((a, b) => b.ytd_cents - a.ytd_cents);
-  const top = ordered.slice(0, 6);
-  const rest = ordered.slice(6);
+  const top = ordered.slice(0, 20);
+  const rest = ordered.slice(20);
   const slices: FundSlice[] = top.map((row) => ({
     code: row.code,
     name: nameOf(row),

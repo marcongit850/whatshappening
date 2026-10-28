@@ -127,6 +127,19 @@ export function displayDate(iso: string | null | undefined): string {
   return `${m}/${d}/${y}`;
 }
 
+/** Month, day, and year with no leading zeros. One format for ranges and captions. */
+export function shortDate(iso: string | null | undefined): string {
+  const shown = displayDate(iso);
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(shown);
+  if (!match) return shown;
+  return `${Number(match[1])}/${Number(match[2])}/${match[3]}`;
+}
+
+/** Fiscal start through the report date. Both dates include the year. */
+export function vendorPaidRange(fyStart: string, asOf: string): string {
+  return `Vendors paid from ${shortDate(fyStart)} through ${shortDate(asOf)}.`;
+}
+
 export function accountKey(fund: string, dept: string, objectCode: string, project: string): string {
   return `${fund}-${dept}-${objectCode}-${project}`;
 }
