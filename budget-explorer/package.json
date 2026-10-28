@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "types": "wrangler types",
+    "maps": "node scripts/build-maps.mjs",
     "seed": "bash scripts/seed-local.sh"
   },
   "dependencies": {
@@ -16,8 +17,10 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261023.1",
+    "topojson-client": "^3.1.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
+    "us-atlas": "^3.0.1",
     "vitest": "^3.2.4",
     "wrangler": "^4.42.0"
   }

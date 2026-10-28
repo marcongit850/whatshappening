@@ -516,7 +516,7 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
   .figure-n { font-size: 28px; }
   .stat-grid { grid-template-columns: 1fr; }
 }
-body.door { background: var(--paper); }
+body.door { background: var(--paper); font-size: 18px; }
 body.door main { max-width: none; margin: 0; padding: 0; }
 .door-note { background: #14232f; color: #e4eaf0; text-align: center; font-size: 18px; line-height: 1.4; padding: 12px 16px; }
 .door-bar { background: #0e1a23; color: #f6f4ee; }
@@ -533,8 +533,8 @@ body.door main { max-width: none; margin: 0; padding: 0; }
 .info-card p { font-size: 20px; line-height: 1.45; margin: 0; }
 .info-card .eyebrow { font-size: 16px; letter-spacing: 0.08em; }
 .info-card .btn { margin-top: 20px; }
-.bar-inner { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 18px; padding-bottom: 18px; }
-.door-brand { font-family: var(--serif); font-size: clamp(26px, 3vw, 36px); font-weight: 560; line-height: 1.15; color: #f6f4ee; text-decoration: none; max-width: 100%; }
+.bar-inner { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 18px; padding-bottom: 18px; min-width: 0; }
+.door-brand { font-family: var(--serif); font-size: clamp(26px, 3vw, 36px); font-weight: 560; line-height: 1.15; color: #f6f4ee; text-decoration: none; max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
 .door-bar a { color: #f6f4ee; }
 .door-bar-link { font-size: 20px; font-weight: 600; text-decoration: none; min-height: 56px; display: inline-flex; align-items: center; }
 .door-hero { background: #0e1a23; color: #f6f4ee; padding: 28px 0 56px; }
@@ -554,18 +554,32 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .door-section { padding: 36px 0 8px; }
 .door-section h2 { font-size: clamp(32px, 4vw, 48px); }
 .door-section h3 { font-family: var(--serif); font-size: 28px; font-weight: 560; margin: 28px 0 0; }
-.map-card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-top: 18px; box-shadow: var(--shadow); overflow-x: auto; }
-.us-map { width: 100%; height: auto; display: block; overflow: hidden; }
-.us-map text { font-family: var(--sans); font-weight: 650; }
-.us-map .live rect { fill: #b78a2d; }
-.us-map .soon rect { fill: #e4dfd4; }
-.us-map .live text { fill: #14232f; }
-.us-map .soon text { fill: #3e4c57; }
-.us-map a:focus rect, .us-map a:hover rect { stroke: #14232f; stroke-width: 4; }
-.map-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 12px; font-size: 18px; }
+.finder { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 22px; align-items: start; margin-top: 28px; }
+.picker { background: #fff; color: var(--ink); border-radius: 20px; padding: 22px 20px 24px; min-width: 0; }
+.picker h2 { color: var(--ink); font-size: clamp(28px, 3vw, 36px); margin: 0 0 8px; }
+.picker label { display: block; font-size: 20px; font-weight: 650; margin: 16px 0 8px; color: var(--ink); }
+.picker select { width: 100%; max-width: 100%; min-width: 0; min-height: 64px; font-size: 20px; background: #fff; color: var(--ink); border: 2px solid #c9c3b4; border-radius: 12px; padding: 0 14px; }
+.picker .btn { width: 100%; margin-top: 18px; }
+.picker .caption { color: var(--muted); }
+.state-picker { margin-top: 18px; }
+.see-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.door-nav { display: flex; flex-wrap: wrap; gap: 4px 18px; min-width: 0; }
+.map-card { position: relative; background: #e7eef2; border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-top: 0; box-shadow: var(--shadow); overflow: hidden; max-width: 100%; }
+.us-map, .county-map { width: 100%; max-width: 100%; height: auto; display: block; overflow: hidden; }
+.us-map a path, .county-map a path { fill: #c5d3dc; stroke: #e7eef2; stroke-width: 1px; vector-effect: non-scaling-stroke; transition: fill 160ms ease; }
+.us-map a.live path, .county-map a.live path { fill: #e0b34d; }
+.us-map a:hover path, .us-map a:focus path, .county-map a:hover path, .county-map a:focus path { fill: #8ea4b3; stroke: #14232f; stroke-width: 2px; }
+.us-map a.live:hover path, .us-map a.live:focus path, .county-map a.live:hover path, .county-map a.live:focus path { fill: #f0cc6e; stroke: #14232f; }
+.us-map .hit { fill: transparent; stroke: none; }
+.inset-frame { fill: rgba(255, 255, 255, 0.55); stroke: #5d7382; stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.inset-label { fill: #14232f; font-size: 20px; font-weight: 700; font-family: var(--sans); pointer-events: none; }
+.map-label { min-height: 1.4em; margin: 12px 0 0; font-size: 20px; font-weight: 650; color: #14232f; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 12px; font-size: 18px; color: #14232f; }
 .map-legend .swatch { width: 22px; height: 22px; border-radius: 6px; display: inline-block; }
-.map-legend .swatch.live { background: #b78a2d; }
-.map-legend .swatch.soon { background: #e4dfd4; border: 1px solid #d0c9ba; }
+.map-legend .swatch.live { background: #e0b34d; }
+.map-legend .swatch.soon { background: #c5d3dc; border: 1px solid #8aa0ae; }
+.skip { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip:focus { position: fixed; left: 12px; top: 12px; z-index: 20; width: auto; height: auto; margin: 0; padding: 14px 18px; overflow: visible; clip: auto; background: #fff; color: #14232f; border-radius: 12px; font-size: 18px; font-weight: 700; text-decoration: none; outline: 3px solid #14232f; }
 .state-pills, .county-list { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-wrap: wrap; gap: 10px; }
 .county-list { display: block; }
 .county-list a, .state-pills a { display: inline-flex; align-items: center; min-height: 56px; padding: 12px 16px; border-radius: 14px; font-size: 18px; font-weight: 600; text-decoration: none; max-width: 100%; line-height: 1.3; overflow-wrap: anywhere; }
@@ -582,7 +596,7 @@ body.door .door-login label, body.door .door-login legend { font-size: 20px; let
 .state-empty { font-size: 22px; line-height: 1.45; margin: 16px 0 0; max-width: 40rem; }
 body.door .door-login legend { font-family: var(--serif); font-size: 32px; font-weight: 560; }
 body.door .door-login fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-body.door .door-login input[type="text"], body.door .door-login input[type="email"], body.door .door-login input[type="password"], body.door .door-login select, body.door .door-login textarea { min-height: 64px; font-size: 20px; max-width: 100%; }
+body.door .door-login input[type="text"], body.door .door-login input[type="email"], body.door .door-login input[type="password"], body.door .door-login select, body.door .door-login textarea { min-height: 64px; min-width: 0; width: 100%; font-size: 20px; max-width: 100%; }
 .choice { display: grid; gap: 12px; }
 .choice label { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 14px; min-height: 72px; padding: 14px 16px; border: 2px solid var(--line); border-radius: 16px; background: #fff; font-size: 22px; line-height: 1.3; overflow-wrap: anywhere; }
 .choice input { width: 28px; height: 28px; min-height: 28px; margin: 0; }
@@ -595,6 +609,8 @@ body.door .door-login input[type="text"], body.door .door-login input[type="emai
 body.door .door-login .hp input[type="text"] { width: 1px; min-height: 0; height: 1px; padding: 0; border: 0; }
 .door-foot { color: var(--muted); font-size: 18px; line-height: 1.45; }
 .door-foot .door-wrap { padding-top: 28px; padding-bottom: 64px; }
+.door-foot-nav { display: flex; flex-wrap: wrap; gap: 12px 22px; margin: 0 0 14px; }
+.door-foot-nav a { font-size: 20px; font-weight: 650; color: var(--navy); text-decoration: none; }
 .door-foot-link { margin: 0 0 12px; }
 .door-foot-link a { font-size: 22px; font-weight: 650; color: var(--navy); }
 .county-list a.soon { background: #fff; color: #24343f; border: 1px solid #d9d3c6; }
@@ -602,16 +618,22 @@ body.door .warning { font-size: 20px; }
 @media (min-width: 801px) {
   .state-pills { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .state-pills a { width: 100%; }
+  .county-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 }
 @media (max-width: 800px) {
-  .steps, .card-row, .door-hero-grid { grid-template-columns: 1fr; }
+  .steps, .card-row, .door-hero-grid, .see-grid, .finder { grid-template-columns: 1fr; }
   .door-wrap { padding-left: 16px; padding-right: 16px; }
   .door-hero { padding-top: 12px; }
   .door-hero h1 { font-size: 40px; }
-  .map-card { display: none; }
   .state-pills { display: grid; grid-template-columns: 1fr 1fr; }
   .state-pills li { min-width: 0; }
   .state-pills a { width: 100%; justify-content: center; min-height: 72px; font-size: 18px; text-align: center; }
+  .county-list a { width: 100%; }
+  .door-actions .btn { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .us-map a path, .county-map a path { transition: none; }
 }
 `;
 
@@ -626,20 +648,54 @@ export const CLIENT_JS = `
       /* Keep the server-rendered link. */
     }
   });
-  const filter = document.querySelector("[data-state-filter]");
-  if (filter instanceof HTMLInputElement) {
-    const rows = document.querySelectorAll("[data-state-name]");
-    const empty = document.querySelector("[data-state-empty]");
-    filter.addEventListener("input", () => {
-      const query = filter.value.trim().toLowerCase();
-      let shown = 0;
-      rows.forEach((row) => {
-        const name = (row.getAttribute("data-state-name") || "").toLowerCase();
-        const hide = Boolean(query) && !name.includes(query);
-        row.hidden = hide;
-        if (!hide) shown += 1;
-      });
-      if (empty instanceof HTMLElement) empty.hidden = query.length === 0 || shown > 0;
+  const statePick = document.querySelector("#pick-state");
+  const countyPick = document.querySelector("#pick-county");
+  if (statePick instanceof HTMLSelectElement && countyPick instanceof HTMLSelectElement) {
+    const loadCounties = async () => {
+      const slug = statePick.value;
+      countyPick.replaceChildren();
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Choose a county";
+      countyPick.appendChild(placeholder);
+      const soon = document.querySelector("#pick-soon");
+      if (soon instanceof HTMLElement) soon.hidden = true;
+      countyPick.disabled = false;
+      if (!slug) return;
+      try {
+        const response = await fetch("/data/counties/" + encodeURIComponent(slug) + ".json", { headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error("missing");
+        const rows = await response.json();
+        if (!Array.isArray(rows) || rows.length === 0) throw new Error("empty");
+        for (const row of rows) {
+          if (!row || typeof row.slug !== "string" || typeof row.name !== "string") continue;
+          if (!/^[a-z0-9-]+$/.test(row.slug)) continue;
+          const option = document.createElement("option");
+          option.value = row.slug;
+          option.textContent = row.live ? row.name + ", live" : row.name + ", coming soon";
+          countyPick.appendChild(option);
+        }
+      } catch {
+        countyPick.disabled = true;
+        if (soon instanceof HTMLElement) soon.hidden = false;
+      }
+    };
+    statePick.addEventListener("change", () => {
+      void loadCounties();
+    });
+  }
+  const map = document.querySelector("[data-us-map]");
+  const mapLabel = document.querySelector("[data-map-label]");
+  if (map && mapLabel instanceof HTMLElement) {
+    const showName = (event) => {
+      const target = event.target instanceof Element ? event.target.closest("a") : null;
+      const name = target?.getAttribute("data-name");
+      if (name) mapLabel.textContent = name;
+    };
+    map.addEventListener("mouseover", showName);
+    map.addEventListener("focusin", showName);
+    map.addEventListener("mouseleave", () => {
+      mapLabel.textContent = mapLabel.getAttribute("data-default") || "";
     });
   }
   const form = document.querySelector("[data-busy]");

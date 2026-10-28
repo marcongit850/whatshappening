@@ -1,11 +1,11 @@
 import { esc } from "./format";
+import { COUNTY_MAPS, STATE_MAP } from "./geo/registry";
 import { canonicalUrl } from "./host";
-import { COUNTIES, countiesIn, countyHref, isLiveState, liveCounties, US_STATES, type CountyPlace, type UsState } from "./places";
+import { COUNTIES, countiesIn, countyHref, isLiveState, liveCounties, stateBySlug, US_STATES, type CountyPlace, type UsState } from "./places";
 
 const SITE_NAME = "How They Spend My Taxes";
 
 const HOME_DESCRIPTION = "Pick a state, then a county, and see how county tax dollars are spent. Florida is open. Walton County is the one live county.";
-const FLORIDA_DESCRIPTION = "Walton County, Florida is live. Request a county that is not listed yet.";
 const WALTON_DESCRIPTION = "An unofficial Walton County budget page built from public records provided by the Walton County Clerk and Comptroller. Access is currently private.";
 
 const FONTS = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap";
@@ -18,6 +18,7 @@ export interface PublicDoc {
   body: string;
   jsonLd: Record<string, unknown> | null;
   canonical?: boolean;
+  requestHref?: string;
 }
 
 export function renderPublicHome(): string {
@@ -33,122 +34,163 @@ export function renderPublicHome(): string {
       url: canonicalUrl("/"),
       description: HOME_DESCRIPTION,
     },
-    body: `<section class="door-hero"><div class="door-wrap door-hero-grid">
-<div>
+    body: `<section class="door-hero"><div class="door-wrap">
 <p class="eyebrow">County budgets, in plain words</p>
 <h1>See how your county spends your tax dollars</h1>
-<p class="explainer">Pick a state. Then pick a county. You can read the budget the county passed and the money it has paid out, without a stack of reports.</p>
-<p class="caption">One county at a time. Florida is first.</p>
-<div class="door-actions">
-<a class="btn gold" href="/florida">Open Florida</a>
-<a class="btn line" href="/walton">Walton County</a>
-</div>
-</div>
-<aside class="feature-panel">
-<p class="eyebrow">Live now</p>
-<h2>Florida is live</h2>
-<p>Walton County is the first county on this site. Open it to read the budget, the spending, the income, and the savings.</p>
-<a class="btn gold" href="/florida">Open Florida</a>
-</aside>
-</div></section>
-<main><div class="door-wrap">
-<section class="door-section" id="map">
-<h2>Pick your state</h2>
-<p class="caption">Florida is live. Every other state is marked coming soon.</p>
-<div class="map-card">
+<p class="explainer">Pick a state. Then pick a county. When a county is live, you can read the budget it passed and the money it has paid out.</p>
+<p class="caption">One county at a time. Walton County, Florida is the one live county today.</p>
+<div class="finder">
+${pickerForm()}
 ${stateMap()}
-<div class="map-legend"><span class="swatch live"></span> Live <span class="swatch soon"></span> Coming soon</div>
 </div>
-<p class="caption">Gray states are coming soon. They do not have county pages yet.</p>
-</section>
-<section class="door-section" id="browse">
-<h2>Browse by name</h2>
-<p class="caption">One list. Type a state, then press the button. Florida is live.</p>
-<div class="state-finder">
-<label for="state-filter">Find a state</label>
-<input id="state-filter" data-state-filter type="search" placeholder="Type a state name" autocomplete="off">
-</div>
-<ul class="state-pills" data-state-list>
-${statePills()}
-</ul>
-<p class="state-empty" data-state-empty hidden>No state matches that name.</p>
-</section>
-<section class="door-section">
-<h2>How to use this site</h2>
-<p class="caption">Three steps. No special words.</p>
-<div class="steps">
-<article class="step"><b>1. Pick a state</b><p class="caption">Florida is the only open state today.</p></article>
-<article class="step"><b>2. Pick a county</b><p class="caption">${esc(liveCountyLine())}</p></article>
-<article class="step"><b>3. Read the budget</b><p class="caption">Walton County is private until you sign in.</p></article>
-</div>
-</section>
-<section class="door-section">
-<h2>Walton County is live</h2>
-<p class="caption">The first county on this site.</p>
-<p class="body-copy">${esc(liveCountyLine())} The figures come from public records provided by the Walton County Clerk and Comptroller. The page is unofficial. Access is currently private.</p>
-<p><a class="btn gold" href="/walton">Open Walton County</a></p>
-</section>
-</div></main>`,
-  });
-}
-
-export function renderFlorida(): string {
-  return document({
-    title: "Florida counties",
-    description: FLORIDA_DESCRIPTION,
-    path: "/florida",
-    index: true,
-    jsonLd: webPage("Florida counties", FLORIDA_DESCRIPTION, "/florida"),
-    body: `<section class="door-hero"><div class="door-wrap">
-<p class="eyebrow">Florida</p>
-<h1>Florida counties</h1>
-<p class="explainer">Open a county to see the budget it passed, the money it has spent, the income it took in, and what it holds in savings.</p>
-<p class="caption">${esc(liveCountyLine())} The pages use plain words and large type.</p>
 </div></section>
 <main><div class="door-wrap">
-<div class="card-row">
+<section class="door-section" id="what">
+<h2>What you can see</h2>
+<p class="caption">These are the pages on a live county. No other county has them yet.</p>
+<div class="see-grid">
 <article class="info-card">
-<p class="eyebrow">Live now</p>
-<h2>Walton County</h2>
-<p>The dashboard shows the budget, spending, income, and savings. It is unofficial. Access is currently private.</p>
-<a class="btn gold" href="/walton">Open Walton County</a>
+<h3>Budget and spending</h3>
+<p>The budget the county passed, next to the money it has actually paid out.</p>
+<p class="caption">What was planned, and what was spent.</p>
 </article>
 <article class="info-card">
-<p class="eyebrow">Not listed yet</p>
-<h2>Request your county</h2>
-<p>Ask for a Florida county that is not on this page. The form does not show your email.</p>
-<a class="btn gold" href="/florida/request">Request your county</a>
+<h3>Where the money comes from</h3>
+<p>Income, grouped by where it came from.</p>
+<p class="caption">Taxes and other money that came in.</p>
+</article>
+<article class="info-card">
+<h3>Savings held in reserve</h3>
+<p>Money the county holds in reserve, set aside from day to day spending.</p>
+<p class="caption">Savings, shown apart from spending.</p>
+</article>
+<article class="info-card">
+<h3>Search payments</h3>
+<p>Look up payments in the public records for a live county.</p>
+<p class="caption">A search box, in plain words.</p>
 </article>
 </div>
-<section class="door-section">
-<h2>Counties</h2>
-<p class="caption">The list comes from one catalog. A county is added there when its page is ready.</p>
-${countyItems("florida")}
-<p><a class="btn secondary" href="/">Back to the United States</a></p>
+</section>
+<section class="door-section" id="how">
+<h2>How it works</h2>
+<p class="caption">Public records only. Nothing here is made up.</p>
+<div class="steps">
+<article class="step"><b>1. Public records</b><p class="caption">A live page is built from budget records the county has already published.</p></article>
+<article class="step"><b>2. Plain words</b><p class="caption">The same records are shown in large type, with short labels.</p></article>
+<article class="step"><b>3. One county at a time</b><p class="caption">${esc(liveCountyLine())} Access to that page is currently private.</p></article>
+</div>
+</section>
+<section class="door-section" id="trust">
+<h2>Built from public records</h2>
+<p class="body-copy">Built from public records. Unofficial. No county seal used.</p>
+<p class="caption">This is not a county website and it is not endorsed by a county government. Walton County figures come from public records provided by the Walton County Clerk and Comptroller.</p>
+</section>
+<section class="door-section" id="coming">
+<h2>Coming to your county</h2>
+<p class="body-copy">The same kind of page can be built for another county from its public records. Tell us which county you want to see.</p>
+<p><a class="btn gold" href="/request">Request your county</a></p>
 </section>
 </div></main>`,
   });
 }
 
-export function renderStateHub(state: UsState): string {
-  const description = `Counties listed for ${state.name}. A live county opens its budget page.`;
-  const live = countiesIn(state.slug).some((county) => county.live);
+export function renderStatePage(state: UsState): string {
+  const title = stateTitle(state);
+  const description = stateDescription(state);
   return document({
-    title: `${state.name} counties`,
+    title,
     description,
-    path: `/states/${state.slug}`,
-    index: live,
-    jsonLd: webPage(`${state.name} counties`, description, `/states/${state.slug}`),
+    path: `/${state.slug}`,
+    index: true,
+    jsonLd: webPage(title, description, `/${state.slug}`),
+    requestHref: `/${state.slug}/request`,
     body: `<section class="door-hero"><div class="door-wrap">
 <p class="eyebrow">${esc(state.name)}</p>
-<h1>${esc(state.name)} counties</h1>
-<p class="explainer">Pick a county. A live county opens its budget page. Any other county on the list is coming soon.</p>
+<h1>${esc(title)}</h1>
+<p class="explainer">${esc(stateIntro(state))}</p>
+<p class="caption">${esc(stateNote(state))}</p>
 </div></section>
-<main><div class="door-wrap"><section class="door-section">
-<h2>Counties</h2>
+<main><div class="door-wrap">
+<section class="door-section">
+<h2>Map</h2>
+<div class="map-card">
+<a class="skip" href="#counties">Skip to the county list</a>
+${countyMap(state)}
+<div class="map-legend"><span class="swatch live"></span> Live <span class="swatch soon"></span> Coming soon</div>
+</div>
+${stateCountyPicker(state)}
+</section>
+<section class="door-section" id="counties">
+<h2>${esc(listHeading(state))}</h2>
+<p class="caption">The list is the same places as the map. A live place opens its budget page.</p>
 ${countyItems(state.slug)}
-<p><a class="btn secondary" href="/">Back to the United States</a></p>
-</section></div></main>`,
+<p class="door-actions"><a class="btn gold" href="/${esc(state.slug)}/request">Request your county</a> <a class="btn secondary" href="/">Back to the United States</a></p>
+</section>
+</div></main>`,
+  });
+}
+
+export function renderAboutSite(): string {
+  const title = "About this site";
+  const description = "An unofficial site that shows a county budget from public records. Walton County, Florida is the only live county. No county seal is used.";
+  return document({
+    title,
+    description,
+    path: "/about-this-site",
+    index: true,
+    jsonLd: webPage(title, description, "/about-this-site"),
+    body: `<section class="door-hero"><div class="door-wrap">
+<p class="eyebrow">About</p>
+<h1>About this site</h1>
+<p class="explainer">How They Spend My Taxes shows a county budget in plain words. It is unofficial. It is not a county website.</p>
+</div></section>
+<main><div class="door-wrap">
+<section class="door-section">
+<h2>What is live</h2>
+<p class="body-copy">${esc(liveCountyLine())} The Walton County pages use public records provided by the Walton County Clerk and Comptroller. Access is currently private. No other county has budget pages yet.</p>
+<p class="caption">Built from public records. Unofficial. No county seal used.</p>
+</section>
+<section class="door-section">
+<h2>What a live county shows</h2>
+<p class="caption">The budget next to spending, where the money comes from, savings held in reserve, and a search of payments.</p>
+<p><a class="btn gold" href="/florida">Open Florida</a></p>
+</section>
+<section class="door-section">
+<h2>A problem or an idea</h2>
+<p class="caption">Use the link in the footer. This site does not show an email address.</p>
+</section>
+</div></main>`,
+  });
+}
+
+export function renderRequestStart(): string {
+  const title = "Request your county";
+  const description = "Ask for a county that is not live yet. Pick a state. The next page asks for the county name.";
+  return document({
+    title,
+    description,
+    path: "/request",
+    index: false,
+    jsonLd: null,
+    canonical: true,
+    body: `<section class="door-hero"><div class="door-wrap">
+<p class="eyebrow">Coming to your county</p>
+<h1>Request your county</h1>
+<p class="explainer">Pick a state. The next page asks for the county. Walton County is already live.</p>
+</div></section>
+<main><div class="door-wrap">
+<section class="door-section">
+<form class="picker" method="get" action="/pick">
+<input type="hidden" name="to" value="request">
+<label for="request-state">State</label>
+<select id="request-state" name="state" required>
+<option value="">Choose a state</option>
+${stateOptions()}
+</select>
+<button class="btn gold" type="submit">Continue</button>
+</form>
+</section>
+</div></main>`,
   });
 }
 
@@ -204,6 +246,81 @@ function liveCountyLine(): string {
   return `Live counties: ${live.map((county) => county.name).join(", ")}.`;
 }
 
+function stateTitle(state: UsState): string {
+  if (state.slug === "district-of-columbia") return "District of Columbia";
+  if (state.slug === "louisiana") return "Louisiana parishes";
+  if (state.slug === "alaska") return "Alaska boroughs and census areas";
+  if (state.slug === "virginia") return "Virginia counties and cities";
+  const kinds = new Set(countiesIn(state.slug).map((county) => county.kind));
+  if (kinds.has("city") && kinds.has("county")) return `${state.name} counties and cities`;
+  return `${state.name} counties`;
+}
+
+function stateDescription(state: UsState): string {
+  if (state.slug === "florida") {
+    return "Map of Florida counties. Walton County is live. Open it for the budget, the spending, the income, and the savings. Other counties are coming soon.";
+  }
+  if (state.slug === "louisiana") {
+    return "Map of Louisiana parishes. No parish is live yet. Open a parish to ask for a budget page built from public records.";
+  }
+  if (state.slug === "virginia") {
+    return "Map of Virginia counties and independent cities. None are live yet. Open one to ask for a budget page built from public records.";
+  }
+  if (state.slug === "alaska") {
+    return "Map of Alaska boroughs, census areas, and municipalities. None are live yet. Open one to ask for a budget page built from public records.";
+  }
+  if (state.slug === "district-of-columbia") {
+    return "Map of the District of Columbia. It is not live yet. Ask for a budget page built from public records.";
+  }
+  if (state.slug === "hawaii") {
+    return "Map of Hawaii counties. No county is live yet. Open a county to ask for a budget page built from public records.";
+  }
+  return `Map of ${state.name} counties. No county is live yet. Open a county to ask for a budget page built from public records.`;
+}
+
+function stateIntro(state: UsState): string {
+  if (state.slug === "florida") {
+    return "Walton County is live. Open it to read the budget, the spending, the income, and the savings. Every other Florida county is coming soon.";
+  }
+  if (state.slug === "district-of-columbia") {
+    return "The District of Columbia does not have a budget page yet. You can ask for one.";
+  }
+  return `${stateTitle(state)}. Nothing here is live yet. Open a place on the map to ask for it.`;
+}
+
+function stateNote(state: UsState): string {
+  switch (state.slug) {
+    case "alaska":
+      return "Boroughs, census areas, and municipalities are each a link. Chugach and Copper River share one shape.";
+    case "connecticut":
+      return "Connecticut is shown as its eight traditional counties.";
+    case "district-of-columbia":
+      return "The District of Columbia is one area on this map.";
+    case "louisiana":
+      return "Louisiana is divided into parishes. Each parish is a link.";
+    case "virginia":
+      return "Counties and independent cities are both on this map. A city keeps its own name.";
+    default:
+      return "Every place on the map is a link. A live county opens its budget page. Any other place opens a request form.";
+  }
+}
+
+function listHeading(state: UsState): string {
+  if (state.slug === "louisiana") return "Parishes";
+  if (state.slug === "virginia") return "Counties and cities";
+  if (state.slug === "alaska") return "Boroughs, census areas, and municipalities";
+  if (state.slug === "district-of-columbia") return "The District";
+  return "Counties";
+}
+
+function pickerNoun(state: UsState): string {
+  if (state.slug === "louisiana") return "Pick a parish";
+  if (state.slug === "virginia") return "Pick a county or city";
+  if (state.slug === "alaska") return "Pick a place";
+  if (state.slug === "district-of-columbia") return "Pick an area";
+  return "Pick a county";
+}
+
 function reportHref(path: string): string {
   return `/report?from=${encodeURIComponent(path || "/")}`;
 }
@@ -219,6 +336,57 @@ function countyItems(stateSlug: string): string {
     })
     .join("");
   return `<ul class="county-list">${items}</ul>`;
+}
+
+function stateOptions(): string {
+  return [...US_STATES]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((state) => {
+      const label = isLiveState(state) ? `${state.name}, live` : `${state.name}, coming soon`;
+      return `<option value="${esc(state.slug)}">${esc(label)}</option>`;
+    })
+    .join("");
+}
+
+function pickerForm(): string {
+  return `<form class="picker" id="picker" method="get" action="/pick">
+<h2>Pick a state</h2>
+<p class="caption">Choose a state and press Go. Florida counties fill in here. Any other state opens a coming soon page.</p>
+<div>
+<label for="pick-state">State</label>
+<select id="pick-state" name="state" required>
+<option value="">Choose a state</option>
+${stateOptions()}
+</select>
+</div>
+<div>
+<label for="pick-county">County</label>
+<select id="pick-county" name="county" aria-describedby="pick-hint pick-soon">
+<option value="">Choose a county</option>
+</select>
+<p id="pick-hint" class="caption">Leave the county blank to open the state page.</p>
+<p id="pick-soon" class="caption" hidden>Coming soon, request your state</p>
+</div>
+<button class="btn gold" type="submit">Go</button>
+</form>`;
+}
+
+function stateCountyPicker(state: UsState): string {
+  const options = countiesIn(state.slug)
+    .map((county) => {
+      const label = county.live ? `${county.name}, live` : `${county.name}, coming soon`;
+      return `<option value="${esc(county.slug)}">${esc(label)}</option>`;
+    })
+    .join("");
+  return `<form class="picker state-picker" method="get" action="/pick">
+<input type="hidden" name="state" value="${esc(state.slug)}">
+<label for="state-county">${esc(pickerNoun(state))}</label>
+<select id="state-county" name="county" required>
+<option value="">Choose</option>
+${options}
+</select>
+<button class="btn gold" type="submit">Go</button>
+</form>`;
 }
 
 function honeypot(): string {
@@ -240,13 +408,14 @@ export function renderCountyRequest(opts: {
   countyName: string;
 }): string {
   const locked = Boolean(opts.county);
-  const stateEmpty = !locked && countiesIn(opts.state.slug).length === 0;
-  const title = locked ? `${opts.county?.name} is coming soon` : stateEmpty ? `${opts.state.name} is coming soon` : `Request a county in ${opts.state.name}`;
+  const stateRequest = !locked && countiesIn(opts.state.slug).length === 0;
+  const title = locked ? `${opts.county?.name} is coming soon` : stateRequest ? `${opts.state.name} is coming soon` : `Request a county in ${opts.state.name}`;
   const description = locked
     ? `${opts.county?.name} does not have budget pages yet. You can ask for them.`
-    : stateEmpty
+    : stateRequest
       ? `Coming soon. We do not have county budget pages for ${opts.state.name} yet.`
       : `Ask for a county in ${opts.state.name}. The state is filled in.`;
+  const heading = stateRequest ? "Request this state" : "Request this county";
   const countyField = locked
     ? `<p class="locked">County</p><p class="locked-value">${esc(opts.county?.name || "")}</p>`
     : `<div><label for="county_name">County</label><input id="county_name" name="county_name" type="text" autocomplete="organization" required value="${esc(opts.countyName)}"></div>`;
@@ -256,15 +425,16 @@ export function renderCountyRequest(opts: {
     path: opts.action,
     index: false,
     jsonLd: webPage(title, description, opts.action),
+    requestHref: `/${opts.state.slug}/request`,
     body: `<section class="door-hero"><div class="door-wrap">
-<p class="eyebrow">${locked || stateEmpty ? "Coming soon" : esc(opts.state.name)}</p>
+<p class="eyebrow">${locked || stateRequest ? "Coming soon" : esc(opts.state.name)}</p>
 <h1>${esc(title)}</h1>
 <p class="explainer">${esc(description)} Ask with the form below. We never publish your email.</p>
 </div></section>
 <main><div class="door-wrap">
 <section class="door-section">
-<h2>Request this county</h2>
-<p class="caption">Name, email, and the county. A note is optional.</p>
+<h2>${heading}</h2>
+<p class="caption">${stateRequest ? "Name, email, and the county you want in this state. A note is optional." : "Name, email, and the county. A note is optional."}</p>
 <form class="door-login" method="post" action="${esc(opts.action)}" data-busy>
 <input type="hidden" name="form_token" value="${esc(opts.token)}">
 ${honeypot()}
@@ -400,6 +570,7 @@ function document(opts: PublicDoc): string {
   const fullTitle = `${opts.title} | ${SITE_NAME}`;
   const canonicalLink = canonical ? `<link rel="canonical" href="${esc(canonical)}">` : "";
   const ogUrl = canonical ? `<meta property="og:url" content="${esc(canonical)}">` : "";
+  const requestHref = opts.requestHref || "/request";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -425,43 +596,71 @@ ${json}
 <div class="door-note">Unofficial. Not a county website.</div>
 <header class="door-bar"><div class="door-wrap bar-inner">
 <a class="door-brand" href="/">How They Spend My Taxes</a>
+<nav class="door-nav" aria-label="Primary">
+<a class="door-bar-link" href="/#picker">Pick a state</a>
 <a class="door-bar-link" href="/florida">Florida</a>
+<a class="door-bar-link" href="/about-this-site">About</a>
+</nav>
 </div></header>
 ${opts.body}
 <footer class="door-foot"><div class="door-wrap">
-<p class="door-foot-link"><a data-report href="${esc(reportHref(opts.path))}">Report a problem or share an idea</a></p>
-<p>Unofficial. Not affiliated with or endorsed by any county government. No county seal is used. A county appears here only when its page is live.</p>
+<nav class="door-foot-nav" aria-label="Footer">
+<a href="/about-this-site">About</a>
+<a data-report href="${esc(reportHref(opts.path))}">Report a problem or share an idea</a>
+<a href="${esc(requestHref)}">Request your county</a>
+</nav>
+<p>Built from public records. Unofficial. No county seal used.</p>
+<p>Not a county website. Not affiliated with or endorsed by any county government.</p>
 </div></footer>
 <script src="/assets/app.js" defer></script>
 </body></html>`;
 }
 
 function stateMap(): string {
-  const size = 104;
-  const gap = 12;
-  const cols = 12;
-  const rows = 8;
-  const width = cols * (size + gap) + gap;
-  const height = rows * (size + gap) + gap;
-  const tiles = US_STATES.map((state) => {
-    const live = isLiveState(state);
-    const x = gap + state.col * (size + gap);
-    const y = gap + state.row * (size + gap);
-    const href = live ? "/florida" : `/states/${state.slug}`;
-    const status = live ? "Live" : "Soon";
-    return `<a class="tile ${live ? "live" : "soon"}" tabindex="-1" href="${href}" aria-label="${esc(state.name)}, ${live ? "live" : "coming soon"}"><title>${esc(state.name)}. ${esc(status)}.</title><rect x="${x}" y="${y}" width="${size}" height="${size}" rx="16"></rect><text x="${x + size / 2}" y="${y + 46}" text-anchor="middle" font-size="30">${esc(state.abbr)}</text><text class="tile-note" x="${x + size / 2}" y="${y + 78}" text-anchor="middle" font-size="20">${esc(status)}</text></a>`;
-  }).join("");
-  return `<svg class="us-map" viewBox="0 0 ${width} ${height}" role="group" aria-label="United States. Pick a state. Florida is live. Other states are coming soon.">${tiles}</svg>`;
-}
-
-function statePills(): string {
-  const ordered = [...US_STATES].sort((a, b) => a.name.localeCompare(b.name));
-  return ordered
-    .map((state) => {
+  const shapes = [...STATE_MAP.states].sort((a, b) => {
+    const aLive = stateBySlug(a.slug) ? isLiveState(stateBySlug(a.slug) as UsState) : false;
+    const bLive = stateBySlug(b.slug) ? isLiveState(stateBySlug(b.slug) as UsState) : false;
+    return Number(aLive) - Number(bLive);
+  });
+  const links = shapes
+    .map((shape) => {
+      const state = stateBySlug(shape.slug);
+      if (!state) return "";
       const live = isLiveState(state);
-      const href = live ? "/florida" : `/states/${state.slug}`;
-      const label = live ? `${state.name}, live` : `${state.name}, coming soon`;
-      return `<li data-state-name="${esc(state.name)}"><a class="${live ? "open" : "soon"}" href="${href}">${esc(label)}</a></li>`;
+      const label = `${state.name}, ${live ? "live" : "coming soon"}`;
+      const hit = shape.hit ? `<circle class="hit" cx="${shape.hit.cx}" cy="${shape.hit.cy}" r="${shape.hit.r}"></circle>` : "";
+      return `<a class="${live ? "live" : "soon"}" href="/${state.slug}" data-name="${esc(label)}" aria-label="${esc(label)}"><title>${esc(label)}</title><path fill-rule="evenodd" d="${shape.d}"></path>${hit}</a>`;
     })
     .join("");
+  const frames = STATE_MAP.insets
+    .map(
+      (inset) =>
+        `<rect class="inset-frame" x="${inset.x}" y="${inset.y}" width="${inset.w}" height="${inset.h}" rx="10"></rect><text class="inset-label" x="${inset.x + inset.w / 2}" y="${inset.y + 24}" text-anchor="middle">${esc(inset.label)}</text>`,
+    )
+    .join("");
+  return `<div class="map-card">
+<a class="skip" href="#picker">Skip to the state picker</a>
+<svg class="us-map" viewBox="${STATE_MAP.viewBox}" role="group" aria-label="United States. Pick a state. Florida is live. Other states are coming soon." data-us-map>${frames}${links}</svg>
+<div class="map-legend"><span class="swatch live"></span> Live <span class="swatch soon"></span> Coming soon</div>
+<p class="map-label" data-map-label data-default="Florida is live. Other states are coming soon.">Florida is live. Other states are coming soon.</p>
+<p class="caption">Alaska and Hawaii are shown as insets. The District of Columbia is enlarged at the right.</p>
+</div>`;
+}
+
+function countyMap(state: UsState): string {
+  const file = COUNTY_MAPS[state.slug];
+  if (!file) return "";
+  const meta = new Map(countiesIn(state.slug).map((county) => [county.slug, county]));
+  const shapes = [...file.counties].sort((a, b) => Number(Boolean(meta.get(a.slug)?.live)) - Number(Boolean(meta.get(b.slug)?.live)));
+  const links = shapes
+    .map((shape) => {
+      const county = meta.get(shape.slug);
+      const live = Boolean(county?.live);
+      const name = county?.name || shape.name;
+      const label = `${name}, ${live ? "live" : "coming soon"}`;
+      const href = county ? countyHref(county) : `/${state.slug}/${shape.slug}`;
+      return `<a class="${live ? "live" : "soon"}" href="${esc(href)}" aria-label="${esc(label)}"><title>${esc(label)}</title><path fill-rule="evenodd" d="${shape.d}"></path></a>`;
+    })
+    .join("");
+  return `<svg class="county-map" viewBox="${esc(file.viewBox)}" role="group" aria-label="${esc(state.name)}. Each place on the map is a link.">${links}</svg>`;
 }

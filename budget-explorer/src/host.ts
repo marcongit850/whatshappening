@@ -1,3 +1,4 @@
+import { US_STATES } from "./places";
 import { safeRedirectLocation, unsafeRequestPath } from "./redirect-path";
 
 /** Apex host used in canonical URLs, Open Graph, and the sitemap. */
@@ -87,7 +88,10 @@ export function prefixLocation(location: string, base = WALTON_PREFIX): string {
   return safeRedirectLocation(`${url.pathname}${url.search}`);
 }
 
-export const SITEMAP_PATHS = ["/", "/florida", "/walton"] as const;
+/** Home, the Florida page, and the Walton landing. Other state pages stay out. */
+export function sitemapPaths(): string[] {
+  return ["/", "/florida", "/walton"];
+}
 
 export function robotsTxt(): string {
   const lines = [
@@ -98,9 +102,12 @@ export function robotsTxt(): string {
     "Disallow: /logout",
     "Disallow: /admin",
     "Disallow: /states/",
-    "Disallow: /florida/",
     "Disallow: /report",
+    "Disallow: /data/",
+    "Disallow: /pick",
+    "Disallow: /request",
   ];
+  for (const state of US_STATES) lines.push(`Disallow: /${state.slug}/`);
   for (const prefix of DASHBOARD_PREFIXES) {
     if (prefix === "/login" || prefix === "/logout" || prefix === "/admin") continue;
     lines.push(`Disallow: ${prefix}`);
@@ -110,6 +117,6 @@ export function robotsTxt(): string {
 }
 
 export function sitemapXml(): string {
-  const urls = SITEMAP_PATHS.map((path) => `  <url><loc>${canonicalUrl(path)}</loc></url>`).join("\n");
+  const urls = sitemapPaths().map((path) => `  <url><loc>${canonicalUrl(path)}</loc></url>`).join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
