@@ -136,12 +136,13 @@ h2 { font-family: var(--serif); font-weight: 560; font-size: 28px; letter-spacin
   border-radius: 18px;
   box-shadow: var(--shadow);
 }
-.metric { padding: 18px 18px 16px; position: relative; overflow: hidden; }
+.metric { padding: 18px 18px 16px; position: relative; overflow: visible; }
 .metric::before { content: ""; position: absolute; left: 18px; right: 18px; top: 0; height: 2px; background: linear-gradient(90deg, var(--gold), transparent); }
 .metric-label { margin: 8px 0 0; color: var(--muted); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
 .metric-value { margin: 6px 0 0; font-weight: 560; font-size: clamp(26px, 2.2vw, 34px); letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums lining-nums; }
 .metric-note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
 .panel { padding: 22px 22px 18px; margin-bottom: 18px; }
+.about-source { margin-top: 20px; }
 .hint { color: var(--muted); margin: 0 0 16px; font-size: 15px; }
 .table-wrap { overflow: auto; border-top: 1px solid var(--line); margin: 0 -6px; }
 table { width: 100%; border-collapse: collapse; min-width: 760px; }
@@ -290,7 +291,7 @@ a.card:hover { border-color: #cfc6b4; }
 .meter div { height: 100%; border-radius: 8px; }
 .pace .note, .card .note { margin: 22px 0 0; font-size: 15px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; background: transparent; }
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin-bottom: 32px; min-width: 0; }
-.kpi { padding: 26px 28px; min-width: 0; overflow: hidden; }
+.kpi { padding: 26px 28px; min-width: 0; overflow: visible; }
 .kpi .l { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .kpi .n { font-family: var(--serif); font-size: 46px; font-weight: 500; line-height: 1.15; margin: 8px 0 4px; overflow-wrap: anywhere; max-width: 100%; }
 .kpi .s { font-size: 15px; color: var(--muted); }
@@ -403,16 +404,16 @@ a.pc span { font-size: 12px; color: #c9dde1; margin-top: 4px; }
 a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #17505c; text-decoration: none; font-weight: 600; padding: 14px 26px; border-radius: 10px; font-size: 17px; }
 .mobpace { display: none; margin-top: 12px; font-size: 15px; background: #f3f1ea; padding: 10px 14px; border-radius: 8px; }
 .sources { color: var(--muted); font-size: 14.5px; margin: 8px 0 0; }
-.spend-row { grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr); }
+.spend-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
 .spend-row > .card, .income-card, .source-block, .reserve-fund, .budget-year { min-width: 0; }
-.income-card .donut { width: min(260px, 100%); }
-.income-card .donutwrap { flex-direction: column; align-items: center; gap: 8px; }
-.income-card .dn1 { font-size: 18px; }
-.income-card .dn2 { font-size: 10px; }
-.income-card .lgs { width: 100%; }
-.income-card a.lg { grid-template-columns: 14px minmax(0, 1fr) auto; gap: 6px; font-size: 13px; padding: 4px 0; }
-.income-card .donut-label { font-size: 13px; overflow-wrap: anywhere; }
-.income-card .donut-amt { display: none; }
+.pie-card .donut { width: min(260px, 100%); }
+.pie-card .donutwrap { flex-direction: column; align-items: center; gap: 8px; }
+.pie-card .dn1 { font-size: 18px; }
+.pie-card .dn2 { font-size: 10px; }
+.pie-card .lgs { width: 100%; }
+.pie-card a.lg { grid-template-columns: 14px minmax(0, 1fr) auto; gap: 6px; font-size: 13px; padding: 4px 0; }
+.pie-card .donut-label { font-size: 13px; overflow-wrap: anywhere; }
+.pie-card .donut-amt { display: none; }
 .donut-amt { display: block; font-weight: 500; color: var(--muted); font-size: 13px; }
 .figure-n { font-family: var(--serif); font-size: clamp(32px, 4vw, 52px); font-weight: 500; line-height: 1.1; margin: 0 0 8px; overflow-wrap: anywhere; max-width: 100%; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(168px, 100%), 1fr)); gap: 14px; margin-top: 18px; min-width: 0; }
@@ -437,6 +438,50 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
 .src { color: var(--muted); font-size: 14px; margin: 12px 0 0; overflow-wrap: anywhere; }
 .what { margin: 10px 0; }
 .what summary { cursor: pointer; font-weight: 600; }
+.tip { position: relative; display: inline-flex; vertical-align: middle; margin-left: 2px; letter-spacing: 0; text-transform: none; flex: none; }
+.tip-btn {
+  width: 44px;
+  height: 44px;
+  border: 1.5px solid #c9a24b;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--navy);
+  font: 700 22px/1 var(--sans);
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+}
+.tip-btn:hover,
+.tip-btn:focus-visible,
+.tip-btn[aria-expanded="true"] {
+  background: #c9a24b;
+  color: var(--navy);
+  box-shadow: 0 0 0 4px rgba(201, 162, 75, 0.35);
+}
+.tip-pop {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 24px));
+  padding: 10px 12px;
+  background: var(--navy-deep);
+  color: #fff;
+  font: 700 16px/1.35 var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: left;
+  border: 1px solid #c9a24b;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(14, 26, 35, 0.28);
+  white-space: normal;
+}
+.tip-pop[hidden] { display: none; }
+.kpi .l, .metric-label { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; }
+.kpi a.n { color: inherit; text-decoration: none; display: block; }
+.reserve-name a, a.reserve-amt { color: inherit; text-decoration: none; }
+.legend-tip { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
 .more-links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 12px 0 0; }
 .more-links a { font-weight: 600; }
 .holder-list { list-style: none; padding: 0; margin: 0; }
@@ -446,7 +491,6 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
 .fund-savings { margin-bottom: 24px; }
 @media (max-width: 1100px) {
   .spend-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .spend-row .income-card { grid-column: 1 / -1; }
 }
 @media (max-width: 980px) {
   .metrics, .split, .filters { grid-template-columns: 1fr 1fr; }
@@ -490,7 +534,7 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
   .mval { font-size: 10px; height: auto; }
   .donutwrap { flex-direction: column; }
   .donut { width: min(300px, 100%); }
-  .income-card .donut { width: min(260px, 100%); }
+  .pie-card .donut { width: min(260px, 100%); }
   .reserve-link { flex-wrap: wrap; }
   .figure-n { font-size: 32px; }
   .table-hint { display: block; }
@@ -733,6 +777,102 @@ export const CLIENT_JS = `
       openLink.textContent = name ? "Open " + name : "Open";
     });
   }
+  let touchAt = 0;
+  let openedAt = 0;
+  const tipPop = (button) => {
+    const id = button.getAttribute("aria-controls") || "";
+    const pop = document.getElementById(id);
+    return pop instanceof HTMLElement ? pop : null;
+  };
+  const closeTip = (button) => {
+    button.setAttribute("aria-expanded", "false");
+    const pop = tipPop(button);
+    if (!pop) return;
+    pop.hidden = true;
+    pop.style.transform = "";
+    pop.style.top = "";
+    pop.style.bottom = "";
+  };
+  const placeTip = (button, pop) => {
+    pop.hidden = false;
+    pop.style.position = "fixed";
+    pop.style.right = "auto";
+    pop.style.bottom = "auto";
+    pop.style.transform = "";
+    const pad = 8;
+    const anchor = button.getBoundingClientRect();
+    const width = Math.min(280, window.innerWidth - pad * 2);
+    pop.style.width = width + "px";
+    let left = anchor.left;
+    if (left + width > window.innerWidth - pad) left = window.innerWidth - pad - width;
+    if (left < pad) left = pad;
+    pop.style.left = left + "px";
+    pop.style.top = anchor.bottom + 4 + "px";
+    const placed = pop.getBoundingClientRect();
+    if (placed.bottom > window.innerHeight - pad) {
+      pop.style.top = Math.max(pad, anchor.top - placed.height - 4) + "px";
+    }
+  };
+  const openTip = (button) => {
+    document.querySelectorAll(".tip-btn[aria-expanded='true']").forEach((other) => {
+      if (other !== button) closeTip(other);
+    });
+    const pop = tipPop(button);
+    if (!pop) return;
+    button.setAttribute("aria-expanded", "true");
+    openedAt = Date.now();
+    placeTip(button, pop);
+  };
+  document.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "touch") touchAt = Date.now();
+  });
+  document.addEventListener("pointerover", (event) => {
+    if (event.pointerType !== "mouse" || Date.now() - touchAt < 700) return;
+    const button = event.target instanceof Element ? event.target.closest(".tip-btn") : null;
+    if (button instanceof HTMLButtonElement) openTip(button);
+  });
+  document.addEventListener("pointerout", (event) => {
+    if (event.pointerType !== "mouse" || Date.now() - touchAt < 700) return;
+    const button = event.target instanceof Element ? event.target.closest(".tip-btn") : null;
+    if (!(button instanceof HTMLButtonElement) || button === document.activeElement) return;
+    const next = event.relatedTarget;
+    if (next instanceof Node && button.closest(".tip")?.contains(next)) return;
+    closeTip(button);
+  });
+  document.addEventListener("focusin", (event) => {
+    const button = event.target instanceof Element ? event.target.closest(".tip-btn") : null;
+    if (button instanceof HTMLButtonElement) openTip(button);
+  });
+  document.addEventListener("focusout", (event) => {
+    const button = event.target instanceof Element ? event.target.closest(".tip-btn") : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    const next = event.relatedTarget;
+    if (next instanceof Node && button.closest(".tip")?.contains(next)) return;
+    closeTip(button);
+  });
+  document.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target?.closest(".tip-btn");
+    if (button instanceof HTMLButtonElement) {
+      event.preventDefault();
+      event.stopPropagation();
+      const open = button.getAttribute("aria-expanded") === "true";
+      const fromTouch = touchAt && Date.now() - touchAt < 700;
+      if (fromTouch && open && Date.now() - openedAt > 400) closeTip(button);
+      else if (!open) openTip(button);
+      return;
+    }
+    if (!target?.closest(".tip")) {
+      document.querySelectorAll(".tip-btn[aria-expanded='true']").forEach((button) => closeTip(button));
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const open = document.querySelector(".tip-btn[aria-expanded='true']");
+    if (!(open instanceof HTMLButtonElement)) return;
+    closeTip(open);
+    open.focus();
+  });
   const form = document.querySelector("[data-busy]");
   if (!form) return;
   form.addEventListener("submit", () => {

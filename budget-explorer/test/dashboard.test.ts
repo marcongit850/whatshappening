@@ -195,6 +195,29 @@ describe("overview dashboard", () => {
     expect(html).toContain("/search?vendor=NORTH%20BUILDERS%20LLC");
     expect(html).toContain("/search?fund=114");
     expect(html).toContain("<svg");
+    const goesAt = html.indexOf("Where the money goes");
+    const comesAt = html.indexOf("Where the money comes from");
+    expect(goesAt).toBeGreaterThan(-1);
+    expect(comesAt).toBeGreaterThan(goesAt);
+    const spendCard = html.slice(html.lastIndexOf('<div class="card pie-card">', goesAt), comesAt);
+    expect(spendCard).toContain('class="donut"');
+    expect(spendCard).toContain('viewBox="0 0 200 200"');
+    expect(spendCard).toContain('stroke-width="26"');
+    expect(spendCard).toContain('r="72"');
+    expect(spendCard).toContain('aria-label="Share of spending by fund"');
+    expect(spendCard).toContain('class="dn1">');
+    expect(spendCard).toContain('class="dn2">spent</text>');
+    expect(spendCard).toContain('class="lgs"');
+    expect(spendCard).toContain('href="/funds/114"');
+    expect(spendCard).toContain('href="/funds/001"');
+    expect(spendCard).toContain("Recreation Plat Fee");
+    expect(spendCard).toContain("General Fund");
+    expect(spendCard).toContain("Each fund's share of the");
+    expect(spendCard).toContain("Money moved between funds is not in this chart.");
+    expect(spendCard).toMatch(/\d+\.\d%/);
+    expect(spendCard).not.toContain("spent in total");
+    expect(spendCard).not.toContain("donut-labels");
+    expect(html).toContain('class="card income-card pie-card"');
     expect(html).toContain(">Over budget<");
     expect(html).not.toContain("may reflect an amendment");
     expect(html).toContain("Recreation Plat Fee");
@@ -214,6 +237,54 @@ describe("overview dashboard", () => {
     expect(hidden).not.toContain("JANE");
     expect(hidden).toContain("North Builders LLC");
     expect(hidden).not.toContain("SAMPLE COUNTY SHERIFF");
+  });
+
+  it("drops the prototype sentence from about the data", async () => {
+    const { raw, db } = openDb();
+    seed(raw);
+    const env = envFor(db, []);
+    const session = await signed();
+    const html = await (await app.request("http://localhost/about", { headers: { cookie: session.header } }, env)).text();
+    expect(html).toContain("<h1>About the data</h1>");
+    expect(html).toContain("<h2>Source</h2>");
+    expect(html).toContain("Figures come from a year to date budget report");
+    expect(html).toContain('class="panel about-source"');
+    expect(html).not.toContain("private concept prototype");
+    expect(html).not.toContain("It is not a Walton County website and it does not use the county seal.");
+    expect(html).not.toContain("<summary>What is this?</summary>");
+    expect(html).not.toContain("\u2014");
+    expect(html).not.toContain("\u2013");
+  });
+
+  it("puts a question-mark info control on overview, funds, and departments", async () => {
+    const { raw, db } = openDb();
+    seed(raw);
+    const env = envFor(db, []);
+    const session = await signed();
+    const headers = { cookie: session.header };
+    const pages = ["/", "/funds", "/departments", "/funds/001", "/departments/00133000"];
+    for (const path of pages) {
+      const html = await (await app.request(`http://localhost${path}`, { headers }, env)).text();
+      expect(html, path).toContain('aria-label="What is this?"');
+      expect(html, path).toContain('aria-expanded="false"');
+      expect(html, path).toContain(">?</button>");
+      expect(html, path).not.toContain("<summary>What is this?</summary>");
+      expect(html, path).not.toMatch(/\u2014|\u2013/);
+    }
+    const overview = await (await app.request("http://localhost/", { headers }, env)).text();
+    expect(overview).toContain("Spending against each fund's revised budget.");
+    expect(overview).toContain('aria-controls="tip-where-goes"');
+    const funds = await (await app.request("http://localhost/funds", { headers }, env)).text();
+    expect(funds).toContain("Each fund in the published import.");
+    const departments = await (await app.request("http://localhost/departments", { headers }, env)).text();
+    expect(departments).toContain("Names come from the chart of accounts.");
+    expect(departments).toContain('aria-controls="tip-dept-00199000"');
+    const css = await (await app.request("http://localhost/assets/app.css", {}, env)).text();
+    const js = await (await app.request("http://localhost/assets/app.js", {}, env)).text();
+    expect(css).toContain("#c9a24b");
+    expect(css).toContain("width: 44px");
+    expect(js).toContain("Escape");
+    expect(js).toContain("aria-expanded");
   });
 
   it("opens a fund and filters payments by fund and month", async () => {

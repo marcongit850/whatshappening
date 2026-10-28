@@ -184,8 +184,6 @@ export function paceStatus(rev: number, ytd: number, enc: number, elapsedPct: nu
   return pace(rev, ytd, enc, elapsedPct);
 }
 
-export const FUND_COLORS = ["#17505c", "#2f7d8c", "#7fb0b9", "#c9a24b", "#8a6f9e", "#c5603f", "#b9b4a6"];
-
 export const PACE_AXIS = 140;
 
 export function axisPercent(value: number): number {
