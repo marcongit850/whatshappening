@@ -127,13 +127,13 @@ describe("vendor names", () => {
   });
 
   it("shows the report's name and marks a 20 character cutoff", () => {
-    const display = buildVendorIndex(["WALTON COUNTY SHERIFF OFFICE", "ZEHNDER COMMUNICATIONS INC", "FLORIDA DEPARTMENT OF REVENUE"]);
+    const display = buildVendorIndex();
     expect(display("WALTON COUNTY SHERIF").text).toBe("Walton County Sherif");
     expect(display("ZEHNDER COMMUNICATIO").text).toBe("Zehnder Communicatio");
     expect(display("ZEHNDER COMMUNICATIO").shortened).toBe(true);
     expect(display("JANE Q PUBLIC").text).toBe("JANE Q PUBLIC");
     expect(display("Payroll (batch total)").text).toBe("Payroll (batch total)");
-    const alone = buildVendorIndex([]);
+    const alone = buildVendorIndex();
     expect(alone("ZEHNDER COMMUNICATIO")).toEqual({ text: "Zehnder Communicatio", shortened: true });
     expect(alone("Adkinson Law Firm Ll")).toEqual({ text: "Adkinson Law Firm Ll", shortened: true });
     expect(alone("C&A Landscape Mainte").text).toBe("C&A Landscape Mainte");
@@ -703,7 +703,8 @@ describe("expression depth, reversals, land, and the money left card", () => {
       isAdmin: false,
       showNames: true,
     });
-    const card = overviewHtml.slice(overviewHtml.indexOf("kpi k4"), overviewHtml.indexOf("kpi k4") + 400);
+    const cardStart = overviewHtml.indexOf("kpi k4");
+    const card = overviewHtml.slice(cardStart, overviewHtml.indexOf("</section>", cardStart));
     expect(card).toContain("$169.1M");
     expect(card).not.toContain("169,117,878");
     expect(overviewHtml).toContain("Spent (posted in the county&#39;s books through 9/15/2026) is 5.6% of the mid-year limit");

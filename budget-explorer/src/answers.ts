@@ -119,7 +119,7 @@ export function noVendorAnswer(): string {
 }
 
 function displayMatchName(names: string[]): string {
-  const display = buildVendorIndex(names);
+  const display = buildVendorIndex();
   const longest = [...names].sort((a, b) => b.length - a.length)[0] || "";
   return display(longest).text || titleCaseVendor(longest);
 }

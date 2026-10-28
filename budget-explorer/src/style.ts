@@ -452,18 +452,38 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
 .src { color: var(--muted); font-size: 14px; margin: 12px 0 0; overflow-wrap: anywhere; }
 .what { margin: 10px 0; }
 .what summary { cursor: pointer; font-weight: 600; }
-.tip { position: relative; display: inline-flex; vertical-align: middle; margin-left: 2px; letter-spacing: 0; text-transform: none; flex: none; }
+.tip { position: relative; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; width: 20px; height: 20px; margin-left: 2px; letter-spacing: 0; text-transform: none; flex: none; line-height: 1; }
 .tip-btn {
-  width: 44px;
-  height: 44px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
   border: 1.5px solid #c9a24b;
   border-radius: 50%;
   background: #fff;
   color: var(--navy);
-  font: 700 22px/1 var(--sans);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 0;
+  margin: 0;
   cursor: pointer;
   flex: none;
+}
+.tip-btn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 .tip-btn:hover,
 .tip-btn:focus-visible,
@@ -474,7 +494,7 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
 }
 .tip-pop {
   position: absolute;
-  z-index: 40;
+  z-index: 80;
   top: calc(100% + 4px);
   left: 0;
   width: max-content;
@@ -793,76 +813,110 @@ export const CLIENT_JS = `
     });
   }
   let touchAt = 0;
-  let openedAt = 0;
+  let pinned = null;
   const tipPop = (button) => {
-    const id = button.getAttribute("aria-controls") || "";
-    const pop = document.getElementById(id);
+    const id = button.getAttribute("aria-describedby") || button.getAttribute("aria-controls") || "";
+    const pop = id ? document.getElementById(id) : null;
     return pop instanceof HTMLElement ? pop : null;
   };
+  const buttonForPop = (pop) => {
+    const buttons = document.querySelectorAll(".tip-btn");
+    for (const button of buttons) {
+      const id = button.getAttribute("aria-describedby") || button.getAttribute("aria-controls");
+      if (id && pop.id && id === pop.id && button instanceof HTMLButtonElement) return button;
+    }
+    return null;
+  };
+  const buttonFrom = (node) => {
+    if (!(node instanceof Element)) return null;
+    const direct = node.closest(".tip-btn");
+    if (direct instanceof HTMLButtonElement) return direct;
+    const pop = node.closest(".tip-pop");
+    if (pop instanceof HTMLElement) return buttonForPop(pop);
+    return null;
+  };
+  const ownsTip = (button, node) => {
+    if (!(node instanceof Node)) return false;
+    const tip = button.closest(".tip");
+    if (tip?.contains(node)) return true;
+    const pop = tipPop(button);
+    return !!pop && (pop === node || pop.contains(node));
+  };
   const closeTip = (button) => {
+    if (pinned === button) pinned = null;
     button.setAttribute("aria-expanded", "false");
     const pop = tipPop(button);
     if (!pop) return;
     pop.hidden = true;
-    pop.style.transform = "";
-    pop.style.top = "";
-    pop.style.bottom = "";
+  };
+  const closeTips = () => {
+    document.querySelectorAll(".tip-btn[aria-expanded='true']").forEach((button) => {
+      if (button instanceof HTMLButtonElement) closeTip(button);
+    });
+    pinned = null;
   };
   const placeTip = (button, pop) => {
+    if (pop.parentNode !== document.body) document.body.appendChild(pop);
     pop.hidden = false;
     pop.style.position = "fixed";
+    pop.style.zIndex = "80";
     pop.style.right = "auto";
     pop.style.bottom = "auto";
-    pop.style.transform = "";
+    pop.style.transform = "none";
+    pop.style.margin = "0";
     const pad = 8;
+    const maxWidth = Math.min(280, Math.max(0, window.innerWidth - pad * 2));
+    pop.style.maxWidth = maxWidth + "px";
+    pop.style.width = maxWidth + "px";
+    pop.style.maxHeight = "";
+    pop.style.overflow = "visible";
     const anchor = button.getBoundingClientRect();
-    const width = Math.min(280, window.innerWidth - pad * 2);
-    pop.style.width = width + "px";
     let left = anchor.left;
-    if (left + width > window.innerWidth - pad) left = window.innerWidth - pad - width;
+    if (left + maxWidth > window.innerWidth - pad) left = window.innerWidth - pad - maxWidth;
     if (left < pad) left = pad;
     pop.style.left = left + "px";
-    pop.style.top = anchor.bottom + 4 + "px";
-    const placed = pop.getBoundingClientRect();
-    if (placed.bottom > window.innerHeight - pad) {
-      pop.style.top = Math.max(pad, anchor.top - placed.height - 4) + "px";
+    let top = anchor.bottom + 6;
+    pop.style.top = top + "px";
+    const box = pop.getBoundingClientRect();
+    if (box.bottom > window.innerHeight - pad) top = anchor.top - box.height - 6;
+    if (top < pad) top = pad;
+    const room = Math.max(0, window.innerHeight - pad - top);
+    if (room > 0 && box.height > room) {
+      pop.style.maxHeight = room + "px";
+      pop.style.overflow = "auto";
     }
+    pop.style.top = top + "px";
+    const placed = pop.getBoundingClientRect();
+    if (placed.left < pad) pop.style.left = pad + "px";
+    if (placed.right > window.innerWidth - pad) pop.style.left = Math.max(pad, window.innerWidth - pad - placed.width) + "px";
   };
-  const openTip = (button) => {
+  const openTip = (button, pin) => {
     document.querySelectorAll(".tip-btn[aria-expanded='true']").forEach((other) => {
-      if (other !== button) closeTip(other);
+      if (other !== button && other instanceof HTMLButtonElement) closeTip(other);
     });
     const pop = tipPop(button);
     if (!pop) return;
+    if (pin) pinned = button;
+    else if (pinned !== button) pinned = null;
     button.setAttribute("aria-expanded", "true");
-    openedAt = Date.now();
     placeTip(button, pop);
+  };
+  const onScroll = () => {
+    if (document.querySelector(".tip-btn[aria-expanded='true']")) closeTips();
   };
   document.addEventListener("pointerdown", (event) => {
     if (event.pointerType === "touch") touchAt = Date.now();
   });
   document.addEventListener("pointerover", (event) => {
     if (event.pointerType !== "mouse" || Date.now() - touchAt < 700) return;
-    const button = event.target instanceof Element ? event.target.closest(".tip-btn") : null;
-    if (button instanceof HTMLButtonElement) openTip(button);
+    const button = buttonFrom(event.target);
+    if (button) openTip(button, false);
   });
   document.addEventListener("pointerout", (event) => {
     if (event.pointerType !== "mouse" || Date.now() - touchAt < 700) return;
-    const button = event.target instanceof Element ? event.target.closest(".tip-btn") : null;
-    if (!(button instanceof HTMLButtonElement) || button === document.activeElement) return;
-    const next = event.relatedTarget;
-    if (next instanceof Node && button.closest(".tip")?.contains(next)) return;
-    closeTip(button);
-  });
-  document.addEventListener("focusin", (event) => {
-    const button = event.target instanceof Element ? event.target.closest(".tip-btn") : null;
-    if (button instanceof HTMLButtonElement) openTip(button);
-  });
-  document.addEventListener("focusout", (event) => {
-    const button = event.target instanceof Element ? event.target.closest(".tip-btn") : null;
-    if (!(button instanceof HTMLButtonElement)) return;
-    const next = event.relatedTarget;
-    if (next instanceof Node && button.closest(".tip")?.contains(next)) return;
+    const button = buttonFrom(event.target);
+    if (!button || button === pinned) return;
+    if (ownsTip(button, event.relatedTarget)) return;
     closeTip(button);
   });
   document.addEventListener("click", (event) => {
@@ -870,24 +924,22 @@ export const CLIENT_JS = `
     const button = target?.closest(".tip-btn");
     if (button instanceof HTMLButtonElement) {
       event.preventDefault();
-      event.stopPropagation();
-      const open = button.getAttribute("aria-expanded") === "true";
-      const fromTouch = touchAt && Date.now() - touchAt < 700;
-      if (fromTouch && open && Date.now() - openedAt > 400) closeTip(button);
-      else if (!open) openTip(button);
+      if (button === pinned) closeTip(button);
+      else openTip(button, true);
       return;
     }
-    if (!target?.closest(".tip")) {
-      document.querySelectorAll(".tip-btn[aria-expanded='true']").forEach((button) => closeTip(button));
-    }
+    if (target?.closest(".tip") || target?.closest(".tip-pop")) return;
+    closeTips();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     const open = document.querySelector(".tip-btn[aria-expanded='true']");
     if (!(open instanceof HTMLButtonElement)) return;
-    closeTip(open);
+    closeTips();
     open.focus();
   });
+  window.addEventListener("scroll", onScroll, true);
+  document.addEventListener("scroll", onScroll, true);
   const form = document.querySelector("[data-busy]");
   if (!form) return;
   form.addEventListener("submit", () => {

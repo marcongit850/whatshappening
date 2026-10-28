@@ -187,6 +187,7 @@ describe("overview dashboard", () => {
     expect(html).toContain("Search any vendor or payment");
     expect(html).toContain("Who was paid the most money");
     expect(html).not.toContain("Who received the most money");
+    expect(html).not.toContain("Total received");
     expect(html.indexOf("Search any vendor or payment")).toBeLessThan(html.indexOf("Who was paid the most money"));
     expect(html.indexOf("Who was paid the most money")).toBeLessThan(html.indexOf("Where the money goes"));
     expect(html).toContain('href="/vendors/1001"');
@@ -296,18 +297,32 @@ describe("overview dashboard", () => {
     }
     const overview = await (await app.request("http://localhost/", { headers }, env)).text();
     expect(overview).toContain("Spending against each fund's revised budget.");
+    expect(overview).toContain('aria-describedby="tip-where-goes"');
     expect(overview).toContain('aria-controls="tip-where-goes"');
+    expect(overview).not.toContain('aria-expanded="true"');
     const funds = await (await app.request("http://localhost/funds", { headers }, env)).text();
     expect(funds).toContain("Each fund in the published import.");
     const departments = await (await app.request("http://localhost/departments", { headers }, env)).text();
     expect(departments).toContain("Names come from the chart of accounts.");
+    expect(departments).toContain('aria-describedby="tip-dept-00199000"');
     expect(departments).toContain('aria-controls="tip-dept-00199000"');
     const css = await (await app.request("http://localhost/assets/app.css", {}, env)).text();
     const js = await (await app.request("http://localhost/assets/app.js", {}, env)).text();
     expect(css).toContain("#c9a24b");
-    expect(css).toContain("width: 44px");
+    expect(css).toContain("var(--navy-deep)");
+    const buttonCss = css.match(/\.tip-btn \{[^}]+\}/)?.[0] ?? "";
+    expect(buttonCss).toContain("width: 20px");
+    expect(buttonCss).toContain("height: 20px");
+    expect(buttonCss).not.toContain("44px");
+    const hitCss = css.match(/\.tip-btn::after \{[^}]+\}/)?.[0] ?? "";
+    expect(hitCss).toContain("width: 44px");
+    expect(hitCss).toContain("height: 44px");
+    expect(hitCss).toContain("position: absolute");
+    expect(css).toMatch(/\.tip-pop \{[^}]*z-index: 80/);
     expect(js).toContain("Escape");
     expect(js).toContain("aria-expanded");
+    expect(js).toContain('addEventListener("scroll"');
+    expect(js).not.toContain("activeElement");
   });
 
   it("opens a fund and filters payments by fund and month", async () => {
@@ -377,7 +392,9 @@ describe("vendors who were paid", () => {
     expect(list).toContain("North Builders LLC");
     expect(list).toContain('href="/vendors/1001"');
     expect(list).toContain("Total paid");
+    expect(list).toContain("Sorted by total paid.");
     expect(list).not.toContain("Total received");
+    expect(list).not.toContain("total received");
     expect(list).toContain("Number of payments");
     expect(list).toContain("Reversals and re-posts are listed as separate lines.");
     expect(list).toContain("7 vendors");
@@ -410,6 +427,8 @@ describe("vendors who were paid", () => {
     const detail = await (await app.request("http://localhost/vendors/1001", { headers }, env)).text();
     expect(detail).toContain("$160,000.00");
     expect(detail).toContain("Total paid");
+    expect(detail).not.toContain("Total received");
+    expect(detail).not.toContain("total received");
     expect(detail).toContain("Number of payments");
     expect(detail).toContain(">3<");
     expect(detail).toContain("10/15/2025");
