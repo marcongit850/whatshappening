@@ -199,13 +199,15 @@ function takeInvoice(value: string): { field: string; rest: string } {
   return { field: value.trim(), rest: "" };
 }
 
-/** The vendor column is also 20 characters, then the description. */
+/**
+ * A padded vendor column ends at a wide gap or at column 20 when that column ends on a space.
+ * A longer name with no gap is kept whole. Do not cut it mid-word at 20 characters.
+ */
 function takeVendor(value: string): { field: string; rest: string } {
   if (!value) return { field: "", rest: "" };
   const split = gapSplit(value);
   if (split && split.left.length <= 20) return { field: split.left, rest: split.right };
   if (value.length > 20 && value[20] === " ") return { field: value.slice(0, 20).trim(), rest: value.slice(21).trim() };
-  if (value.length > 20) return { field: value.slice(0, 20).trim(), rest: value.slice(20).trim() };
   return { field: value.trim(), rest: "" };
 }
 

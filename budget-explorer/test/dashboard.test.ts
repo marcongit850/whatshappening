@@ -205,7 +205,11 @@ describe("overview dashboard", () => {
     expect(who).toContain("PUBLIC, JANE Q");
     expect(who).toContain("Total paid");
     expect(who.match(/Total paid/g)).toEqual(["Total paid"]);
+    expect(who).toContain("Vendors paid from 10/1/2025 through 9/15/2026.");
+    expect(who).not.toContain("October 1");
     expect(who).toContain("2 payments");
+    expect(who).toContain("See all vendors");
+    expect(who).toContain('class="vlist ranked"');
     expect(who).toContain('title="North Builders LLC"');
     expect(who).not.toContain("Total received");
     expect(who).not.toContain("Sheriff");
@@ -268,6 +272,26 @@ describe("overview dashboard", () => {
     expect(hidden).toContain("Waste Management");
     expect(hidden).toContain("North Builders LLC");
     expect(hidden).not.toContain("SAMPLE COUNTY SHERIFF");
+  });
+
+  it("shows 20 vendors in who was paid when more exist", async () => {
+    const { raw, db } = openDb();
+    seed(raw);
+    const pay = raw.prepare(`INSERT INTO payments (
+      import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
+      amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key, is_person_name
+    ) VALUES (1, '001', '00133000', '534000', '', '', '2026-01-02', 'API', ?, ?, ?, 'X', '1', '', 0, ?, 0)`);
+    for (let i = 0; i < 22; i += 1) {
+      const number = String(3000 + i);
+      pay.run(80_000_000 - i, number, `RANKED VENDOR ${String(i).padStart(2, "0")} SUPPLY`, `rank-${number}`);
+    }
+    const env = envFor(db, []);
+    const session = await signed();
+    const ranked = await (await app.request("http://localhost/", { headers: { cookie: session.header } }, env)).text();
+    const top = ranked.slice(ranked.indexOf("Who was paid the most money"), ranked.indexOf("Commissioners adopted"));
+    expect(top.match(/class="vrow"/g)).toHaveLength(20);
+    expect(top).toContain("See all vendors");
+    expect(top).not.toContain("Vendor 21");
   });
 
   it("drops the prototype sentence from about the data", async () => {
@@ -358,6 +382,12 @@ describe("overview dashboard", () => {
 
     const payments = await (await app.request("http://localhost/search", { headers }, env)).text();
     expect(payments).toContain("Maximum amount");
+    expect(payments).toContain("Showing ");
+    expect(payments).toContain(">Show<");
+    const widePay = await (await app.request("http://localhost/search?per=50", { headers }, env)).text();
+    expect(widePay).toContain("per=50");
+    const badPay = await (await app.request("http://localhost/search?per=1000", { headers }, env)).text();
+    expect(badPay).not.toContain("per=1000");
     expect(payments).toContain("at most 2,000 lines");
     expect(payments).toContain("Download results (CSV)");
     const capped = await (await app.request("http://localhost/search?min=70000&max=90000", { headers }, env)).text();
@@ -435,7 +465,13 @@ describe("vendors who were paid", () => {
     expect(list).toContain('href="/vendors/1001"');
     expect(list).toContain(">Search</button>");
     expect(list).toContain("Total paid");
-    expect(list).toContain("Sorted by total paid.");
+    expect(list).toContain("Sorted by total paid, highest first.");
+    expect(list).toContain("Vendors paid from 10/1/2025 through 9/15/2026.");
+    expect(list).not.toContain("October 1");
+    expect(list).toContain("Showing 1 to 7 of 7");
+    expect(list).toContain(">Show<");
+    expect(list).toContain('href="/vendors?per=50"');
+    expect(list).toContain('aria-sort="descending"');
     expect(list).toContain("3 payments");
     expect(list).toContain('title="Jm Phelps Constructi. Name shortened in the county report."');
     expect(list).not.toContain("Number of payments");
@@ -462,16 +498,34 @@ describe("vendors who were paid", () => {
 
     const byCount = await (await app.request("http://localhost/vendors?sort=count", { headers }, env)).text();
     expect(byCount.indexOf("/vendors/1001")).toBeLessThan(byCount.indexOf("/vendors/1008"));
-    expect(byCount).toContain("Sorted by total paid.");
+    expect(byCount).toContain("Sorted by total paid, highest first.");
     expect(byCount).not.toContain("Sorted by number of payments.");
-    expect(byCount).not.toContain('href="/vendors?sort=count"');
+    expect(byCount).not.toContain("sort=count");
     expect(byCount).toContain("Platform Services INC");
+    const byName = await (await app.request("http://localhost/vendors?sort=name_asc", { headers }, env)).text();
+    expect(byName.indexOf("Acme Widget Co")).toBeLessThan(byName.indexOf("North Builders LLC"));
+    expect(byName).toContain("Sorted by vendor name, A to Z.");
+    expect(byName).toContain('aria-sort="ascending"');
+    expect(byName).toContain("sort=name_desc");
+    expect(byName).toContain("3 payments");
+    const named = await (await app.request("http://localhost/vendors?sort=name_desc", { headers }, env)).text();
+    expect(named.indexOf("Waste Management")).toBeLessThan(named.indexOf("Acme Widget Co"));
+    expect(named).toContain("sort=name_asc");
+    const byLow = await (await app.request("http://localhost/vendors?sort=paid_asc&per=50", { headers }, env)).text();
+    expect(byLow.indexOf("Waste Management")).toBeLessThan(byLow.indexOf("North Builders LLC"));
+    expect(byLow).toContain("Showing 1 to 7 of 7");
+    expect(byLow).toContain("sort=paid_asc");
+    expect(byLow).toContain("per=50");
+    const badPer = await (await app.request("http://localhost/vendors?per=100&page=9", { headers }, env)).text();
+    expect(badPer).toContain("Showing 1 to 7 of 7");
+    expect(badPer).toContain("North Builders LLC");
+    expect(badPer).not.toContain("per=100");
     const css = await (await app.request("http://localhost/assets/app.css", {}, env)).text();
     const paidAmount = css.match(/\.vv, \.paid-list \.vv, \.vv b[\s\S]*?\}/)?.[0] ?? "";
     expect(paidAmount).toContain("font-size: 16px");
     expect(paidAmount).toContain("font-weight: 600");
-    expect(css).toContain("grid-template-columns: minmax(16rem, 2.1fr) minmax(36px, 0.55fr) max-content 1rem");
-    expect(css).toContain("minmax(0, 1fr) max-content 1rem");
+    expect(css).toContain("grid-template-columns: minmax(280px, 1.35fr) minmax(72px, 1fr) max-content 1.25rem");
+    expect(css).toContain("grid-template-columns: subgrid");
     expect(css).toContain(".paid-list a.vrow, a.vrow, a.brow, a.drow, .reserve-link, .holder-list li, .transfer-row, a.lg, .cmp, .pager a {\n    min-height: 44px;");
     expect(css).toContain("a.vrow::after, a.brow::after, a.drow::after, .reserve-link::after {\n  position: static;");
     expect(css).toContain(".footer-grid { display: flex; align-items: flex-start;");
@@ -614,4 +668,59 @@ describe("question facts", () => {
     expect(mostAnswer).not.toContain("SAMPLE COUNTY SHERIFF");
     expect(mostAnswer).not.toContain("JANE");
   });
+});
+
+describe("ranked bar alignment", () => {
+  it("lines up bar tracks at 1280 and 390", async () => {
+    const { mkdirSync } = await import("node:fs");
+    const { chromium } = await import("playwright");
+    const { raw, db } = openDb();
+    seed(raw);
+    const env = envFor(db, []);
+    const session = await signed();
+    const headers = { cookie: session.header };
+    const css = await (await app.request("http://localhost/assets/app.css", {}, env)).text();
+    const browser = await chromium.launch({
+      executablePath: "/usr/local/bin/google-chrome",
+      args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    });
+    const shots = "/opt/cursor/artifacts/screenshots";
+    mkdirSync(shots, { recursive: true });
+    const pages: [string, string][] = [
+      ["/", "overview"],
+      ["/vendors", "vendors"],
+      ["/funds/114", "fund"],
+      ["/departments/00133000", "department"],
+      ["/revenue", "revenue"],
+      ["/reserves", "savings"],
+    ];
+    try {
+      for (const width of [1280, 390]) {
+        const page = await browser.newPage({ viewport: { width, height: 900 } });
+        for (const [path, name] of pages) {
+          const html = await (await app.request(`http://localhost${path}`, { headers }, env)).text();
+          await page.setContent(html.replace('<link rel="stylesheet" href="/assets/app.css">', `<style>${css}</style>`), { waitUntil: "load" });
+          const groups = await page.locator(".vlist").evaluateAll((lists) =>
+            lists.map((list) =>
+              [...list.querySelectorAll(".vt")].map((node) => {
+                const box = node.getBoundingClientRect();
+                return { left: Math.round(box.left), right: Math.round(box.right) };
+              }),
+            ),
+          );
+          const bars = groups.flat();
+          if (name === "vendors" || name === "overview") expect(bars.length, name).toBeGreaterThan(1);
+          for (const [index, tracks] of groups.entries()) {
+            if (tracks.length < 2) continue;
+            expect(new Set(tracks.map((track) => track.left)).size, `${name} list ${index} left at ${width}`).toBe(1);
+            expect(new Set(tracks.map((track) => track.right)).size, `${name} list ${index} right at ${width}`).toBe(1);
+          }
+          await page.screenshot({ path: `${shots}/${name}-${width}.png` });
+        }
+        await page.close();
+      }
+    } finally {
+      await browser.close();
+    }
+  }, 60000);
 });

@@ -782,7 +782,16 @@ export interface VendorSlice {
   payments: number;
 }
 
-export type VendorSort = "total" | "count";
+export type VendorListSort = "paid_desc" | "paid_asc" | "name_asc" | "name_desc";
+
+export function readVendorSort(value: string | undefined): VendorListSort {
+  if (value === "paid_asc" || value === "name_asc" || value === "name_desc" || value === "paid_desc") return value;
+  return "paid_desc";
+}
+
+export function readPageSize(value: string | undefined): 25 | 50 {
+  return value === "50" ? 50 : 25;
+}
 
 function vendorLike(value: string): string {
   const cleaned = value.replace(/[%_]/g, " ").trim().slice(0, 80);
@@ -825,8 +834,11 @@ function vendorMatchBinds(query: string): (string | number)[] {
   return [query.trim() ? 0 : 1, pattern, pattern, pattern];
 }
 
-function vendorOrder(sort: VendorSort): string {
-  return sort === "count" ? "payments DESC, cents DESC, vendor_name COLLATE NOCASE" : "cents DESC, payments DESC, vendor_name COLLATE NOCASE";
+function vendorOrder(sort: VendorListSort): string {
+  if (sort === "paid_asc") return "cents ASC, vendor_name COLLATE NOCASE ASC";
+  if (sort === "name_asc") return "vendor_name COLLATE NOCASE ASC, cents DESC";
+  if (sort === "name_desc") return "vendor_name COLLATE NOCASE DESC, cents DESC";
+  return "cents DESC, vendor_name COLLATE NOCASE ASC";
 }
 
 /** Vendors with a number, grouped by that number. Longest stored name is shown. */
@@ -836,7 +848,7 @@ export async function listVendors(
   asOf: string,
   showNames: boolean,
   query: string,
-  sort: VendorSort,
+  sort: VendorListSort,
   limit: number,
   offset: number,
 ): Promise<{ rows: VendorSummary[]; total: number }> {

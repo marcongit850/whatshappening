@@ -960,16 +960,64 @@ a.item .big { margin: 0 0 4px; }
 .vv { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
 .row-cap { display: inline; margin: 0; font-family: var(--sans); font-size: 12px; font-weight: 500; line-height: 1.2; color: var(--muted); white-space: nowrap; }
 .cmp p:has(> span):has(> b) > b { font-size: 16px; font-weight: 600; }
-a.vrow {
-  grid-template-columns: minmax(16rem, 2.1fr) minmax(36px, 0.55fr) max-content 1rem;
-  gap: 4px 10px;
+.vlist {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.35fr) minmax(72px, 1fr) max-content 1.25rem;
+  column-gap: 10px;
+  align-items: center;
+}
+.vlist.ranked { grid-template-columns: 1.75rem minmax(240px, 1.15fr) minmax(72px, 1fr) max-content 1.25rem; }
+.vlist > a.vrow, .vlist > .vhead {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  column-gap: 10px;
   align-items: center;
   min-height: 40px;
   padding: 2px 0;
   padding-right: 0;
 }
 .paid-list a.vrow { padding: 2px 0; min-height: 40px; }
-.vn { font-size: 15px; line-height: 1.2; gap: 8px; }
+.vlist .vn {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.vhead a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  text-decoration: none;
+  color: var(--muted);
+}
+.pager-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 8px; }
+.pager-range { margin: 0; font-size: 14px; color: var(--muted); }
+.pager-size { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.pager-size a, .pager a, .pager .page-num {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  text-decoration: none;
+  font-weight: 600;
+}
+.pager { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 0; }
+.pager .page-num.on, .pager-size a.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--gold); }
+.pager .page-gap { min-width: 24px; text-align: center; color: var(--muted); }
 .vt, .btrack, .dplot { height: 8px; }
 .meter, .stackbar, .splitbar { height: 8px; }
 a.brow {
@@ -1036,6 +1084,21 @@ a.vrow::after, a.brow::after, a.drow::after, .reserve-link::after {
   .bval { text-align: right; }
   .kpi .n, .figure-n, .plat .n, .plat .n a { font-size: 22px; }
   .state-pills a, .county-list a, .pay-find .btn, .ask-row input, .btn { min-height: 44px; }
+  .vlist, .vlist.ranked { display: block; }
+  .vlist > a.vrow, .vlist > .vhead {
+    grid-template-columns: minmax(0, 1fr) max-content 1rem;
+    grid-column: auto;
+    min-height: 44px;
+  }
+  .vlist.ranked > a.vrow { grid-template-columns: 1.5rem minmax(0, 1fr) max-content 1rem; }
+  .vlist .rk { grid-column: 1; grid-row: 1; }
+  .vlist.ranked .vn { grid-column: 2; grid-row: 1; }
+  .vlist:not(.ranked) .vn { grid-column: 1; grid-row: 1; }
+  .vlist.ranked .vv { grid-column: 3; grid-row: 1; }
+  .vlist:not(.ranked) .vv { grid-column: 2; grid-row: 1; }
+  .vlist.ranked > a.vrow::after { grid-column: 4; grid-row: 1; }
+  .vlist:not(.ranked) > a.vrow::after { grid-column: 3; grid-row: 1; }
+  .vlist .vhead span { display: none; }
 }
 @media (max-width: 800px) {
   .state-pills a { min-height: 44px; font-size: 16px; }

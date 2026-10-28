@@ -53,6 +53,8 @@ import {
   landSpendByMonth,
   latestPublished,
   listVendors,
+  readPageSize,
+  readVendorSort,
   listImports,
   loadNames,
   loginAttempts as attemptsFor,
@@ -428,8 +430,8 @@ app.get("/departments/:dept/:object/:project", async (c) => {
   if (!/^\d{8}$/.test(dept) || !/^\d{6}$/.test(objectCode) || !/^[A-Za-z0-9]{0,12}$/.test(project)) return c.text("Not found", 404);
   const account = await oneAccount(c.env.DB, current.id, dept, objectCode, project);
   if (!account) return c.text("Account not found", 404);
-  const pageIndex = pageNumber(c.req.query("page"));
-  const pageSize = 25;
+  const pageSize = readPageSize(c.req.query("per"));
+  let pageIndex = pageNumber(c.req.query("page"));
   const [payments, names] = await Promise.all([
     accountLines(c.env.DB, current.id, dept, objectCode, project, pageIndex, pageSize, c.get("showNames")),
     loadNames(c.env.DB),
@@ -457,9 +459,10 @@ app.get("/search", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
   const filters = readFilters(c);
-  const pageIndex = pageNumber(c.req.query("page"));
+  const pageSize = readPageSize(c.req.query("per"));
+  let pageIndex = pageNumber(c.req.query("page"));
   const [result, departments, names, funds] = await Promise.all([
-    searchLines(c.env.DB, current.id, filters, pageIndex, 25, c.get("showNames")),
+    searchLines(c.env.DB, current.id, filters, pageIndex, pageSize, c.get("showNames")),
     departmentRollups(c.env.DB, current.id),
     loadNames(c.env.DB),
     fundNameMap(c.env.DB, current.id),
@@ -475,7 +478,7 @@ app.get("/search", async (c) => {
       total: result.total,
       totalCents: result.totalCents,
       pageIndex,
-      pageSize: 25,
+      pageSize,
       csrf: c.get("session").csrf,
       isAdmin: isAdmin(c),
       showNames: c.get("showNames"),
@@ -504,16 +507,22 @@ app.get("/vendors", async (c) => {
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
   const query = (c.req.query("q") || "").replace(/[%_]/g, " ").trim().slice(0, 80);
-  const pageIndex = pageNumber(c.req.query("page"));
-  const pageSize = 25;
-  // sort in the query string, including sort=count, is ignored. Highest total paid is always first.
-  const found = await listVendors(c.env.DB, current.id, current.data_as_of || "", c.get("showNames"), query, "total", pageSize, pageIndex * pageSize);
+  const pageSize = readPageSize(c.req.query("per"));
+  const sort = readVendorSort(c.req.query("sort"));
+  let pageIndex = pageNumber(c.req.query("page"));
+  let found = await listVendors(c.env.DB, current.id, current.data_as_of || "", c.get("showNames"), query, sort, pageSize, pageIndex * pageSize);
+  const lastPage = Math.max(0, Math.ceil(found.total / pageSize) - 1);
+  if (pageIndex > lastPage) {
+    pageIndex = lastPage;
+    found = await listVendors(c.env.DB, current.id, current.data_as_of || "", c.get("showNames"), query, sort, pageSize, pageIndex * pageSize);
+  }
   return c.html(
     renderVendors({
       row: current,
       vendors: found.rows,
       total: found.total,
       query,
+      sort,
       pageIndex,
       pageSize,
       csrf: c.get("session").csrf,
@@ -529,8 +538,8 @@ app.get("/vendors/:number", async (c) => {
   if (!/^\d{1,20}$/.test(number)) return c.text("Not found", 404);
   const current = await requirePublished(c);
   if (current instanceof Response) return current;
-  const pageIndex = pageNumber(c.req.query("page"));
-  const pageSize = 25;
+  const pageSize = readPageSize(c.req.query("per"));
+  let pageIndex = pageNumber(c.req.query("page"));
   const asOf = current.data_as_of || "";
   const showNames = c.get("showNames");
   const vendor = await oneVendor(c.env.DB, current.id, asOf, showNames, number);
