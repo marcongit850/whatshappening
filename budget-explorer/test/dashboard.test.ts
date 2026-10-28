@@ -104,7 +104,8 @@ function seed(raw: DatabaseSync): void {
     ["114", "11444000", "561000", "2025-10-20", "API", 2_000_000, "1001", "NORTH BUILDERS LLC", "N2", 0, "n2", 0],
     ["001", "00133000", "534000", "2025-12-02", "API", 8_000_000, "1002", "ACME WIDGET CO", "A1", 0, "a1", 0],
     ["001", "00133000", "534000", "2025-11-01", "API", 123_456, "1003", "SAMPLE COUNTY SHERIFF", "S1", 0, "s1", 0],
-    ["001", "00122000", "534000", "2025-11-02", "API", 100, "1004", "JANE Q PUBLIC", "P1", 0, "p1", 1],
+    ["001", "00122000", "534000", "2025-11-02", "API", 100, "1004", "PUBLIC, JANE Q", "P1", 0, "p1", 1],
+    ["001", "00133000", "534000", "2026-01-20", "API", 100, "0402", "WASTE MANAGEMENT", "W1", 0, "w1", 1],
     ["114", "11444000", "534000", "2026-09-20", "API", 99_999_900, "1005", "LATE VENDOR CO", "L1", 1, "l1", 0],
     ["001", "00133000", "534000", "2025-12-01", "GEN", 4_000_000, "1006", "INTERNAL JOURNAL CO", "J1", 0, "j1", 0],
     ["001", "00133000", "534000", "2026-01-15", "API", 6_000_000, "1007", "PLAT SUPPLY CO", "PS1", 0, "ps1", 0],
@@ -195,10 +196,11 @@ describe("overview dashboard", () => {
     expect(html).toContain("Planned budget (county&#39;s budget book)");
     expect(html).toContain("The county&#39;s own FY2027 tentative budget book");
     const who = html.slice(html.indexOf("Who was paid the most money"), html.indexOf("Commissioners adopted"));
+    expect(who).toContain("North Builders LLC");
+    expect(who).toContain("Waste Management");
+    expect(who).toContain("PUBLIC, JANE Q");
     expect(who).toContain("Total paid");
     expect(who).not.toContain("Total received");
-    expect(who).toContain("North Builders LLC");
-    expect(who).not.toContain("Jane");
     expect(who).not.toContain("Sheriff");
     expect(who).not.toContain("Late Vendor");
     expect(who).not.toContain("Internal Journal");
@@ -242,7 +244,8 @@ describe("overview dashboard", () => {
     expect(html).toContain("Recreation Plat Fee");
     expect(html).toContain("Roads Division");
     expect(html).toContain(moneyCompact(123_456));
-    expect(html).not.toContain("JANE");
+    expect(html).toContain("PUBLIC, JANE Q");
+    expect(html).toContain("Waste Management");
     expect(html).not.toContain("SAMPLE COUNTY SHERIFF");
     expect(html).not.toContain("LATE VENDOR CO");
     expect(html).not.toContain("INTERNAL JOURNAL CO");
@@ -254,6 +257,8 @@ describe("overview dashboard", () => {
     await setShowPersonNames(db, false);
     const hidden = await (await app.request("http://localhost/", { headers: { cookie: session.header } }, env)).text();
     expect(hidden).not.toContain("JANE");
+    expect(hidden).not.toContain("PUBLIC, JANE");
+    expect(hidden).toContain("Waste Management");
     expect(hidden).toContain("North Builders LLC");
     expect(hidden).not.toContain("SAMPLE COUNTY SHERIFF");
   });
@@ -368,7 +373,12 @@ describe("vendors who were paid", () => {
     ) VALUES
       (1, '001', '00122000', '534000', '', '', '2026-02-01', 'API', 1, '1008', 'PLATFORM SERVICES INC', 'PF2', '2', '', 0, 'pf2', 0),
       (1, '001', '00122000', '534000', '', '', '2026-02-02', 'API', 1, '1008', 'PLATFORM SERVICES INC', 'PF3', '3', '', 0, 'pf3', 0),
-      (1, '001', '00122000', '534000', '', '', '2026-02-03', 'API', 1, '1008', 'PLATFORM SVCS', 'PF4', '4', '', 0, 'pf4', 0)`);
+      (1, '001', '00122000', '534000', '', '', '2026-02-03', 'API', 1, '1008', 'PLATFORM SVCS', 'PF4', '4', '', 0, 'pf4', 0),
+      (1, '114', '11444000', '534000', '', '', '2025-10-18', 'API', -1000000, '1001', 'NORTH BUILDERS LLC', 'N3', '9', '', 0, 'n3', 0),
+      (1, '001', '00133000', '534000', '', '', '2026-03-01', 'API', 300, '2488', 'JM PHELPS CONSTRUCTI', 'JP1', '8', 'road work', 0, 'jp1', 1),
+      (1, '001', '00133000', '534000', '', '', '2026-03-02', 'API', 900000000, '999999', 'CARD ONE', 'C1', '7', 'card', 0, 'c1', 0),
+      (1, '001', '00133000', '534000', '', '', '2026-03-03', 'API', 100, '999999', 'CARD TWO', 'C2', '6', 'other card', 0, 'c2', 0),
+      (1, '001', '00133000', '534000', '', '', '2026-03-04', 'API', 100, '999995', 'TRAVEL PAYEE', 'T1', '5', 'travel', 0, 't1', 0)`);
     raw.exec(`UPDATE payments SET description = 'SMITH, MARY rent' WHERE dedupe_key = 'n1'`);
     const env = envFor(db, []);
     const session = await signed();
@@ -387,11 +397,20 @@ describe("vendors who were paid", () => {
     expect(list).not.toContain("total received");
     expect(list).toContain("Number of payments");
     expect(list).toContain("Reversals and re-posts are listed as separate lines.");
-    expect(list).not.toContain("Jane");
+    expect(list).toContain("7 vendors");
+    expect(list).toContain("Waste Management");
+    expect(list).toContain("Jm Phelps Constructi");
+    expect(list).toContain("PUBLIC, JANE Q");
+    expect(list).toContain("County offices, transfers between county funds, and credit-card catch-alls are not listed.");
+    expect(list).toContain("Credit-card and travel payments are listed under Payments, not as one vendor.");
+    expect(list).not.toContain("CARD ONE");
+    expect(list).not.toContain("TRAVEL PAYEE");
     expect(list).not.toContain("Sample County Sheriff");
     expect(list).not.toContain("Late Vendor");
     expect(list).not.toContain("Internal Journal");
     expect(list).not.toMatch(/\u2014|\u2013/);
+    const listed = list.slice(list.indexOf("7 vendors"), list.indexOf("Lines dated after"));
+    expect(listed.match(/href="\/vendors\/\d+"/g)).toHaveLength(7);
     expect(list.indexOf("/vendors/1001")).toBeLessThan(list.indexOf("/vendors/1008"));
 
     const byCount = await (await app.request("http://localhost/vendors?sort=count", { headers }, env)).text();
@@ -406,29 +425,53 @@ describe("vendors who were paid", () => {
     expect(shortName).toContain('href="/vendors/1008"');
 
     const detail = await (await app.request("http://localhost/vendors/1001", { headers }, env)).text();
-    expect(detail).toContain("$170,000.00");
+    expect(detail).toContain("$160,000.00");
     expect(detail).toContain("Total paid");
     expect(detail).not.toContain("Total received");
     expect(detail).not.toContain("total received");
     expect(detail).toContain("Number of payments");
-    expect(detail).toContain(">2<");
+    expect(detail).toContain(">3<");
     expect(detail).toContain("10/15/2025");
     expect(detail).toContain("10/20/2025");
     expect(detail).toContain("Recreation Plat Fee");
     expect(detail).toContain("Parks Maintenance");
     expect(detail).toContain("534000");
     expect(detail).toContain("561000");
+    expect(detail).toContain("Operating (account 534000)");
+    expect(detail).toContain("What the county paid this vendor for");
+    expect(detail).toContain("Most of this money, $140,000.00, was paid by the Parks Maintenance department for Operating (account 534000).");
     expect(detail).toContain("SMITH, MARY rent");
+    expect(detail).toContain("This total is a net figure. The county recorded $170,000.00 in payments and $10,000.00 in reversals and credits, which are subtracted.");
+    expect(detail).toContain('aria-label="What is this?"');
     expect(detail).toContain("Reversals and re-posts are listed as separate lines.");
     expect(detail).not.toContain("LATE VENDOR");
+    expect(detail).not.toContain("Total received");
     expect(detail).not.toMatch(/\u2014|\u2013/);
+    const personPage = await app.request("http://localhost/vendors/1004", { headers }, env);
+    expect(personPage.status).toBe(200);
+    expect(await personPage.text()).toContain("PUBLIC, JANE Q");
+    const cutOff = await (await app.request("http://localhost/vendors/2488", { headers }, env)).text();
+    expect(cutOff).toContain("Jm Phelps Constructi");
+    expect(cutOff).toContain("road work");
+    for (const path of ["/vendors/999999", "/vendors/999995"]) {
+      const catchall = await app.request(`http://localhost${path}`, { headers }, env);
+      expect(catchall.status, path).toBe(404);
+    }
 
     await setShowPersonNames(db, false);
+    const hiddenList = await (await app.request("http://localhost/vendors", { headers }, env)).text();
+    expect(hiddenList).toContain("6 vendors");
+    expect(hiddenList).toContain("Waste Management");
+    expect(hiddenList).not.toContain("PUBLIC, JANE");
+    expect(hiddenList).toContain("Person names written as Last, First are not listed.");
+    const hiddenPerson = await app.request("http://localhost/vendors/1004", { headers }, env);
+    expect(hiddenPerson.status).toBe(404);
     const hidden = await (await app.request("http://localhost/vendors/1001", { headers }, env)).text();
     expect(hidden).toContain("North Builders LLC");
+    expect(hidden).toContain("What the county paid this vendor for");
     expect(hidden).not.toContain("SMITH");
     expect(hidden).not.toContain("MARY");
-    expect(hidden).not.toContain("Jane");
+    expect(hidden).toContain("rent");
 
     for (const path of ["/vendors/1003", "/vendors/1004", "/vendors/1005", "/vendors/nope"]) {
       const missing = await app.request(`http://localhost${path}`, { headers }, env);

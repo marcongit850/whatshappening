@@ -3,12 +3,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { TOP_VENDOR_SQL, TRANSFER_OBJECT } from "../src/budget";
-import { organizationVendors, type OrgVendor } from "../src/db";
-import { CONSTITUTIONAL_SQL, VENDOR_SOURCES } from "../src/overview";
+import { organizationVendors, vendorDirectoryWhereSql, type OrgVendor } from "../src/db";
+import { CONSTITUTIONAL_SQL } from "../src/overview";
 
-const sources = VENDOR_SOURCES.map((source) => `'${source}'`).join(", ");
-
-/** The previous per-vendor sort. The rewrite has to return these rows. */
+/** The previous per-vendor sort, with the current directory filters. The rewrite has to return these rows. */
 const LEGACY_ORG_SQL = `
 WITH scoped AS (
   SELECT
@@ -18,15 +16,7 @@ WITH scoped AS (
     amount_cents,
     object_code
   FROM payments
-  WHERE import_id = ?
-    AND after_cutoff = 0
-    AND pay_date <= ?
-    AND source IN (${sources})
-    AND vendor_name IS NOT NULL
-    AND trim(vendor_name) != ''
-    AND object_code != '${TRANSFER_OBJECT}'
-    AND is_person_name = 0
-    AND NOT ${CONSTITUTIONAL_SQL}
+  WHERE ${vendorDirectoryWhereSql(true)}
 )
 SELECT s.vendor_key AS vendor_key,
        MAX(s.vendor_number) AS vendor_number,
@@ -215,7 +205,7 @@ describe("vendor name queries match the previous results", () => {
     const db = asD1(raw, captured);
     const asOf = "2026-02-15";
     const legacy = (limit: number) => raw.prepare(LEGACY_ORG_SQL).all(1, asOf, limit) as LegacyOrg[];
-    const current = await organizationVendors(db, 1, asOf, 40);
+    const current = await organizationVendors(db, 1, asOf, true, 40);
     const previous = legacy(40).map(mapOrg);
     expect(sortOrg(current)).toEqual(sortOrg(previous));
     expect(current).toEqual(previous);
@@ -226,7 +216,14 @@ describe("vendor name queries match the previous results", () => {
     expect(current.find((row) => row.vendor_number === "000222")).toMatchObject({ vendor_name: "MMMM", cents: 25, payments: 3 });
     expect(current.find((row) => row.vendor_name === "SOLO NAME")).toMatchObject({ cents: 15, payments: 2, vendor_number: "   " });
     expect(current.find((row) => row.vendor_name === "SOLO NAME LONG")?.cents).toBe(9);
-    expect(current.map((row) => row.vendor_name).join(" ")).not.toMatch(/SHERIFF|JANE|JOURNAL|COMPANY|PERSON NAME/);
+    expect(current.map((row) => row.vendor_name).join(" ")).not.toMatch(/SHERIFF|JOURNAL|COMPANY/);
+    expect(current.find((row) => row.vendor_number === "000333")).toEqual({
+      vendor_number: "000333",
+      vendor_name: "JANE Q PUBLIC",
+      cents: 55,
+      payments: 2,
+      land_cents: 0,
+    });
     expect(current.find((row) => row.vendor_number === "000555")).toEqual({
       vendor_number: "000555",
       vendor_name: "REAL CO",
@@ -235,10 +232,14 @@ describe("vendor name queries match the previous results", () => {
       land_cents: 0,
     });
     expect(current.find((row) => row.vendor_number === "000666")).toBeUndefined();
-    expect(current.find((row) => row.vendor_number === "000123")).toMatchObject({ vendor_name: "ACME SHORT", cents: 100, payments: 1 });
+    expect(current.find((row) => row.vendor_number === "000123")).toMatchObject({
+      vendor_name: "ACME SHORT PERSON NAME LONGER",
+      cents: 150,
+      payments: 2,
+    });
     expect(current.find((row) => row.vendor_number === " 000111")?.vendor_name).toBe("OTHER KEY");
 
-    const limited = await organizationVendors(db, 1, asOf, 2);
+    const limited = await organizationVendors(db, 1, asOf, true, 2);
     expect(limited).toEqual(legacy(2).map(mapOrg));
 
     const sql = captured[0] || "";

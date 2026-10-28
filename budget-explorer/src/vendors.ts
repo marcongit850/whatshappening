@@ -1,5 +1,75 @@
 import { TRANSFER_OBJECT } from "./budget";
-import { looksLikePersonName } from "./parser";
+import { moneyExact } from "./format";
+import { commaPersonSql, looksLikePersonName } from "./parser";
+
+/** P-card and travel payees share these vendor numbers. They are not one vendor. */
+export const CREDIT_CARD_VENDOR_NUMBERS = ["999999", "999995"] as const;
+
+export const CREDIT_CARD_VENDOR_NOTE =
+  "Credit-card and travel payments are listed under Payments, not as one vendor.";
+
+export const VENDOR_DIRECTORY_CAPTION =
+  "County offices, transfers between county funds, and credit-card catch-alls are not listed. Credit-card and travel payments are listed under Payments, not as one vendor.";
+
+export function creditCardVendorSql(column = "vendor_number"): string {
+  const list = CREDIT_CARD_VENDOR_NUMBERS.map((number) => `'${number}'`).join(", ");
+  return `trim(COALESCE(${column}, '')) NOT IN (${list})`;
+}
+
+/** Plain line for a vendor whose payment lines include a negative amount. */
+export function reversalNote(paidCents: number, creditCents: number): string {
+  if (creditCents >= 0) return "";
+  return `This total is a net figure. The county recorded ${moneyExact(paidCents)} in payments and ${moneyExact(Math.abs(creditCents))} in reversals and credits, which are subtracted.`;
+}
+
+export interface PurposeFact {
+  department: string;
+  expense: string;
+  cents: number;
+}
+
+export interface DescriptionFact {
+  text: string;
+  payments: number;
+  cents: number;
+}
+
+/** One sentence from the county's department, expense account, and payment descriptions. */
+export function vendorPurposeSentence(netCents: number, top: PurposeFact | null, description: DescriptionFact | null): string {
+  if (!top || top.cents <= 0) return "The county's payment lines for this vendor do not name a department.";
+  const department = top.department.trim();
+  const named = /department$/i.test(department) ? department : `${department} department`;
+  const most = netCents > 0 && top.cents * 2 > netCents;
+  const lead = most ? "Most of this money" : "The largest share";
+  let sentence = `${lead}, ${moneyExact(top.cents)}, was paid by the ${named} for ${top.expense}.`;
+  const text = description?.text.trim() || "";
+  if (text && description) {
+    const lines = `${description.payments.toLocaleString("en-US")} line${description.payments === 1 ? "" : "s"}`;
+    sentence += ` The most common description on the payment lines is "${text}" (${lines}, ${moneyExact(description.cents)}).`;
+  }
+  return sentence;
+}
+
+export function mergeDescribed<T extends { description: string; cents: number; payments: number }>(rows: T[]): T[] {
+  const groups = new Map<string, T>();
+  for (const row of rows) {
+    const text = row.description.trim();
+    if (!text) continue;
+    const key = text.toUpperCase();
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { ...row, description: text });
+      continue;
+    }
+    groups.set(key, {
+      ...existing,
+      description: existing.payments >= row.payments ? existing.description : text,
+      cents: existing.cents + row.cents,
+      payments: existing.payments + row.payments,
+    });
+  }
+  return [...groups.values()].sort((a, b) => b.payments - a.payments || Math.abs(b.cents) - Math.abs(a.cents) || a.description.localeCompare(b.description));
+}
 
 const STRIP_CHARS = ["'", "’", "`", "´", ",", ".", "-", "&", "#", "/", "(", ")", ":", ";", "\"", "!", "+", "@", "*"];
 const APOSTROPHES = ["'", "’", "`", "´"];
@@ -194,8 +264,9 @@ export function paymentRef(checkNumber: string | null, journal: string | null, i
   return "";
 }
 
-export function vendorSpendSql(transfersOnly = false): string {
+export function vendorSpendSql(transfersOnly = false, showNames = true): string {
   const objectSql = transfersOnly ? `object_code = '${TRANSFER_OBJECT}'` : `object_code != '${TRANSFER_OBJECT}'`;
+  const person = showNames ? "" : `AND NOT ${commaPersonSql("vendor_name")}`;
   return `
 SELECT vendor_name,
   COALESCE(SUM(amount_cents), 0) AS cents,
@@ -211,7 +282,7 @@ WHERE import_id = ?
   AND after_cutoff = 0
   AND ${objectSql}
   AND vendor_name != ''
-  AND (? = 1 OR is_person_name = 0)
+  ${person}
   AND ${vendorCompactSql("vendor_name")} LIKE ?
 GROUP BY vendor_name
 `;
