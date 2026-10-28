@@ -25,5 +25,8 @@
   ],
   "vars": {
     "PUBLIC_BASE_URL": ""
-  }
+  },
+  "rules": [
+    { "type": "Data", "globs": ["**/*.png"], "fallthrough": true }
+  ]
 }

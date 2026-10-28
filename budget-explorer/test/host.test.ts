@@ -135,7 +135,15 @@ describe("taxes host public door", () => {
     expect(html).toContain('id="pick-county-wrap"');
     expect(html).not.toContain("Coming soon, request your state");
     expect(html).toContain("What you can see");
-    expect(html).toContain("How it works");
+    expect(html).not.toContain("How it works");
+    expect(html).toContain("Budget vs. spent: what the county planned and what it actually paid.");
+    expect(html).toContain("Where the money comes from: taxes, fees and grants.");
+    expect(html).toContain("Savings in reserve: money set aside, by fund.");
+    expect(html).toContain("Who was paid: search vendors and payments.");
+    expect(html).toContain('alt="How They Spend My Taxes"');
+    expect(html).toContain(">Home<");
+    expect(html).toContain(">Florida<");
+    expect(html).toContain(">Walton County<");
     expect(html).not.toContain("Built from public records. Unofficial. No county seal used.");
     expect(html).not.toContain("Public records only. Nothing here is made up.");
     expect(html).not.toContain("Unofficial. Not a county website.");
@@ -144,7 +152,7 @@ describe("taxes host public door", () => {
     expect(html).not.toContain("Choose a state and press Go. The county choice is only for Florida.");
     expect(html).not.toContain("These are the pages on a live county. No other county has them yet.");
     expect(html).not.toContain("The same kind of page can be built for another county");
-    expect(html).not.toContain('href="/florida">Florida</a>');
+    expect(html).toContain('href="/florida">Florida</a>');
     expect(html).toContain("Built from public records");
     expect(html).toContain("Coming to your county");
     expect(html).toContain(">About<");
@@ -157,6 +165,15 @@ describe("taxes host public door", () => {
     expect(html).toContain('href="/hawaii"');
     expect(html).toContain('href="/district-of-columbia"');
     expect(html).not.toContain('class="tile');
+    const icon = await app.request(`${TAXES}/assets/favicon-32.v1.png`, {}, dbEnv);
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get("content-type")).toContain("image/png");
+    expect(icon.headers.get("cache-control")).toContain("max-age=31536000");
+    expect(icon.headers.get("cache-control")).toContain("immutable");
+    expect((await icon.arrayBuffer()).byteLength).toBeGreaterThan(100);
+    const manifest = await app.request(`${TAXES}/assets/site.v1.webmanifest`, {}, dbEnv);
+    expect(manifest.status).toBe(200);
+    expect(await manifest.text()).toContain("/assets/icon-512.v1.png");
     const css = await (await app.request(`${TAXES}/assets/app.css`, {}, dbEnv)).text();
     expect(css).toContain(".door-section .body-copy { font-size: 22px;");
     expect(css).toContain("body.door { background: var(--paper); font-size: 18px;");
@@ -164,8 +181,9 @@ describe("taxes host public door", () => {
     expect(html).toContain("<svg");
     expect(html).toContain('href="/florida"');
     expect(html).toContain("Coming soon");
-    expect(html).toContain("Fraunces");
-    expect(html).toContain("IBM+Plex+Sans");
+    expect(html).toContain("family=Inter");
+    expect(html).toContain("display=swap");
+    expect(html).not.toContain("Fraunces");
     expect(html).toContain('rel="canonical" href="https://howtheyspendmytaxes.com/"');
     expect(html).toContain('property="og:title"');
     expect(html).toContain('property="og:description"');
@@ -199,7 +217,7 @@ describe("taxes host public door", () => {
     expect(floridaHtml).toContain("income");
     expect(floridaHtml).toContain("savings");
     expect(floridaHtml).toContain('class="place-leader"');
-    expect(floridaHtml).not.toContain('href="/florida">Florida</a>');
+    expect(floridaHtml).toContain('class="on" href="/florida">Florida</a>');
     expect(floridaHtml).not.toContain("Skip to the county list");
     expect(floridaHtml).not.toContain('id="state-county"');
     expect(floridaHtml).toContain('rel="canonical" href="https://howtheyspendmytaxes.com/florida"');
@@ -219,12 +237,14 @@ describe("taxes host public door", () => {
     expect(soonHtml).not.toContain(">Coming soon<");
     expect(soonHtml).not.toContain("Coming soon.");
     expect(soonHtml).toContain("Request this state");
-    expect(soonHtml).not.toContain(">Request your county<");
+    expect(soonHtml.match(/>Request your county</g)).toEqual([">Request your county<"]);
+    expect(soonHtml).not.toContain('aria-label="Request your county"');
     expect(soonHtml).toContain('name="county_name"');
     expect(soonHtml).toContain('class="state-mark"');
     expect(soonHtml).not.toContain("Harris County");
     expect(soonHtml).not.toContain('href="/texas/harris"');
-    expect(soonHtml).not.toContain("Walton");
+    expect(soonHtml).not.toContain("Walton County, live");
+    expect(soonHtml).toContain('href="/walton">Walton County</a>');
     expect(soonHtml).not.toContain("Okaloosa");
     expect(soonHtml).not.toMatch(/\u2014|\u2013/);
 
@@ -370,7 +390,10 @@ describe("taxes host public door", () => {
     expect(loginHtml).toContain("<title>Sign in | Budget Explorer</title>");
     expect(loginHtml).not.toMatch(/<title>[^<]*[.\u2014\u2013]/);
     expect(loginHtml).toContain("Walton County Clerk and Comptroller");
-    expect(loginHtml).toContain("Unofficial. Built from public records");
+    expect(loginHtml).toContain("Built from public records.");
+    expect(loginHtml).toContain('alt="How They Spend My Taxes"');
+    expect(loginHtml).not.toContain("Unofficial");
+    expect(loginHtml).not.toContain("not a county website");
 
     const vendorGate = await app.request(`${TAXES}/walton/vendors`, {}, dbEnv);
     expect(vendorGate.status).toBe(303);
@@ -391,23 +414,24 @@ describe("taxes host public door", () => {
     expect(dash.status).toBe(200);
     expect(dash.headers.get("X-Robots-Tag")).toContain("noindex");
     expect(dashHtml).toContain("noindex");
-    expect(dashHtml).toContain("Unofficial. Built from public records");
-    expect(dashHtml).toContain('href="/walton/departments"');
+    expect(dashHtml).toContain("Built from public records.");
+    expect(dashHtml).not.toContain("Unofficial");
+    expect(dashHtml).toContain('alt="How They Spend My Taxes"');
+    expect(dashHtml).toContain('href="/walton/vendors"');
+    expect(dashHtml).toContain('href="/walton/about"');
     expect(dashHtml).toContain('href="/walton/revenue"');
     expect(dashHtml).toContain('href="/walton/reserves"');
-    expect(dashHtml).toContain('href="/walton/funds"');
     expect(dashHtml).toContain('href="/walton/search"');
-    expect(dashHtml).toContain('href="/walton/ask"');
     expect(dashHtml).toContain('href="/assets/app.css"');
     expect(dashHtml).not.toContain('href="/departments"');
     expect(dashHtml).not.toContain('href="/revenue"');
 
     const old = await (await app.request(`${BUDGET}/`, { headers: { cookie } }, dbEnv)).text();
-    expect(old).toContain('href="/departments"');
+    expect(old).toContain('href="/vendors"');
     expect(old).toContain('href="/revenue"');
     expect(old).not.toContain('href="/walton/');
     const workers = await (await app.request(`${WORKERS}/`, { headers: { cookie } }, dbEnv)).text();
-    expect(workers).toContain('href="/departments"');
+    expect(workers).toContain('href="/vendors"');
     expect(workers).not.toContain('href="/walton/');
 
     const revenue = await app.request(`${TAXES}/walton/revenue`, { headers: { cookie } }, dbEnv);

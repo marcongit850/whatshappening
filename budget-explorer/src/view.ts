@@ -23,6 +23,7 @@ import {
   pct,
   spentTerm,
 } from "./format";
+import { BUDGET_BOOK_URL, headAssets, siteFooter, siteHeader } from "./chrome";
 import { donutChart, fundSavings, incomeCard, reservesDocument, reservesEmpty, revenueDocument, revenueEmpty } from "./money-pages";
 import {
   SHERIFF_FUND_CAPTION,
@@ -72,7 +73,6 @@ export const PUBLIC_PATHS = NAV.map((item) => item[1]);
 /** Download cap for the payments CSV. The page states this limit. */
 export const PAYMENT_CSV_LIMIT = 2000;
 
-const BUDGET_BOOK_URL = "https://budget-waltoncountyfl.com";
 const BUDGET_BOOK_LINK = "Planned budget (county's budget book)";
 const BUDGET_BOOK_LABEL = "The county's own FY2027 tentative budget book";
 
@@ -81,16 +81,15 @@ function budgetBookLink(): string {
 }
 
 export function page(opts: ShellOpts): string {
-  const asOf = opts.dataAsOf ? displayDate(opts.dataAsOf) : "the latest published import";
-  const nav = opts.bare
-    ? ""
-    : NAV.map(([key, href, label]) => `<a class="${opts.active === key ? "on" : ""}" href="${href}">${label}</a>`).join("");
-  const adminLink = !opts.bare && opts.admin ? `<a class="${opts.active === "admin" ? "on" : ""}" href="/admin">Admin</a>` : "";
-  const logout =
-    !opts.bare && opts.csrf
-      ? `<form method="post" action="/logout" style="display:inline"><input type="hidden" name="csrf" value="${esc(opts.csrf)}"><button class="linkish" type="submit">Log out</button></form>`
-      : "";
-  const payrollFooter = "Payroll lines in this report are batch totals. No employee names appear.";
+  const asOf = opts.dataAsOf ? displayDate(opts.dataAsOf) : "";
+  const chrome = {
+    mode: "dashboard" as const,
+    active: opts.bare ? "" : opts.active,
+    reportHref: "/report",
+    admin: opts.bare ? false : opts.admin,
+    csrf: opts.bare ? "" : opts.csrf,
+    dataAsOf: asOf,
+  };
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -98,25 +97,13 @@ export function page(opts: ShellOpts): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>${esc(opts.title)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+${headAssets()}
 </head>
 <body>
-<div class="private-strip">Private prototype. Not a county website.</div>
-<div class="banner"><div class="banner-inner"><span class="banner-mark"></span><p>Unofficial. Built from public records provided by the Walton County Clerk and Comptroller. Data as of ${esc(asOf)}.</p></div></div>
-<header class="site-header"><div class="header-inner">
-<div class="header-top">
-<a class="brand" href="/"><span class="brand-name">Budget Explorer</span><span class="brand-sub">Walton County, Florida</span></a>
-<label class="nav-btn" for="nav-toggle">Menu</label>
-</div>
-<input class="nav-toggle" id="nav-toggle" type="checkbox">
-<div class="nav-scroller"><nav>${nav}${adminLink}${logout}</nav></div>
-</div></header>
-<main>${opts.body}</main>
-<footer class="footer"><div class="footer-inner"><p class="footer-report"><a data-report href="/report">Report a problem or share an idea</a></p><p class="footer-book">${budgetBookLink()}. ${esc(BUDGET_BOOK_LABEL)}.</p><p>Concept prototype for private review. Not affiliated with or endorsed by Walton County government. Figures are unaudited and may change. ${payrollFooter} No county seal is used.</p></div></footer>
+<a class="skip" href="#content">Skip to content</a>
+${opts.bare ? "" : siteHeader(chrome)}
+<main id="content">${opts.body}</main>
+${siteFooter(chrome)}
 <script src="/assets/app.js" defer></script>
 </body></html>`;
 }
@@ -266,13 +253,12 @@ function fundLabel(code: string, report: string, names: NameMaps): { primary: st
 
 export function renderLogin(error: string, next: string, formToken = "", showNames = true, taxesNote = false): string {
   const lede = taxesNote
-    ? "This is an unofficial look at how Walton County, Florida spends county money. It is built from public records provided by the Walton County Clerk and Comptroller. It is not a county website. Access is currently private."
-    : "One shared password opens this prototype. Nothing here is an official county system.";
+    ? "It is built from public records provided by the Walton County Clerk and Comptroller. A password is required before any county figures are shown."
+    : "A password is required before any county figures are shown.";
   return page({
     title: "Sign in | Budget Explorer",
     active: "",
     csrf: "",
-    bare: true,
     showNames,
     body: `<div class="login-wrap"><section class="login-card">
 <p class="brand-kicker" style="color:var(--gold)">Private access</p>
@@ -1883,5 +1869,3 @@ ${error ? `<p class="warning">${esc(error)}</p>` : ""}
 </form></section></div>`;
   return page({ title: "Admin password. Budget Explorer", active: "admin", body, csrf, admin: false, showNames });
 }
-
-export const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#13283a"/><path d="M9 22V10h3.2c2.7 0 4.3 1.4 4.3 3.6 0 2.3-1.6 3.7-4.3 3.7H11.4V22H9zm2.4-6.2h.7c1.3 0 2-.6 2-1.6s-.7-1.6-2-1.6h-.7v3.2z" fill="#c6aa72"/></svg>`;

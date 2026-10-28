@@ -216,7 +216,10 @@ describe("revenue and reserves pages", () => {
     const fund = await (await app.request("http://localhost/funds/111", { headers }, env)).text();
 
     for (const html of [revenue, reserves, overview]) {
-      expect(html).toContain("Unofficial. Built from public records provided by the Walton County Clerk and Comptroller. Data as of");
+      expect(html).toContain("Built from public records.");
+      expect(html).toContain("Data as of");
+      expect(html).not.toContain("Unofficial");
+      expect(html).not.toContain("Not a county website");
       expect(html).toContain('content="noindex"');
       expect(html).not.toContain("\u2013");
       expect(html).not.toContain("\u2014");

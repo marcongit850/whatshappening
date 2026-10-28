@@ -5,6 +5,7 @@ export const CSP = [
   "style-src 'self' https://fonts.googleapis.com",
   "font-src https://fonts.gstatic.com",
   "img-src 'self' data:",
+  "manifest-src 'self'",
   "connect-src 'self' https://cloudflareinsights.com",
   "base-uri 'none'",
   "form-action 'self'",

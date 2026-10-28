@@ -82,6 +82,8 @@ import { loadPublishedLedger } from "./published-db";
 import { AI_MODEL, modelText } from "./qa";
 import { isTaxesHost } from "./host";
 import { handleReport } from "./intake";
+import { BRAND_ASSETS, brandBody } from "./brand-files";
+import { FAVICON_PNG, MANIFEST_PATH, WEB_MANIFEST } from "./chrome";
 import { CSP } from "./headers";
 import { createSite } from "./site";
 import { CLIENT_JS, CSS } from "./style";
@@ -109,7 +111,6 @@ import {
   renderUnlock,
   renderVendorDetail,
   renderVendors,
-  FAVICON,
   PAYMENT_CSV_LIMIT,
 } from "./view";
 
@@ -122,7 +123,12 @@ app.use("*", async (c, next) => {
   c.header("Referrer-Policy", "no-referrer");
   c.header("X-Frame-Options", "DENY");
   c.header("Content-Security-Policy", CSP);
-  c.header("Cache-Control", "private, no-store");
+  const path = c.req.path;
+  if (/\.v1\.(png|webmanifest)$/.test(path)) {
+    c.header("Cache-Control", "public, max-age=31536000, immutable");
+  } else {
+    c.header("Cache-Control", "private, no-store");
+  }
 });
 
 app.get("/robots.txt", (c) => {
@@ -141,10 +147,21 @@ app.get("/assets/app.js", (c) => {
   return c.body(CLIENT_JS);
 });
 
-app.get("/favicon.svg", (c) => {
-  c.header("Content-Type", "image/svg+xml");
-  return c.body(FAVICON);
+for (const [path, data] of Object.entries(BRAND_ASSETS)) {
+  app.get(path, (c) => {
+    c.header("Content-Type", "image/png");
+    c.header("Cache-Control", "public, max-age=31536000, immutable");
+    return c.body(brandBody(data));
+  });
+}
+
+app.get(MANIFEST_PATH, (c) => {
+  c.header("Content-Type", "application/manifest+json; charset=utf-8");
+  c.header("Cache-Control", "public, max-age=31536000, immutable");
+  return c.body(WEB_MANIFEST);
 });
+
+app.get("/favicon.svg", (c) => c.redirect(FAVICON_PNG, 301));
 
 app.get("/login", async (c) => {
   const token = crypto.randomUUID().replace(/-/g, "");

@@ -165,10 +165,14 @@ describe("overview dashboard", () => {
     const fiscal = fiscalPosition("2026-09-15");
     const html = await (await app.request("http://localhost/", { headers: { cookie: session.header } }, env)).text();
 
-    expect(html).toContain("Unofficial. Built from public records");
+    expect(html).toContain("Built from public records.");
+    expect(html).not.toContain("Unofficial");
     expect(html).toContain("Data as of 09/15/2026");
-    expect(html).toContain("Fraunces");
-    expect(html).toContain("IBM+Plex+Sans");
+    expect(html).toContain("family=Inter");
+    expect(html).toContain("display=swap");
+    expect(html).toContain('alt="How They Spend My Taxes"');
+    expect(html).toContain("/assets/favicon-32.v1.png");
+    expect(html).toContain("/assets/site.v1.webmanifest");
     const netYtd = IMPORT_YTD - 1_000;
     const netRev = IMPORT_REV - 9_000_000;
     expect(html).toContain(moneyCompact(netYtd));

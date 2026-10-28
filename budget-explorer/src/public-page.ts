@@ -1,3 +1,4 @@
+import { headAssets, siteFooter, siteHeader } from "./chrome";
 import { esc } from "./format";
 import { COUNTY_MAPS, STATE_MAP } from "./geo/registry";
 import { canonicalUrl } from "./host";
@@ -6,9 +7,7 @@ import { COUNTIES, countiesIn, isLiveState, liveCounties, stateBySlug, US_STATES
 const SITE_NAME = "How They Spend My Taxes";
 
 const HOME_DESCRIPTION = "Pick a state, then a county, and see how county tax dollars are spent. Florida is open. Walton County is the one live county.";
-const WALTON_DESCRIPTION = "An unofficial Walton County budget page built from public records provided by the Walton County Clerk and Comptroller. Access is currently private.";
-
-const FONTS = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap";
+const WALTON_DESCRIPTION = "A Walton County budget page built from public records provided by the Walton County Clerk and Comptroller. A password is required before any county figures are shown.";
 
 export interface PublicDoc {
   title: string;
@@ -48,39 +47,15 @@ ${stateMap()}
 <section class="door-section" id="what">
 <h2>What you can see</h2>
 <div class="see-grid">
-<article class="info-card">
-<h3>Budget and spending</h3>
-<p>The budget the county passed, next to the money it has actually paid out.</p>
-<p class="caption">What was planned, and what was spent.</p>
-</article>
-<article class="info-card">
-<h3>Where the money comes from</h3>
-<p>Income, grouped by where it came from.</p>
-<p class="caption">Taxes and other money that came in.</p>
-</article>
-<article class="info-card">
-<h3>Savings held in reserve</h3>
-<p>Money the county holds in reserve, set aside from day to day spending.</p>
-<p class="caption">Savings, shown apart from spending.</p>
-</article>
-<article class="info-card">
-<h3>Search payments</h3>
-<p>Look up payments in the public records for a live county.</p>
-<p class="caption">A search box, in plain words.</p>
-</article>
-</div>
-</section>
-<section class="door-section" id="how">
-<h2>How it works</h2>
-<div class="steps">
-<article class="step"><b>1. Public records</b><p class="caption">A live page is built from budget records the county has already published.</p></article>
-<article class="step"><b>2. Plain words</b><p class="caption">The same records are shown in large type, with short labels.</p></article>
-<article class="step"><b>3. One county at a time</b><p class="caption">${esc(liveCountyLine())} Access to that page is currently private.</p></article>
+<article class="info-card"><p>Budget vs. spent: what the county planned and what it actually paid.</p></article>
+<article class="info-card"><p>Where the money comes from: taxes, fees and grants.</p></article>
+<article class="info-card"><p>Savings in reserve: money set aside, by fund.</p></article>
+<article class="info-card"><p>Who was paid: search vendors and payments.</p></article>
 </div>
 </section>
 <section class="door-section" id="trust">
 <h2>Built from public records</h2>
-<p class="caption">This is not a county website and it is not endorsed by a county government. Walton County figures come from public records provided by the Walton County Clerk and Comptroller.</p>
+<p class="caption">Walton County figures come from public records provided by the Walton County Clerk and Comptroller.</p>
 </section>
 <section class="door-section" id="coming">
 <h2>Coming to your county</h2>
@@ -116,7 +91,7 @@ ${countyMap(state)}
 
 export function renderAboutSite(): string {
   const title = "About this site";
-  const description = "An unofficial site that shows a county budget from public records. Walton County, Florida is the only live county. No county seal is used.";
+  const description = "A site that shows a county budget from public records. Walton County, Florida is the only live county.";
   return document({
     title,
     description,
@@ -126,7 +101,7 @@ export function renderAboutSite(): string {
     body: `<section class="door-hero" id="content"><div class="door-wrap">
 <p class="eyebrow">About</p>
 <h1>About this site</h1>
-<p class="explainer">How They Spend My Taxes shows a county budget in plain words. It is unofficial. It is not a county website.</p>
+<p class="explainer">How They Spend My Taxes shows a county budget in plain words.</p>
 </div></section>
 <main><div class="door-wrap">
 <section class="door-section">
@@ -461,6 +436,14 @@ function webPage(name: string, description: string, path: string): Record<string
   };
 }
 
+function publicActive(path: string): string {
+  if (path === "/request" || path.endsWith("/request")) return "request";
+  if (path === "/florida") return "florida";
+  if (path === "/walton") return "walton";
+  if (path === "/") return "home";
+  return "";
+}
+
 function document(opts: PublicDoc): string {
   const robots = opts.index ? "index, follow" : "noindex, nofollow";
   const canonical = opts.canonical === false ? "" : canonicalUrl(opts.path);
@@ -468,8 +451,12 @@ function document(opts: PublicDoc): string {
   const fullTitle = `${opts.title} | ${SITE_NAME}`;
   const canonicalLink = canonical ? `<link rel="canonical" href="${esc(canonical)}">` : "";
   const ogUrl = canonical ? `<meta property="og:url" content="${esc(canonical)}">` : "";
-  const requestHref = opts.requestHref || "/request";
-  const requestLink = opts.footerRequest === false ? "" : `<a href="${esc(requestHref)}">Request your county</a>`;
+  const chrome = {
+    mode: "public" as const,
+    active: publicActive(opts.path),
+    reportHref: reportHref(opts.path),
+    showRequest: opts.footerRequest !== false,
+  };
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -484,31 +471,14 @@ ${canonicalLink}
 <meta property="og:type" content="website">
 ${ogUrl}
 <meta property="og:site_name" content="${esc(SITE_NAME)}">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="${FONTS}" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+${headAssets()}
 ${json}
 </head>
 <body class="door">
 <a class="skip" href="#content">Skip to content</a>
-<header class="door-bar"><div class="door-wrap bar-inner">
-<a class="door-brand" href="/">How They Spend My Taxes</a>
-<nav class="door-nav" aria-label="Primary">
-<a class="door-bar-link" href="/#picker">Pick a state</a>
-<a class="door-bar-link" href="/about-this-site">About</a>
-</nav>
-</div></header>
+${siteHeader(chrome)}
 ${opts.body}
-<footer class="door-foot"><div class="door-wrap">
-<nav class="door-foot-nav" aria-label="Footer">
-<a href="/about-this-site">About</a>
-<a data-report href="${esc(reportHref(opts.path))}">Report a problem or share an idea</a>
-${requestLink}
-</nav>
-<p>Not a county website. Not affiliated with or endorsed by any county government.</p>
-</div></footer>
+${siteFooter(chrome)}
 <script src="/assets/app.js" defer></script>
 </body></html>`;
 }

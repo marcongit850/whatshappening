@@ -280,7 +280,7 @@ function bedBlock(ledger: PublishedLedger): string {
 <div class="eyebrow">Collections, not the audit</div>
 <h2>Bed tax so far this year${infoTip("bed-ytd", "Collected from October 2025 through August 2026.")}</h2>
 <p class="figure-n">${esc(moneyCompact(bed.ytdCents))}</p>
-<p class="cap">Collected from October 2025 through August 2026. That is ${bed.changePct.toFixed(1)}% more than the same months a year earlier.</p>
+<p class="cap">Collected from October 2025 through August 2026. That is <span class="${bed.changePct < 0 ? "chg-down" : "chg-up"}">${bed.changePct.toFixed(1)}%</span> more than the same months a year earlier.</p>
 <p>${esc(bed.detail)}</p>
 <p>The FY2025 audited bed tax was ${esc(money(bed.actualCents))}. The FY2026 tentative budget for bed tax was ${esc(money(bed.budgetCents))}.</p>
 ${sourceLine("Clerk tourist development tax collections report", bed.sourceUrl, "")}
