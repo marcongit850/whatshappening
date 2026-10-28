@@ -516,7 +516,7 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
   .figure-n { font-size: 28px; }
   .stat-grid { grid-template-columns: 1fr; }
 }
-body.door { background: var(--paper); }
+body.door { background: var(--paper); font-size: 18px; }
 body.door main { max-width: none; margin: 0; padding: 0; }
 .door-note { background: #14232f; color: #e4eaf0; text-align: center; font-size: 18px; line-height: 1.4; padding: 12px 16px; }
 .door-bar { background: #0e1a23; color: #f6f4ee; }
@@ -533,14 +533,17 @@ body.door main { max-width: none; margin: 0; padding: 0; }
 .info-card p { font-size: 20px; line-height: 1.45; margin: 0; }
 .info-card .eyebrow { font-size: 16px; letter-spacing: 0.08em; }
 .info-card .btn { margin-top: 20px; }
-.bar-inner { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 18px; padding-bottom: 18px; }
-.door-brand { font-family: var(--serif); font-size: clamp(26px, 3vw, 36px); font-weight: 560; line-height: 1.15; color: #f6f4ee; text-decoration: none; max-width: 100%; }
+.bar-inner { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; min-width: 0; }
+.door-brand { font-family: var(--serif); font-size: clamp(26px, 3vw, 36px); font-weight: 560; line-height: 1.15; color: #f6f4ee; text-decoration: none; max-width: 100%; min-width: 0; min-height: 44px; display: inline-flex; align-items: center; overflow-wrap: anywhere; }
 .door-bar a { color: #f6f4ee; }
 .door-bar-link { font-size: 20px; font-weight: 600; text-decoration: none; min-height: 56px; display: inline-flex; align-items: center; }
-.door-hero { background: #0e1a23; color: #f6f4ee; padding: 28px 0 56px; }
-.door-hero h1 { color: #f6f4ee; font-size: clamp(42px, 6vw, 72px); max-width: 16ch; line-height: 1.05; margin: 0 0 16px; }
+.door-hero { background: #0e1a23; color: #f6f4ee; padding: 12px 0 32px; }
+.hero-grid { display: grid; grid-template-columns: minmax(300px, 460px) minmax(0, 1fr); gap: 24px; align-items: stretch; }
+.hero-copy { min-width: 0; display: flex; flex-direction: column; }
+.door-hero h1 { color: #f6f4ee; font-size: clamp(36px, 3.6vw, 52px); max-width: 14em; line-height: 1.05; margin: 0 0 8px; }
+.door-hero .hero-copy h1 { margin-bottom: 18px; }
 .door-hero .eyebrow { color: #e6c46a; }
-.door-hero .explainer { font-size: 22px; line-height: 1.45; max-width: 40rem; color: #e7e1d6; margin: 0; }
+.door-hero .explainer { font-size: 20px; line-height: 1.35; max-width: 40rem; color: #e7e1d6; margin: 0; }
 .door-section .body-copy { font-size: 22px; line-height: 1.45; max-width: 40rem; color: var(--ink); margin: 12px 0 0; }
 .door-hero .caption, .door-section .caption { font-size: 20px; line-height: 1.4; margin: 12px 0 0; }
 .door-hero .caption { color: #c9d3da; }
@@ -554,26 +557,65 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .door-section { padding: 36px 0 8px; }
 .door-section h2 { font-size: clamp(32px, 4vw, 48px); }
 .door-section h3 { font-family: var(--serif); font-size: 28px; font-weight: 560; margin: 28px 0 0; }
-.map-card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-top: 18px; box-shadow: var(--shadow); overflow-x: auto; }
-.us-map { width: 100%; height: auto; display: block; overflow: hidden; }
-.us-map text { font-family: var(--sans); font-weight: 650; }
-.us-map .live rect { fill: #b78a2d; }
-.us-map .soon rect { fill: #e4dfd4; }
-.us-map .live text { fill: #14232f; }
-.us-map .soon text { fill: #3e4c57; }
-.us-map a:focus rect, .us-map a:hover rect { stroke: #14232f; stroke-width: 4; }
-.map-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 12px; font-size: 18px; }
+.finder { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 22px; align-items: start; margin-top: 28px; }
+.picker { background: #fff; color: var(--ink); border-radius: 20px; padding: 14px 16px 16px; min-width: 0; margin-top: 12px; }
+.hero-copy .picker { flex: 1; }
+.picker h2 { color: var(--ink); font-size: 28px; margin: 0 0 4px; }
+.picker label { display: block; font-size: 20px; font-weight: 650; margin: 10px 0 6px; color: var(--ink); }
+.picker select { width: 100%; max-width: 100%; min-width: 0; min-height: 64px; font-size: 20px; background: #fff; color: var(--ink); border: 2px solid #c9c3b4; border-radius: 12px; padding: 0 14px; }
+.picker .btn { width: 100%; margin-top: 12px; }
+.picker .caption { color: var(--muted); }
+.state-picker { margin-top: 18px; }
+.see-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.door-nav { display: flex; flex-wrap: wrap; gap: 4px 18px; min-width: 0; }
+.map-card { position: relative; background: #e7eef2; border: 1px solid var(--line); border-radius: 18px; padding: 12px 12px 14px; margin-top: 0; box-shadow: var(--shadow); overflow: hidden; max-width: 100%; }
+.us-map, .county-map { width: 100%; max-width: 100%; height: auto; display: block; overflow: hidden; }
+.us-map a, .county-map a { outline: none; }
+.us-map a path, .county-map g path { fill: #7f97a6; stroke: #2f4553; stroke-width: 1.4px; vector-effect: non-scaling-stroke; transition: fill 160ms ease; }
+.us-map a path, .county-map a path { fill: #7f97a6; stroke: #2f4553; stroke-width: 1.4px; vector-effect: non-scaling-stroke; transition: fill 160ms ease; }
+.us-map a.live path, .county-map a.live path { fill: #e0b34d; }
+.us-map a:hover path, .county-map a:hover path { fill: #8ea4b3; stroke: #14232f; stroke-width: 2px; }
+.us-map a.live:hover path, .county-map a.live:hover path { fill: #f0cc6e; stroke: #14232f; }
+.us-map a:focus-visible path, .county-map a:focus-visible path { stroke: #14232f; stroke-width: 3px; }
+.us-map a.live:focus-visible path, .county-map a.live:focus-visible path { fill: #f0cc6e; stroke: #14232f; stroke-width: 3px; }
+.us-map .hit, .county-map .hit { fill: transparent; stroke: none; }
+.place-label { fill: #14232f; font-weight: 700; font-family: var(--sans); pointer-events: none; }
+.florida-wrap { max-width: 720px; margin: 0 auto; }
+.florida-map { max-width: 640px; margin: 14px auto 0; overflow: visible; }
+.florida-map .county-map { width: min(640px, 100%); max-height: 360px; height: auto; margin: 0 auto; overflow: visible; }
+.florida-map .map-note { margin-top: 20px; }
+.florida-hero { padding-bottom: 16px; }
+.florida-hero .map-action { max-width: 640px; margin: 12px auto 0; }
+.inset-frame { fill: rgba(255, 255, 255, 0.55); stroke: #5d7382; stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.inset-label { fill: #14232f; font-size: 20px; font-weight: 700; font-family: var(--sans); pointer-events: none; }
+.map-label { min-height: 1.4em; margin: 10px 0 0; font-size: 20px; font-weight: 650; color: #14232f; }
+.map-action { margin: 12px 0 0; }
+.map-action .btn { width: 100%; }
+.door-hero .map-card .map-note { color: #1b2a36; font-size: 20px; line-height: 1.45; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 12px; font-size: 18px; color: #14232f; }
 .map-legend .swatch { width: 22px; height: 22px; border-radius: 6px; display: inline-block; }
-.map-legend .swatch.live { background: #b78a2d; }
-.map-legend .swatch.soon { background: #e4dfd4; border: 1px solid #d0c9ba; }
+.map-legend .swatch.live { background: #e0b34d; }
+.map-legend .swatch.soon { background: #7f97a6; border: 1px solid #2f4553; }
+.skip { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip:focus { position: fixed; left: 12px; top: 12px; z-index: 20; width: auto; height: auto; margin: 0; padding: 14px 18px; overflow: visible; clip: auto; background: #fff; color: #14232f; border-radius: 12px; font-size: 18px; font-weight: 700; text-decoration: none; outline: 3px solid #14232f; }
 .state-pills, .county-list { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-wrap: wrap; gap: 10px; }
 .county-list { display: block; }
 .county-list a, .state-pills a { display: inline-flex; align-items: center; min-height: 56px; padding: 12px 16px; border-radius: 14px; font-size: 18px; font-weight: 600; text-decoration: none; max-width: 100%; line-height: 1.3; overflow-wrap: anywhere; }
 .state-pills a.open, .county-list a { background: #b78a2d; color: #14232f; }
 .state-pills a.soon { background: #fff; color: #24343f; border: 1px solid #d9d3c6; }
 .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
-.step { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 22px; min-width: 0; }
+.step { background: #fff; border: 1px solid var(--line); border-top: 6px solid #b78a2d; border-radius: 18px; padding: 28px 24px; min-width: 0; }
 .step b { display: block; font-family: var(--serif); font-size: 28px; font-weight: 560; line-height: 1.2; margin-bottom: 8px; }
+.coming-cta { margin: 18px 0 0; display: flex; justify-content: center; }
+#coming { text-align: center; }
+#coming .body-copy { margin-left: auto; margin-right: auto; }
+.door-foot { text-align: center; }
+.door-foot-nav { justify-content: center; }
+.state-mark { width: 220px; height: 150px; margin: 0 0 16px; background: #e7eef2; border: 1px solid #d5dde3; border-radius: 16px; padding: 10px; }
+.state-mark svg { width: 100%; height: 100%; display: block; }
+.state-mark path { fill: #c5d3dc; stroke: #5d7382; stroke-width: 2px; vector-effect: non-scaling-stroke; }
+body.door .eyebrow { font-size: 16px; letter-spacing: 0.08em; }
+.door-bar a:focus-visible { outline: 3px solid #e6c46a; outline-offset: 3px; border-radius: 8px; }
 .door-login { display: grid; gap: 16px; width: 100%; max-width: none; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px; margin-top: 18px; }
 body.door .door-login label, body.door .door-login legend { font-size: 20px; letter-spacing: 0; text-transform: none; color: var(--ink); font-weight: 600; }
 .state-finder { margin-top: 18px; max-width: 720px; }
@@ -582,7 +624,7 @@ body.door .door-login label, body.door .door-login legend { font-size: 20px; let
 .state-empty { font-size: 22px; line-height: 1.45; margin: 16px 0 0; max-width: 40rem; }
 body.door .door-login legend { font-family: var(--serif); font-size: 32px; font-weight: 560; }
 body.door .door-login fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-body.door .door-login input[type="text"], body.door .door-login input[type="email"], body.door .door-login input[type="password"], body.door .door-login select, body.door .door-login textarea { min-height: 64px; font-size: 20px; max-width: 100%; }
+body.door .door-login input[type="text"], body.door .door-login input[type="email"], body.door .door-login input[type="password"], body.door .door-login select, body.door .door-login textarea { min-height: 64px; min-width: 0; width: 100%; font-size: 20px; max-width: 100%; }
 .choice { display: grid; gap: 12px; }
 .choice label { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 14px; min-height: 72px; padding: 14px 16px; border: 2px solid var(--line); border-radius: 16px; background: #fff; font-size: 22px; line-height: 1.3; overflow-wrap: anywhere; }
 .choice input { width: 28px; height: 28px; min-height: 28px; margin: 0; }
@@ -595,23 +637,46 @@ body.door .door-login input[type="text"], body.door .door-login input[type="emai
 body.door .door-login .hp input[type="text"] { width: 1px; min-height: 0; height: 1px; padding: 0; border: 0; }
 .door-foot { color: var(--muted); font-size: 18px; line-height: 1.45; }
 .door-foot .door-wrap { padding-top: 28px; padding-bottom: 64px; }
+.door-foot-nav { display: flex; flex-wrap: wrap; gap: 12px 22px; margin: 0 0 14px; }
+.door-foot-nav a { font-size: 20px; font-weight: 650; color: var(--navy); text-decoration: none; }
 .door-foot-link { margin: 0 0 12px; }
 .door-foot-link a { font-size: 22px; font-weight: 650; color: var(--navy); }
 .county-list a.soon { background: #fff; color: #24343f; border: 1px solid #d9d3c6; }
 body.door .warning { font-size: 20px; }
 @media (min-width: 801px) {
+  .door-hero .door-wrap:has(.state-mark) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    column-gap: 32px;
+    align-items: center;
+  }
+  .door-hero .door-wrap:has(.state-mark) .state-mark {
+    grid-column: 2;
+    grid-row: 1 / span 4;
+    justify-self: end;
+    margin: 0;
+  }
   .state-pills { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .state-pills a { width: 100%; }
+  .county-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 }
 @media (max-width: 800px) {
-  .steps, .card-row, .door-hero-grid { grid-template-columns: 1fr; }
+  .steps, .card-row, .door-hero-grid, .see-grid, .finder, .hero-grid { grid-template-columns: 1fr; }
   .door-wrap { padding-left: 16px; padding-right: 16px; }
   .door-hero { padding-top: 12px; }
   .door-hero h1 { font-size: 40px; }
-  .map-card { display: none; }
   .state-pills { display: grid; grid-template-columns: 1fr 1fr; }
   .state-pills li { min-width: 0; }
   .state-pills a { width: 100%; justify-content: center; min-height: 72px; font-size: 18px; text-align: center; }
+  .county-list a { width: 100%; }
+  .door-actions .btn { width: 100%; }
+  .florida-map .county-map { max-height: 190px; }
+  .florida-hero h1 { font-size: 34px; }
+  .florida-hero .explainer { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .us-map a path, .county-map a path { transition: none; }
 }
 `;
 
@@ -626,20 +691,47 @@ export const CLIENT_JS = `
       /* Keep the server-rendered link. */
     }
   });
-  const filter = document.querySelector("[data-state-filter]");
-  if (filter instanceof HTMLInputElement) {
-    const rows = document.querySelectorAll("[data-state-name]");
-    const empty = document.querySelector("[data-state-empty]");
-    filter.addEventListener("input", () => {
-      const query = filter.value.trim().toLowerCase();
-      let shown = 0;
-      rows.forEach((row) => {
-        const name = (row.getAttribute("data-state-name") || "").toLowerCase();
-        const hide = Boolean(query) && !name.includes(query);
-        row.hidden = hide;
-        if (!hide) shown += 1;
-      });
-      if (empty instanceof HTMLElement) empty.hidden = query.length === 0 || shown > 0;
+  const statePick = document.querySelector("#pick-state");
+  const countyPick = document.querySelector("#pick-county");
+  const countyWrap = document.querySelector("#pick-county-wrap");
+  if (statePick instanceof HTMLSelectElement && countyPick instanceof HTMLSelectElement && countyWrap instanceof HTMLElement) {
+    const syncCounty = () => {
+      const florida = statePick.value === "florida";
+      countyWrap.hidden = !florida;
+      countyPick.disabled = !florida;
+      if (!florida) countyPick.value = "";
+    };
+    statePick.addEventListener("change", syncCounty);
+    syncCounty();
+  }
+  const map = document.querySelector("[data-us-map]");
+  const mapLabel = document.querySelector("[data-map-label]");
+  if (map && mapLabel instanceof HTMLElement) {
+    const showName = (event) => {
+      const target = event.target instanceof Element ? event.target.closest("a") : null;
+      const name = target?.getAttribute("data-name");
+      if (name) mapLabel.textContent = name;
+    };
+    map.addEventListener("mouseover", showName);
+    map.addEventListener("focusin", showName);
+    map.addEventListener("mouseleave", () => {
+      mapLabel.textContent = mapLabel.getAttribute("data-default") || "";
+    });
+    const openLink = document.querySelector("#map-open");
+    let fromTouch = false;
+    map.addEventListener("pointerdown", (event) => {
+      fromTouch = event.pointerType === "touch";
+    });
+    map.addEventListener("click", (event) => {
+      if (!fromTouch || !(openLink instanceof HTMLAnchorElement)) return;
+      const target = event.target instanceof Element ? event.target.closest("a") : null;
+      const href = target?.getAttribute("href") || "";
+      const raw = target?.getAttribute("data-name") || "";
+      if (!href.startsWith("/") || href.startsWith("//")) return;
+      event.preventDefault();
+      const name = raw.replace(/, live$/, "").replace(/, coming soon$/, "");
+      openLink.setAttribute("href", href);
+      openLink.textContent = name ? "Open " + name : "Open";
     });
   }
   const form = document.querySelector("[data-busy]");

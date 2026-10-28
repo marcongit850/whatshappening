@@ -101,9 +101,10 @@ describe("host routing helpers", () => {
     expect(prefixLocation("//evil.com")).toBe("/walton");
     expect(prefixLocation("/\\evil.com")).toBe("/walton");
     expect(prefixLocation("/login?next=%2F%2Fevil.com")).toBe("/walton/login?next=%2Fwalton");
-    expect(US_STATES).toHaveLength(50);
-    expect(new Set(US_STATES.map((state) => state.abbr)).size).toBe(50);
-    expect(new Set(US_STATES.map((state) => `${state.col},${state.row}`)).size).toBe(50);
+    expect(US_STATES).toHaveLength(51);
+    expect(new Set(US_STATES.map((state) => state.abbr)).size).toBe(51);
+    expect(US_STATES.some((state) => state.abbr === "DC" && state.slug === "district-of-columbia")).toBe(true);
+    expect(new Set(US_STATES.map((state) => state.slug)).size).toBe(51);
   });
 });
 
@@ -118,17 +119,40 @@ describe("taxes host public door", () => {
     expect(home.headers.get("X-Robots-Tag")).toBe("index, follow");
     expect(home.headers.get("Referrer-Policy")).toBe("same-origin");
     expect(html).toContain("See how your county spends your tax dollars");
-    expect(html).toContain("Browse by name");
+    expect(html).toContain("Skip to content");
+    expect(html).toContain('href="#content"');
+    expect(html).toContain("Skip to the state picker");
     expect(html).toContain("Florida, live");
-    expect(html).toContain('tabindex="-1"');
+    expect(html).not.toContain('tabindex="-1"');
     expect(html).toContain("Florida is live");
     expect(html).toContain("Pick a state. Then pick a county.");
-    expect(html).toContain("No state matches that name");
-    expect(html).toContain('data-state-empty hidden');
+    expect(html).toContain('action="/pick"');
+    expect(html).toContain('name="state"');
+    expect(html).toContain('name="county"');
+    expect(html).toContain(">Go<");
+    expect(html).toContain("Walton County, live");
+    expect(html).toContain("Request your county");
+    expect(html).toContain('id="pick-county-wrap"');
+    expect(html).not.toContain("Coming soon, request your state");
+    expect(html).toContain("What you can see");
+    expect(html).toContain("How it works");
+    expect(html).toContain("Built from public records. Unofficial. No county seal used.");
+    expect(html).toContain("Coming to your county");
+    expect(html).toContain(">About<");
+    expect(html).toContain("Report a problem or share an idea");
+    expect(html).toContain("Request your county");
     expect(html).toContain('class="body-copy"');
+    expect(html).toContain("<path");
+    expect(html).toContain('aria-label="Florida, live"');
+    expect(html).toContain('aria-label="Texas, coming soon"');
+    expect(html).toContain('href="/alaska"');
+    expect(html).toContain('href="/hawaii"');
+    expect(html).toContain('href="/district-of-columbia"');
+    expect(html).not.toContain('class="tile');
     const css = await (await app.request(`${TAXES}/assets/app.css`, {}, dbEnv)).text();
     expect(css).toContain(".door-section .body-copy { font-size: 22px;");
-    expect(css).toContain(".state-empty { font-size: 22px;");
+    expect(css).toContain("body.door { background: var(--paper); font-size: 18px;");
+    expect(css).not.toContain(".map-card { display: none; }");
     expect(html).toContain("<svg");
     expect(html).toContain('href="/florida"');
     expect(html).toContain("Coming soon");
@@ -155,28 +179,42 @@ describe("taxes host public door", () => {
     expect(florida.headers.get("X-Robots-Tag")).toBe("index, follow");
     expect(floridaHtml).toContain(">Walton County, live<");
     expect(floridaHtml).toContain('href="/walton"');
+    expect(floridaHtml).toContain("<title>Coming soon</title>");
+    expect(floridaHtml).toContain(">Walton</text>");
+    expect(floridaHtml).not.toContain('href="/florida/okaloosa"');
+    expect(floridaHtml).not.toContain(">Okaloosa County, coming soon<");
     expect(floridaHtml).toContain("Request your county");
     expect(floridaHtml).toContain("budget");
     expect(floridaHtml).toContain("spending");
     expect(floridaHtml).toContain("income");
     expect(floridaHtml).toContain("savings");
+    expect(floridaHtml).not.toContain("Skip to the county list");
+    expect(floridaHtml).not.toContain('id="state-county"');
     expect(floridaHtml).toContain('rel="canonical" href="https://howtheyspendmytaxes.com/florida"');
     expect(floridaHtml).toContain('"@type":"WebPage"');
-    expect(floridaHtml).not.toContain("Okaloosa");
     expect(floridaHtml).not.toContain("mailto:");
     expect(floridaHtml).not.toContain("noindex");
     expect(floridaHtml).not.toMatch(/\u2014|\u2013/);
 
-    const soon = await app.request(`${TAXES}/states/texas`, {}, dbEnv);
+    const alias = await app.request(`${TAXES}/states/texas`, {}, dbEnv);
+    expect(alias.status).toBe(301);
+    expect(alias.headers.get("Location")).toBe("/texas");
+    const soon = await app.request(`${TAXES}/texas`, {}, dbEnv);
     const soonHtml = await soon.text();
     expect(soon.status).toBe(200);
     expect(soon.headers.get("X-Robots-Tag")).toContain("noindex");
-    expect(soonHtml).toContain("Coming soon");
-    expect(soonHtml).toContain("Request this county");
+    expect(soonHtml).toContain("Texas is coming soon");
+    expect(soonHtml).not.toContain(">Coming soon<");
+    expect(soonHtml).not.toContain("Coming soon.");
+    expect(soonHtml).toContain("Request this state");
+    expect(soonHtml).not.toContain(">Request your county<");
     expect(soonHtml).toContain('name="county_name"');
-    expect(soonHtml).not.toContain("No counties are listed");
+    expect(soonHtml).toContain('class="state-mark"');
+    expect(soonHtml).not.toContain("Harris County");
+    expect(soonHtml).not.toContain('href="/texas/harris"');
     expect(soonHtml).not.toContain("Walton");
     expect(soonHtml).not.toContain("Okaloosa");
+    expect(soonHtml).not.toMatch(/\u2014|\u2013/);
 
     const budget = await app.request(`${BUDGET}/`, {}, dbEnv);
     expect(budget.status).toBe(303);
@@ -206,14 +244,88 @@ describe("taxes host public door", () => {
     expect(xml).toContain("https://howtheyspendmytaxes.com/</loc>");
     expect(xml).toContain("https://howtheyspendmytaxes.com/florida</loc>");
     expect(xml).toContain("https://howtheyspendmytaxes.com/walton</loc>");
+    expect(xml).not.toContain("https://howtheyspendmytaxes.com/alaska</loc>");
+    expect(xml).not.toContain("https://howtheyspendmytaxes.com/texas</loc>");
+    expect(xml).not.toContain("https://howtheyspendmytaxes.com/district-of-columbia</loc>");
+    expect(xml.match(/<loc>/g)).toHaveLength(3);
     expect(xml).not.toContain("/walton/");
+    expect(xml).not.toContain("/florida/");
+    expect(xml).not.toContain("/texas/");
     expect(xml).not.toContain("/funds");
     expect(xml).not.toContain("/login");
+    expect(xml).not.toContain("/report");
+    expect(robotsBody).toContain("Disallow: /florida/");
+    expect(robotsBody).toContain("Disallow: /texas/");
+    expect(robotsBody).toContain("Disallow: /data/");
 
     const oldRobots = await (await app.request(`${BUDGET}/robots.txt`, {}, dbEnv)).text();
     expect(oldRobots).toBe("User-agent: *\nDisallow: /\n");
     const oldMap = await app.request(`${WORKERS}/sitemap.xml`, {}, dbEnv);
     expect(oldMap.status).toBe(303);
+  });
+
+  it("routes the picker, keeps Florida counties, and leaves other states noindex", async () => {
+    const dbEnv = env();
+    for (const path of ["/alaska", "/hawaii", "/district-of-columbia", "/louisiana", "/virginia"]) {
+      const response = await app.request(`${TAXES}${path}`, {}, dbEnv);
+      const html = await response.text();
+      expect(response.status, path).toBe(200);
+      expect(response.headers.get("X-Robots-Tag"), path).toContain("noindex");
+      expect(html, path).toContain("Request this state");
+      expect(html, path).toContain("is coming soon");
+      expect(html, path).toContain('name="county_name"');
+      expect(html, path).toContain('class="state-mark"');
+      expect(html, path).not.toContain("Juneau");
+      expect(html, path).not.toContain("Orleans Parish");
+      expect(html, path).not.toContain("Alexandria");
+      expect(html, path).not.toMatch(/\u2014|\u2013/);
+      expect(html, path).not.toContain("mailto:");
+    }
+
+    const live = await app.request(`${TAXES}/florida/walton`, {}, dbEnv);
+    expect(live.status).toBe(301);
+    expect(live.headers.get("Location")).toBe("/walton");
+    const otherWalton = await app.request(`${TAXES}/georgia/walton`, {}, dbEnv);
+    expect(otherWalton.status).toBe(404);
+    const okaloosa = await app.request(`${TAXES}/florida/okaloosa`, {}, dbEnv);
+    expect(okaloosa.status).toBe(301);
+    expect(okaloosa.headers.get("Location")).toBe("/florida/request");
+    const requestPage = await app.request(`${TAXES}/florida/request`, {}, dbEnv);
+    const requestHtml = await requestPage.text();
+    expect(requestPage.headers.get("X-Robots-Tag")).toContain("noindex");
+    expect(requestHtml).toContain("Request this county");
+    expect(requestHtml).toContain('name="county_name"');
+
+    const toState = await app.request(`${TAXES}/pick?state=alaska`, {}, dbEnv);
+    expect(toState.status).toBe(303);
+    expect(toState.headers.get("Location")).toBe("/alaska");
+    const toLive = await app.request(`${TAXES}/pick?state=florida&county=walton`, {}, dbEnv);
+    expect(toLive.headers.get("Location")).toBe("/walton");
+    const toSoon = await app.request(`${TAXES}/pick?state=texas&county=harris`, {}, dbEnv);
+    expect(toSoon.headers.get("Location")).toBe("/texas");
+    const toRequest = await app.request(`${TAXES}/pick?state=florida&county=request`, {}, dbEnv);
+    expect(toRequest.headers.get("Location")).toBe("/florida/request");
+    const ignoredCounty = await app.request(`${TAXES}/pick?state=florida&county=okaloosa`, {}, dbEnv);
+    expect(ignoredCounty.headers.get("Location")).toBe("/florida");
+    const toStateRequest = await app.request(`${TAXES}/pick?state=louisiana&to=request`, {}, dbEnv);
+    expect(toStateRequest.headers.get("Location")).toBe("/louisiana/request");
+    const evil = await app.request(`${TAXES}/pick?state=https:%2F%2Fevil.example&county=//evil.com`, {}, dbEnv);
+    expect(evil.status).toBe(303);
+    expect(evil.headers.get("Location")).toBe("/");
+
+    const data = await app.request(`${TAXES}/data/counties/florida.json`, {}, dbEnv);
+    expect(data.headers.get("content-type")).toContain("application/json");
+    expect(data.headers.get("X-Robots-Tag")).toContain("noindex");
+    const rows = (await data.json()) as { slug: string; name: string; live: boolean }[];
+    expect(rows.find((row) => row.slug === "walton")).toMatchObject({ name: "Walton County", live: true });
+    expect(rows.find((row) => row.slug === "okaloosa")?.live).toBe(false);
+    expect(JSON.stringify(rows)).not.toContain('"d"');
+    expect(rows).toHaveLength(67);
+    const emptyState = await app.request(`${TAXES}/data/counties/texas.json`, {}, dbEnv);
+    expect(emptyState.status).toBe(200);
+    expect(await emptyState.json()).toEqual([]);
+    const missing = await app.request(`${TAXES}/data/counties/atlantis.json`, {}, dbEnv);
+    expect(missing.status).toBe(404);
   });
 
   it("moves the Walton dashboard under /walton and redirects old paths", async () => {
@@ -516,43 +628,19 @@ describe("county catalog and request form", () => {
     expect(Number(total?.n)).toBe(0);
   });
 
-  it("shows a coming soon page with the county filled in when that county is not live", async () => {
+  it("redirects a Florida county path that is not Walton", async () => {
     const added = { stateSlug: "florida", slug: "sample", name: "Sample County", live: false };
     COUNTIES.push(added);
     try {
       const dbEnv = envFor(openDb());
-      const page = await openForm(`${TAXES}/florida/sample`, dbEnv);
-      expect(page.response.status).toBe(200);
-      expect(page.response.headers.get("X-Robots-Tag")).toContain("noindex");
-      expect(page.html).toContain("Coming soon");
-      expect(page.html).toContain("Sample County");
-      expect(page.html).toContain("Request this county");
-      expect(page.html).toContain(">Florida<");
-      expect(page.html).not.toContain('name="county_name"');
-      expect(page.html).not.toContain(ASKER);
+      const page = await app.request(`${TAXES}/florida/sample`, {}, dbEnv);
+      expect(page.status).toBe(301);
+      expect(page.headers.get("Location")).toBe("/florida/request");
       const florida = await (await app.request(`${TAXES}/florida`, {}, dbEnv)).text();
-      expect(florida).toContain(">Sample County, coming soon<");
-      expect(florida).toContain('href="/florida/sample"');
+      expect(florida).not.toContain('href="/florida/sample"');
+      expect(florida).not.toContain(">Sample County, coming soon<");
       expect(florida).toContain(">Walton County, live<");
-
-      const posted = await postForm(`${TAXES}/florida/sample`, dbEnv, page.cookie, {
-        form_token: page.token,
-        name: "Ada",
-        email: ASKER,
-        county_name: "Okaloosa County",
-        note: "",
-        company_website: "",
-      });
-      expect(posted.status).toBe(303);
-      const row = await dbEnv.DB.prepare("SELECT county_name, county_slug, requester_email FROM county_requests").first<{
-        county_name: string;
-        county_slug: string;
-        requester_email: string;
-      }>();
-      expect(row).toMatchObject({ county_name: "Sample County", county_slug: "sample", requester_email: ASKER });
-      const thanks = await (await app.request(`${TAXES}${posted.headers.get("Location")}`, {}, dbEnv)).text();
-      expect(thanks).not.toContain(ASKER);
-      expect(thanks).not.toContain("Okaloosa");
+      expect(florida).toContain('href="/walton"');
     } finally {
       COUNTIES.pop();
     }
@@ -927,11 +1015,11 @@ describe("intake network and global caps", () => {
     expect(cross.status).toBe(403);
 
     const dayEnv = envFor(openDb());
-    const dayPage = await openForm(`${TAXES}/states/texas`, dayEnv);
+    const dayPage = await openForm(`${TAXES}/texas/request`, dayEnv);
     const old = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
     await seedForms(dayEnv.DB, 400, 600, old);
     const dayBlocked = await postForm(
-      `${TAXES}/states/texas`,
+      `${TAXES}/texas/request`,
       dayEnv,
       dayPage.cookie,
       { ...fields, form_token: dayPage.token },

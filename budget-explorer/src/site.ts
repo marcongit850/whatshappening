@@ -12,10 +12,10 @@ import {
 } from "./host";
 import type { AppEnv } from "./env";
 import { handleCountyForm, handleReport } from "./intake";
-import { countiesIn, countyByPath, stateBySlug } from "./places";
-import { applyPublicHeaders, publicHtml, publicRedirect } from "./public-http";
+import { countiesIn, countyChoices, stateBySlug } from "./places";
+import { applyPublicHeaders, publicHtml, publicJson, publicRedirect } from "./public-http";
 import { safeRedirectLocation, unsafeRequestPath } from "./redirect-path";
-import { renderFlorida, renderPublicHome, renderPublicMissing, renderStateHub, renderWaltonLanding } from "./public-page";
+import { renderAboutSite, renderPublicHome, renderPublicMissing, renderRequestStart, renderStatePage, renderWaltonLanding } from "./public-page";
 
 type DashboardApp = {
   fetch: (request: Request, env: AppEnv) => Response | Promise<Response>;
@@ -47,40 +47,53 @@ async function taxesRequest(c: Context<{ Bindings: AppEnv }>, dashboard: Dashboa
   if (pathname === "/robots.txt") return text(robotsTxt(), "text/plain; charset=utf-8");
   if (pathname === "/sitemap.xml") return text(sitemapXml(), "application/xml; charset=utf-8");
   if (pathname === "/report" || pathname === `${WALTON_PREFIX}/report`) return handleReport(c.req.raw, c.env, pathname);
-  const stateRequest = /^\/states\/([a-z-]+)\/request$/.exec(pathname);
-  if (stateRequest || pathname === "/florida/request") {
-    const slug = stateRequest ? stateRequest[1] : "florida";
-    const state = stateBySlug(slug);
+  if (pathname === "/pick") return pickResponse(c);
+  const dataMatch = /^\/data\/counties\/([a-z-]+)\.json$/.exec(pathname);
+  if (dataMatch) return countyData(c, dataMatch[1]);
+  if (pathname === "/about-this-site") {
+    if (c.req.method === "GET" || c.req.method === "HEAD") return html(renderAboutSite(), 200, true);
+    return text("Not found", "text/plain; charset=utf-8", 404, false);
+  }
+  if (pathname === "/request") {
+    if (c.req.method === "GET" || c.req.method === "HEAD") return html(renderRequestStart(), 200, false);
+    return text("Not found", "text/plain; charset=utf-8", 404, false);
+  }
+  const requestSlug = requestStateSlug(pathname);
+  if (requestSlug) {
+    const state = stateBySlug(requestSlug);
     if (!state) return html(renderPublicMissing(), 404, false);
     return handleCountyForm(c.req.raw, c.env, { action: pathname, state, county: null });
   }
-  const stateMatch = /^\/states\/([a-z-]+)$/.exec(pathname);
-  if (stateMatch) {
-    if (stateMatch[1] === "florida") return redirect("/florida", 301);
-    const state = stateBySlug(stateMatch[1]);
+  const stateAlias = /^\/states\/([a-z-]+)$/.exec(pathname);
+  if (stateAlias) {
+    const state = stateBySlug(stateAlias[1]);
     if (!state) return c.req.method === "GET" || c.req.method === "HEAD" ? html(renderPublicMissing(), 404, false) : text("Not found", "text/plain; charset=utf-8", 404, false);
-    if (countiesIn(state.slug).length === 0) return handleCountyForm(c.req.raw, c.env, { action: pathname, state, county: null });
-    if (c.req.method === "GET" || c.req.method === "HEAD") {
-      const live = countiesIn(state.slug).some((county) => county.live);
-      return html(renderStateHub(state), 200, live);
+    if (c.req.method === "GET" || c.req.method === "HEAD") return redirect(`/${state.slug}`, 301);
+  }
+  const bareState = /^\/([a-z-]+)$/.exec(pathname);
+  if (bareState) {
+    const state = stateBySlug(bareState[1]);
+    if (state && countiesIn(state.slug).length === 0) {
+      return handleCountyForm(c.req.raw, c.env, { action: pathname, state, county: null });
     }
   }
   if (c.req.method === "GET" || c.req.method === "HEAD") {
     if (pathname === "/") return html(renderPublicHome(), 200, true);
-    if (pathname === "/florida") return html(renderFlorida(), 200, true);
     if (pathname === WALTON_PREFIX) {
       const session = await readSession(c.env.SESSION_SECRET || "", readCookie(c.req.header("cookie"), SESSION_COOKIE));
       if (!session) return waltonLanding();
     }
+    const stateSlug = pathname.startsWith("/") && !pathname.slice(1).includes("/") ? pathname.slice(1) : "";
+    const state = stateSlug ? stateBySlug(stateSlug) : undefined;
+    if (state) return html(renderStatePage(state), 200, true);
   }
 
   const countyMatch = /^\/([a-z-]+)\/([a-z0-9-]+)$/.exec(pathname);
   if (countyMatch && !pathname.startsWith(`${WALTON_PREFIX}/`) && pathname !== WALTON_PREFIX) {
     const state = stateBySlug(countyMatch[1]);
-    const county = state ? countyByPath(state.slug, countyMatch[2]) : undefined;
-    if (state && county) {
-      if (county.live && county.href) return redirect(county.href, 301);
-      return handleCountyForm(c.req.raw, c.env, { action: pathname, state, county });
+    if (state?.slug === "florida") {
+      if (countyMatch[2] === "walton") return redirect("/walton", 301);
+      return redirect("/florida/request", 301);
     }
   }
 
@@ -96,6 +109,35 @@ async function taxesRequest(c: Context<{ Bindings: AppEnv }>, dashboard: Dashboa
     return forward(c, dashboard, pathname);
   }
   return notFoundFor(c.req.method);
+}
+
+function requestStateSlug(pathname: string): string | null {
+  const legacy = /^\/states\/([a-z-]+)\/request$/.exec(pathname);
+  if (legacy) return legacy[1];
+  const direct = /^\/([a-z-]+)\/request$/.exec(pathname);
+  if (!direct || direct[1] === WALTON_PREFIX.slice(1) || direct[1] === "states") return null;
+  return stateBySlug(direct[1]) ? direct[1] : null;
+}
+
+function pickResponse(c: Context<{ Bindings: AppEnv }>): Response {
+  if (c.req.method !== "GET" && c.req.method !== "HEAD") return text("Not found", "text/plain; charset=utf-8", 404, false);
+  const url = new URL(c.req.url);
+  const state = stateBySlug((url.searchParams.get("state") || "").toLowerCase());
+  if (!state) return redirect("/", 303);
+  if (url.searchParams.get("to") === "request") return redirect(`/${state.slug}/request`, 303);
+  const countySlug = (url.searchParams.get("county") || "").toLowerCase();
+  if (state.slug === "florida" && /^[a-z0-9-]+$/.test(countySlug)) {
+    if (countySlug === "walton") return redirect("/walton", 303);
+    if (countySlug === "request") return redirect("/florida/request", 303);
+  }
+  return redirect(`/${state.slug}`, 303);
+}
+
+function countyData(c: Context<{ Bindings: AppEnv }>, slug: string): Response {
+  if (c.req.method !== "GET" && c.req.method !== "HEAD") return text("Not found", "text/plain; charset=utf-8", 404, false);
+  const state = stateBySlug(slug);
+  if (!state) return text("Not found", "text/plain; charset=utf-8", 404, false);
+  return publicJson(JSON.stringify(countyChoices(state.slug)));
 }
 
 function taxesTarget(pathname: string): string | null {

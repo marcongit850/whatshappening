@@ -294,7 +294,7 @@ export async function handleCountyForm(request: Request, env: AppEnv, spec: Coun
           title: "Request received",
           message: "Thank you. We saved your request. This page does not send email.",
           path: spec.action,
-          backHref: spec.state.slug === "florida" ? "/florida" : `/states/${spec.state.slug}`,
+          backHref: `/${spec.state.slug}`,
           backLabel: `Back to ${spec.state.name}`,
         }),
         200,
