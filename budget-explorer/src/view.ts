@@ -445,10 +445,10 @@ function whoPaidCard(vendors: OrgVendor[], fiscal: { fyStart: string; asOf: stri
       const label = displayName(vendor.vendor_name);
       const title = label.shortened ? ` title="Name shortened in the county report"` : "";
       const count = `${vendor.payments.toLocaleString("en-US")} payment${vendor.payments === 1 ? "" : "s"}`;
-      return `<a class="vrow" href="${esc(vendorPageHref(vendor, fiscal))}"><div class="vn"><span class="rk">${index + 1}</span><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span><span class="row-cap">Total received</span></div></a>`;
+      return `<a class="vrow" href="${esc(vendorPageHref(vendor, fiscal))}"><div class="vn"><span class="rk">${index + 1}</span><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span><span class="row-cap">Total paid</span></div></a>`;
     })
     .join("");
-  return `<section class="card paid-list"><div class="eyebrow">Who was paid</div><h2>Who received the most money${infoTip("who-paid", through)}</h2>
+  return `<section class="card paid-list"><div class="eyebrow">Who was paid</div><h2>Who was paid the most money${infoTip("who-paid", through)}</h2>
 <p class="cap">${esc(through)} Payments to other county offices are not in these bars.</p>
 ${rows || `<p class="cap">No outside-vendor payments are in this import.</p>`}
 <p class="mnote">People, payroll, and individual pay are not listed. A name cut off at 20 characters in the county report is marked. The rest of the name is not guessed.</p>
@@ -1308,10 +1308,10 @@ export function renderVendors(opts: {
       const title = label.shortened ? ` title="Name shortened in the county report"` : "";
       const width = max ? (vendor.cents / max) * 100 : 0;
       const count = `${vendor.payments.toLocaleString("en-US")} payment${vendor.payments === 1 ? "" : "s"}`;
-      return `<a class="vrow" href="/vendors/${esc(vendor.vendor_number)}"><div class="vn"><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span><span class="row-cap">Total received</span></div></a>`;
+      return `<a class="vrow" href="/vendors/${esc(vendor.vendor_number)}"><div class="vn"><span${title}>${esc(label.text)}</span></div><div class="vt"><div class="vb" style="width:${width.toFixed(2)}%"></div></div><div class="vv"><b>${esc(moneyCompact(vendor.cents))}</b><span class="row-cap">${esc(count)}</span><span class="row-cap">Total paid</span></div></a>`;
     })
     .join("");
-  const sortNote = opts.sort === "count" ? "Sorted by number of payments." : "Sorted by total received.";
+  const sortNote = opts.sort === "count" ? "Sorted by number of payments." : "Sorted by total paid.";
   const body = `
 <p class="crumb"><a href="/">Overview</a> / Vendors</p>
 <h1>Vendors${infoTip("vendor-list", through)}</h1>
@@ -1326,7 +1326,7 @@ ${opts.sort === "count" ? `<input type="hidden" name="sort" value="count">` : ""
 </div>
 </form>
 <div class="sort-row">
-<a class="btn${opts.sort === "total" ? "" : " secondary"}" href="${esc(vendorListHref(opts.query, "total"))}">Total received</a>
+<a class="btn${opts.sort === "total" ? "" : " secondary"}" href="${esc(vendorListHref(opts.query, "total"))}">Total paid</a>
 <a class="btn${opts.sort === "count" ? "" : " secondary"}" href="${esc(vendorListHref(opts.query, "count"))}">Number of payments</a>
 </div>
 <p class="cap">${sortNote}</p>
@@ -1384,7 +1384,7 @@ export function renderVendorDetail(opts: {
     .map((item) => {
       const named = fundLabel(item.code, opts.fundReports.get(item.code) || "", opts.names);
       const count = `${item.payments.toLocaleString("en-US")} payment${item.payments === 1 ? "" : "s"}`;
-      return `<li><a href="/funds/${esc(item.code)}">${esc(named.primary)}</a> <a href="/search?fund=${esc(item.code)}&amp;vendor=${vendorQuery}"><b>${esc(moneyExact(item.cents))}</b></a> <span>${count}. Total received.</span></li>`;
+      return `<li><a href="/funds/${esc(item.code)}">${esc(named.primary)}</a> <a href="/search?fund=${esc(item.code)}&amp;vendor=${vendorQuery}"><b>${esc(moneyExact(item.cents))}</b></a> <span>${count}. Total paid.</span></li>`;
     })
     .join("");
   const deptItems = opts.departments
@@ -1392,7 +1392,7 @@ export function renderVendorDetail(opts: {
       const row = opts.deptRows.find((dept) => dept.code === item.code);
       const named = deptLabels.get(item.code) || deptName({ code: item.code, report_name: row?.report_name || "" }, opts.names).primary;
       const count = `${item.payments.toLocaleString("en-US")} payment${item.payments === 1 ? "" : "s"}`;
-      return `<li><a href="/departments/${esc(item.code)}">${esc(named)}</a> <a href="/search?dept=${esc(item.code)}&amp;vendor=${vendorQuery}"><b>${esc(moneyExact(item.cents))}</b></a> <span>${count}. Total received.</span></li>`;
+      return `<li><a href="/departments/${esc(item.code)}">${esc(named)}</a> <a href="/search?dept=${esc(item.code)}&amp;vendor=${vendorQuery}"><b>${esc(moneyExact(item.cents))}</b></a> <span>${count}. Total paid.</span></li>`;
     })
     .join("");
   const lineRows = opts.payments
@@ -1418,7 +1418,7 @@ export function renderVendorDetail(opts: {
 <p class="lede">Vendor number ${esc(number)}. ${esc(through)} Payments to other county offices are not in these bars.</p>
 <p class="more-links"><a class="btn" href="${esc(searchHref)}">All payments for this vendor</a> <a class="btn secondary" href="/vendors">All vendors</a></p>
 <section class="metrics">
-${metric("vendor-total", "Total received", `<a href="#payments">${esc(moneyExact(opts.vendor.cents))}</a>`, "Payments to this vendor, added together.")}
+${metric("vendor-total", "Total paid", `<a href="#payments">${esc(moneyExact(opts.vendor.cents))}</a>`, "Payments to this vendor, added together.")}
 ${metric("vendor-count", "Number of payments", `<a href="#payments">${opts.vendor.payments.toLocaleString("en-US")}</a>`, "Reversals and re-posts are listed as separate lines.")}
 ${metric("vendor-first", "First payment", `<a href="${esc(dayHref(opts.vendor.first_date))}">${esc(displayDate(opts.vendor.first_date))}</a>`, "The earliest payment date in this list.")}
 ${metric("vendor-last", "Last payment", `<a href="${esc(dayHref(opts.vendor.last_date))}">${esc(displayDate(opts.vendor.last_date))}</a>`, "The latest payment date in this list.")}

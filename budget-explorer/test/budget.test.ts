@@ -681,7 +681,8 @@ describe("expression depth, reversals, land, and the money left card", () => {
       isAdmin: false,
       showNames: true,
     });
-    const card = overviewHtml.slice(overviewHtml.indexOf("kpi k4"), overviewHtml.indexOf("kpi k4") + 400);
+    const cardStart = overviewHtml.indexOf("kpi k4");
+    const card = overviewHtml.slice(cardStart, overviewHtml.indexOf("</section>", cardStart));
     expect(card).toContain("$169.1M");
     expect(card).not.toContain("169,117,878");
     expect(overviewHtml).toContain("Spent (posted in the county&#39;s books through 9/15/2026) is 5.6% of the mid-year limit");
