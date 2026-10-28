@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import {
   accountLines,
   buildQuestionContext,
+  showVendorLines,
   finalizeAnswer,
   personNamesUpdatedAt,
   platLines,
@@ -50,11 +51,13 @@ import {
   sheriffReleaseByMonth,
   landSpendByMonth,
   latestPublished,
+  listVendors,
   listImports,
   loadNames,
   loginAttempts as attemptsFor,
   monthlyParts,
   oneAccount,
+  oneVendor,
   organizationVendors,
   overlapCount,
   platHistory,
@@ -65,7 +68,9 @@ import {
   saveChart,
   saveImport,
   unmatchedCodes,
+  vendorSlices,
   type SearchFilters,
+  type VendorSort,
 } from "./db";
 import { adminPasswordSet, publicBase, type AppEnv } from "./env";
 import { csvAmount, csvCell, displayDate, isoDate } from "./format";
@@ -101,7 +106,10 @@ import {
   renderSearch,
   renderSheriff,
   renderUnlock,
+  renderVendorDetail,
+  renderVendors,
   FAVICON,
+  PAYMENT_CSV_LIMIT,
 } from "./view";
 
 const app = new Hono<{ Bindings: AppEnv; Variables: { session: SessionPayload; showNames: boolean } }>();
@@ -468,7 +476,7 @@ app.get("/search.csv", async (c) => {
   if (current instanceof Response) return current;
   const filters = readFilters(c);
   const [result, vendorNames] = await Promise.all([
-    searchLines(c.env.DB, current.id, filters, 0, 2000, c.get("showNames")),
+    searchLines(c.env.DB, current.id, filters, 0, PAYMENT_CSV_LIMIT, c.get("showNames")),
     loadVendorNames(c.env.DB, current.id),
   ]);
   const named = withDisplayNames(result.rows, buildVendorIndex(vendorNames));
@@ -481,6 +489,74 @@ app.get("/search.csv", async (c) => {
   c.header("Content-Type", "text/csv; charset=utf-8");
   c.header("Content-Disposition", "attachment; filename=payments.csv");
   return c.body(lines.join("\n"));
+});
+
+app.get("/vendors", async (c) => {
+  const current = await requirePublished(c);
+  if (current instanceof Response) return current;
+  const query = (c.req.query("q") || "").replace(/[%_]/g, " ").trim().slice(0, 80);
+  const sort: VendorSort = c.req.query("sort") === "count" ? "count" : "total";
+  const pageIndex = pageNumber(c.req.query("page"));
+  const pageSize = 25;
+  const [found, vendorNames] = await Promise.all([
+    listVendors(c.env.DB, current.id, current.data_as_of || "", query, sort, pageSize, pageIndex * pageSize),
+    loadVendorNames(c.env.DB, current.id),
+  ]);
+  return c.html(
+    renderVendors({
+      row: current,
+      vendors: found.rows,
+      total: found.total,
+      query,
+      sort,
+      pageIndex,
+      pageSize,
+      csrf: c.get("session").csrf,
+      isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
+      displayName: buildVendorIndex(vendorNames),
+    }),
+  );
+});
+
+app.get("/vendors/:number", async (c) => {
+  const number = c.req.param("number") || "";
+  if (!/^\d{1,20}$/.test(number)) return c.text("Not found", 404);
+  const current = await requirePublished(c);
+  if (current instanceof Response) return current;
+  const pageIndex = pageNumber(c.req.query("page"));
+  const pageSize = 25;
+  const asOf = current.data_as_of || "";
+  const vendor = await oneVendor(c.env.DB, current.id, asOf, number);
+  if (!vendor) return c.text("Not found", 404);
+  const [funds, departments, lines, deptRows, names, vendorNames, fundReports] = await Promise.all([
+    vendorSlices(c.env.DB, current.id, asOf, number, "fund_code"),
+    vendorSlices(c.env.DB, current.id, asOf, number, "dept_code"),
+    showVendorLines(c.env.DB, current.id, asOf, number, pageIndex, pageSize, c.get("showNames")),
+    departmentRollups(c.env.DB, current.id),
+    loadNames(c.env.DB),
+    loadVendorNames(c.env.DB, current.id),
+    fundNameMap(c.env.DB, current.id),
+  ]);
+  return c.html(
+    renderVendorDetail({
+      row: current,
+      vendor,
+      funds,
+      departments,
+      deptRows,
+      fundReports,
+      names,
+      payments: withDisplayNames(lines.rows, buildVendorIndex(vendorNames)),
+      total: lines.total,
+      pageIndex,
+      pageSize,
+      csrf: c.get("session").csrf,
+      isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
+      displayName: buildVendorIndex(vendorNames),
+    }),
+  );
 });
 
 app.get("/ask", async (c) => {
@@ -763,15 +839,20 @@ function pageNumber(value: string | undefined): number {
   return Math.min(10_000, Math.floor(parsed) - 1);
 }
 
+function readMoneyCents(value: string | undefined): number {
+  const amount = Number((value || "").replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return Math.round(amount * 100);
+}
+
 function readFilters(c: { req: { query: (name: string) => string | undefined } }): SearchFilters {
-  const minRaw = c.req.query("min") || "";
-  const minNumber = Number(minRaw.replace(/[$,\s]/g, ""));
   return {
     q: (c.req.query("q") || "").slice(0, 80),
     vendor: (c.req.query("vendor") || "").slice(0, 80),
     dept: /^\d{8}$/.test(c.req.query("dept") || "") ? c.req.query("dept") || "" : "",
     fund: /^\d{3}$/.test(c.req.query("fund") || "") ? c.req.query("fund") || "" : "",
-    minCents: Number.isFinite(minNumber) && minNumber > 0 ? Math.round(minNumber * 100) : 0,
+    minCents: readMoneyCents(c.req.query("min")),
+    maxCents: readMoneyCents(c.req.query("max")),
     from: isoDate(c.req.query("from") || ""),
     to: isoDate(c.req.query("to") || ""),
     excludeTransfer: c.req.query("transfers") !== "1",

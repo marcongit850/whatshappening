@@ -183,6 +183,21 @@ describe("overview dashboard", () => {
     expect(html).toContain("What has the county spent on Recreation Plat Fees?");
     expect(html).toContain("How much has department 11444000 spent?");
     expect(html).toContain('href="/departments"');
+    expect(html).toContain("Search any vendor or payment");
+    expect(html).toContain("Who received the most money");
+    expect(html.indexOf("Search any vendor or payment")).toBeLessThan(html.indexOf("Who received the most money"));
+    expect(html.indexOf("Who received the most money")).toBeLessThan(html.indexOf("Where the money goes"));
+    expect(html).toContain('href="/vendors/1001"');
+    expect(html).toContain('href="/vendors"');
+    expect(html).toContain("https://budget-waltoncountyfl.com");
+    expect(html).toContain("Planned budget (county&#39;s budget book)");
+    expect(html).toContain("The county&#39;s own FY2027 tentative budget book");
+    const who = html.slice(html.indexOf("Who received the most money"), html.indexOf("Commissioners adopted"));
+    expect(who).toContain("North Builders LLC");
+    expect(who).not.toContain("Jane");
+    expect(who).not.toContain("Sheriff");
+    expect(who).not.toContain("Late Vendor");
+    expect(who).not.toContain("Internal Journal");
     expect(html).toContain('href="/search"');
     expect(html).toContain('href="/departments?sort=enc"');
     expect(html).toContain('href="/departments?sort=avail"');
@@ -310,6 +325,91 @@ describe("overview dashboard", () => {
     expect(october).toContain("North Builders LLC");
     expect(october).not.toContain("ACME WIDGET CO");
     expect(october).not.toContain("LATE VENDOR CO");
+
+    const payments = await (await app.request("http://localhost/search", { headers }, env)).text();
+    expect(payments).toContain("Maximum amount");
+    expect(payments).toContain("at most 2,000 lines");
+    expect(payments).toContain("Download results (CSV)");
+    const capped = await (await app.request("http://localhost/search?min=70000&max=90000", { headers }, env)).text();
+    expect(capped).toContain("2 payments found, totaling $150,000.00");
+    expect(capped).toContain("$80,000.00");
+    expect(capped).toContain("$70,000.00");
+    expect(capped).not.toContain("North Builders");
+    expect(capped).not.toContain("$60,000.00");
+    expect(capped).not.toContain("$20,000.00");
+  });
+});
+
+describe("vendors who were paid", () => {
+  it("lists vendors and opens one vendor without people, offices, or lines after the cutoff", async () => {
+    const { raw, db } = openDb();
+    seed(raw);
+    raw.exec(`INSERT INTO payments (
+      import_id, fund_code, dept_code, object_code, project_code, journal, pay_date, source,
+      amount_cents, vendor_number, vendor_name, invoice, check_number, description, after_cutoff, dedupe_key, is_person_name
+    ) VALUES
+      (1, '001', '00122000', '534000', '', '', '2026-02-01', 'API', 1, '1008', 'PLATFORM SERVICES INC', 'PF2', '2', '', 0, 'pf2', 0),
+      (1, '001', '00122000', '534000', '', '', '2026-02-02', 'API', 1, '1008', 'PLATFORM SERVICES INC', 'PF3', '3', '', 0, 'pf3', 0),
+      (1, '001', '00122000', '534000', '', '', '2026-02-03', 'API', 1, '1008', 'PLATFORM SVCS', 'PF4', '4', '', 0, 'pf4', 0)`);
+    raw.exec(`UPDATE payments SET description = 'SMITH, MARY rent' WHERE dedupe_key = 'n1'`);
+    const env = envFor(db, []);
+    const session = await signed();
+    const headers = { cookie: session.header };
+
+    const locked = await app.request("http://localhost/vendors", {}, env);
+    expect(locked.status).toBe(303);
+    expect(locked.headers.get("Location")).toBe("/login?next=%2Fvendors");
+
+    const list = await (await app.request("http://localhost/vendors", { headers }, env)).text();
+    expect(list).toContain("North Builders LLC");
+    expect(list).toContain('href="/vendors/1001"');
+    expect(list).toContain("Total received");
+    expect(list).toContain("Number of payments");
+    expect(list).toContain("Reversals and re-posts are listed as separate lines.");
+    expect(list).not.toContain("Jane");
+    expect(list).not.toContain("Sample County Sheriff");
+    expect(list).not.toContain("Late Vendor");
+    expect(list).not.toContain("Internal Journal");
+    expect(list).not.toMatch(/\u2014|\u2013/);
+    expect(list.indexOf("/vendors/1001")).toBeLessThan(list.indexOf("/vendors/1008"));
+
+    const byCount = await (await app.request("http://localhost/vendors?sort=count", { headers }, env)).text();
+    expect(byCount.indexOf("/vendors/1008")).toBeLessThan(byCount.indexOf("/vendors/1001"));
+    expect(byCount).toContain("Platform Services INC");
+
+    const found = await (await app.request("http://localhost/vendors?q=1002", { headers }, env)).text();
+    expect(found).toContain("Acme Widget Co");
+    expect(found).not.toContain("North Builders LLC");
+    const shortName = await (await app.request("http://localhost/vendors?q=svcs", { headers }, env)).text();
+    expect(shortName).toContain("Platform Services INC");
+    expect(shortName).toContain('href="/vendors/1008"');
+
+    const detail = await (await app.request("http://localhost/vendors/1001", { headers }, env)).text();
+    expect(detail).toContain("$170,000.00");
+    expect(detail).toContain("Number of payments");
+    expect(detail).toContain(">2<");
+    expect(detail).toContain("10/15/2025");
+    expect(detail).toContain("10/20/2025");
+    expect(detail).toContain("Recreation Plat Fee");
+    expect(detail).toContain("Parks Maintenance");
+    expect(detail).toContain("534000");
+    expect(detail).toContain("561000");
+    expect(detail).toContain("SMITH, MARY rent");
+    expect(detail).toContain("Reversals and re-posts are listed as separate lines.");
+    expect(detail).not.toContain("LATE VENDOR");
+    expect(detail).not.toMatch(/\u2014|\u2013/);
+
+    await setShowPersonNames(db, false);
+    const hidden = await (await app.request("http://localhost/vendors/1001", { headers }, env)).text();
+    expect(hidden).toContain("North Builders LLC");
+    expect(hidden).not.toContain("SMITH");
+    expect(hidden).not.toContain("MARY");
+    expect(hidden).not.toContain("Jane");
+
+    for (const path of ["/vendors/1003", "/vendors/1004", "/vendors/1005", "/vendors/nope"]) {
+      const missing = await app.request(`http://localhost${path}`, { headers }, env);
+      expect(missing.status, path).toBe(404);
+    }
   });
 });
 

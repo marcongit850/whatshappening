@@ -20,6 +20,7 @@ export const DASHBOARD_PREFIXES = [
   "/reserves",
   "/funds",
   "/departments",
+  "/vendors",
   "/search",
   "/ask",
   "/plat",
