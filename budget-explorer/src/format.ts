@@ -20,7 +20,7 @@ export function infoTip(id: string, sentence: string): string {
   const text = firstSentence(sentence);
   if (!text || text.toLowerCase() === "n/a") return "";
   const slug = id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "tip";
-  return `<span class="tip"><button type="button" class="tip-btn" aria-label="What is this?" aria-expanded="false" aria-controls="tip-${esc(slug)}">?</button><span class="tip-pop" id="tip-${esc(slug)}" role="tooltip" hidden>${esc(text)}</span></span>`;
+  return `<span class="tip"><button type="button" class="tip-btn" aria-label="What is this?" aria-expanded="false" aria-controls="tip-${esc(slug)}" aria-describedby="tip-${esc(slug)}">?</button><span class="tip-pop" id="tip-${esc(slug)}" role="tooltip" hidden>${esc(text)}</span></span>`;
 }
 
 /** Display name for the body of water, when that phrase appears. */
