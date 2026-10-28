@@ -1,5 +1,5 @@
 import { esc, firstSentence, gulfName, infoTip, money, moneyCompact } from "./format";
-import { percentTenths, type AmountItem, type PublishedLedger, type ReserveFund } from "./published";
+import { percentTenths, type AmountItem, type InterestLine, type InterestReport, type PublishedLedger, type ReserveFund } from "./published";
 
 const SLICE_COLORS = ["#17505c", "#1f6a78", "#c9a24b", "#8a6f9e", "#c5603f", "#1b6542", "#7fb0b9", "#8a5b12", "#4d6d8a", "#5c4a3a", "#b9b4a6"];
 const CLASS_COLORS: Record<string, string> = {
@@ -32,6 +32,7 @@ export function revenueDocument(ledger: PublishedLedger, fundCodes: Set<string>)
   const total = ledger.incomeTotalCents;
   const property = income.find((item) => item.key === "property-taxes");
   const bed = income.find((item) => item.key === "bed-tax");
+  const interest = income.find((item) => item.key === "interest");
   const transfers = ledger.notIncome.find((item) => item.key === "transfers");
   return `<p class="crumb"><a href="/">Overview</a> / Income</p>
 <h1>Where the county's income comes from${infoTip("revenue-title", "The lead figures are audited actual income for the year that ended September 30, 2025.")}</h1>
@@ -46,10 +47,11 @@ export function revenueDocument(ledger: PublishedLedger, fundCodes: Set<string>)
 <div class="eyebrow">Audited actual</div>
 <h2>FY2025 income by source${infoTip("income-chart", "Each slice is one source of income.")}</h2>
 <p class="cap">Each slice is one source of income. Together they are ${esc(money(total))}.</p>
-${donutChart(income, total, moneyCompact(total), "FY2025 income", (item) => `#${item.key}`)}
+${donutChart(income, total, moneyCompact(total), "FY2025 income", (item) => `#${item.key}`, "FY2025 income", (item) => item.label === "Interest earned")}
+${interest ? `<p class="interest-call"><a href="#interest">Interest earned</a> is ${esc(moneyCompact(interest.cents))} of this circle. <a href="/reserves#cash">Savings</a>.</p>` : ""}
 ${sourceLine("FY2025 audited financial report", income[0]?.sourceUrl || "", income[0]?.sourcePages || "")}
 </section>
-${income.map((item) => sourceBlock(item, total)).join("")}
+${income.map((item) => (item.key === "interest" ? interestBlock(ledger, item, total, fundCodes) : sourceBlock(item, total))).join("")}
 ${beachBlock(ledger, fundCodes)}
 ${notIncomeBlock(ledger)}
 ${budgetBlock(ledger)}
@@ -121,9 +123,9 @@ ${sourceLine("FY2025 audited financial report", reserves.sourceUrl, reserves.sou
 <p>It is not a pile of cash you can spend tomorrow.</p>
 ${sourceLine("Fund Balance Policy, Resolution 2012-59", reserves.policy.sourceUrl, "")}
 </section>
-<section class="card">
+<section class="card" id="cash">
 <h2>Savings are not the same as cash${infoTip("res-cash", firstSentence(gulfName(reserves.cashDetail)))}</h2>
-<p class="cap">${esc(gulfName(reserves.cashDetail))} Cash and equivalents were ${esc(money(reserves.cashCents))}. Investments on those same lines were ${esc(money(reserves.investmentsCents))}.</p>
+<p class="cap">${esc(gulfName(reserves.cashDetail))} Cash and equivalents were ${esc(money(reserves.cashCents))}. Investments on those same lines were ${esc(money(reserves.investmentsCents))}. <a href="/revenue#interest">Interest earned</a> on investments is income.</p>
 ${sourceLine("FY2025 audited financial report", reserves.cashSourceUrl, reserves.cashPages)}
 </section>
 `;
@@ -161,6 +163,77 @@ export function reservesEmpty(): string {
   return `<h1>Savings the county held</h1>
 <p class="lead">Audited year-end savings are not loaded in this copy of the database yet.</p>
 <p class="more-links"><a href="/revenue">See all income sources</a></p>`;
+}
+
+function interestBlock(ledger: PublishedLedger, item: AmountItem, total: number, fundCodes: Set<string>): string {
+  const report = ledger.interest;
+  const share = total ? item.pct.toFixed(1) : "0.0";
+  const caption = interestCaption(report);
+  const majors = report.fy2025.filter((line) => line.budgetCents != null);
+  const smaller = report.fy2025.filter((line) => line.budgetCents == null);
+  if (!report.fy2025.length) return sourceBlock(item, total);
+  return `<section class="card source-block" id="interest">
+<p class="eyebrow">${esc(item.status)}</p>
+<h2>Interest and investment earnings${caption ? infoTip("interest-gap", caption) : ""}</h2>
+<p class="figure-n">${esc(moneyCompact(item.cents))}</p>
+<p class="cap">${share}% of audited FY2025 income. Exact amount ${esc(money(item.cents))}.</p>
+${caption ? `<p class="interest-note">${esc(caption)}</p>` : ""}
+<table class="interest-table">
+<thead><tr><th>Fund</th><th class="num">FY2025 earned</th><th class="num">FY2025 budget</th></tr></thead>
+<tbody>
+${majors.map((line) => interestRow(line, fundCodes, true)).join("")}
+<tr class="interest-total"><td>Six major funds</td><td class="num">${esc(money(report.majorEarnedCents))}</td><td class="num">${esc(money(report.majorBudgetCents))}</td></tr>
+${smaller.map((line) => interestRow(line, fundCodes, true)).join("")}
+</tbody>
+</table>
+<p class="interest-note">On these six funds the original budget and the final budget are the same.</p>
+<table class="interest-table">
+<thead><tr><th>Fund</th><th class="num">FY2027 budget</th></tr></thead>
+<tbody>
+${report.fy2027.map((line) => interestRow(line, fundCodes, false)).join("")}
+<tr class="interest-total"><td>Adopted interest</td><td class="num">${esc(money(report.fy2027Cents))}</td></tr>
+</tbody>
+</table>
+${report.excludedSelfInsuranceCents ? `<p class="interest-note">The FY2027 budget leaves out ${esc(money(report.excludedSelfInsuranceCents))} of interest in the Self-Insurance fund. That fund is outside the adopted total.</p>` : ""}
+<p class="interest-note">The earnings are recorded in the fund that earned them. The audit says investment earnings are used to offset any projected revenue shortfalls in the budget.</p>
+<p class="interest-note">Investments are reported at fair value, and U.S. Treasury notes are valued at quoted market. FY2022 was a loss, so the audited figure is not only cash interest.</p>
+${interestTrend(report)}
+<p class="more-links"><a href="/reserves#cash">How much is in savings</a></p>
+${sourceLine("FY2025 audited financial report", item.sourceUrl, item.sourcePages)}
+${sourceLine("FY2025 budget to actual", report.budgetSourceUrl, report.budgetPages)}
+${sourceLine("Ten-year schedule", report.trendSourceUrl, report.trendPages)}
+${sourceLine("County FY2027 revenue file", report.fy2027SourceUrl, report.fy2027Pages)}
+</section>`;
+}
+
+function interestCaption(report: InterestReport): string {
+  if (!report.majorBudgetCents || !report.majorEarnedCents) return "";
+  return `The county budgets far less interest than it earns. In FY2025 the six major funds budgeted about ${aboutMillions(report.majorBudgetCents)} and earned ${aboutMillions(report.majorEarnedCents)}.`;
+}
+
+function aboutMillions(cents: number): string {
+  return `$${(Math.abs(cents) / 100 / 1_000_000).toFixed(1)}M`;
+}
+
+function interestRow(line: InterestLine, fundCodes: Set<string>, showEarned: boolean): string {
+  const name = line.fundCode && fundCodes.has(line.fundCode) ? `<a href="/funds/${esc(line.fundCode)}">${esc(line.label)}</a>` : esc(line.label);
+  const budget = line.budgetCents == null ? "Not combined" : esc(money(line.budgetCents));
+  if (!showEarned) return `<tr><td>${name}</td><td class="num">${budget}</td></tr>`;
+  return `<tr><td>${name}</td><td class="num">${esc(money(line.earnedCents || 0))}</td><td class="num">${budget}</td></tr>`;
+}
+
+function interestTrend(report: InterestReport): string {
+  const byYear = new Map(report.trend.map((point) => [point.year, point.cents]));
+  const loss = byYear.get(2022);
+  const y2023 = byYear.get(2023);
+  const y2024 = byYear.get(2024);
+  const y2025 = byYear.get(2025);
+  if (loss == null || y2023 == null || y2024 == null || y2025 == null) return "";
+  return `<p class="interest-trend">Ten-year schedule, FY2022 to FY2025: loss of ${esc(trendMillions(Math.abs(loss)))}, then ${esc(trendMillions(y2023))}, ${esc(trendMillions(y2024))}, and ${esc(moneyCompact(y2025))}.</p>`;
+}
+
+function trendMillions(cents: number): string {
+  return `$${(cents / 100 / 1_000_000).toFixed(2)}M`;
 }
 
 function sourceBlock(item: AmountItem, total: number): string {
@@ -384,6 +457,7 @@ export function donutChart<T extends { label: string; cents: number; pct: number
   centerNote: string,
   hrefFor: (item: T) => string,
   ariaLabel = centerNote,
+  emphasize?: (item: T) => boolean,
 ): string {
   const r = 72;
   const circumference = 2 * Math.PI * r;
@@ -393,17 +467,19 @@ export function donutChart<T extends { label: string; cents: number; pct: number
       const length = total > 0 ? (item.cents / total) * circumference : 0;
       const gap = length > 4 ? 0.9 : 0;
       const drawn = Math.max(length - gap, length > 0 ? 0.35 : 0);
-      const color = SLICE_COLORS[index % SLICE_COLORS.length];
+      const marked = emphasize?.(item) === true;
+      const color = marked ? "#8a5b12" : SLICE_COLORS[index % SLICE_COLORS.length];
       const href = hrefFor(item);
-      const arc = `<a href="${esc(href)}"><circle r="${r}" cx="100" cy="100" fill="none" stroke="${color}" stroke-width="26" stroke-dasharray="${drawn.toFixed(2)} ${(circumference - drawn).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 100 100)"><title>${esc(item.label)} ${esc(moneyCompact(item.cents))}</title></circle></a>`;
+      const arc = `<a${marked ? ` class="arc-mark"` : ""} href="${esc(href)}"><circle r="${r}" cx="100" cy="100" fill="none" stroke="${color}" stroke-width="26" stroke-dasharray="${drawn.toFixed(2)} ${(circumference - drawn).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 100 100)"><title>${esc(item.label)} ${esc(moneyCompact(item.cents))}</title></circle></a>`;
       offset += length;
       return item.cents > 0 ? arc : "";
     })
     .join("");
   const legend = items
     .map((item, index) => {
-      const color = SLICE_COLORS[index % SLICE_COLORS.length];
-      return `<a class="lg" href="${esc(hrefFor(item))}"><i style="background:${color}"></i><span class="donut-label">${esc(item.label)}</span><b>${item.pct.toFixed(1)}%<span class="donut-amt">${esc(moneyCompact(item.cents))}</span></b></a>`;
+      const marked = emphasize?.(item) === true;
+      const color = marked ? "#8a5b12" : SLICE_COLORS[index % SLICE_COLORS.length];
+      return `<a class="lg${marked ? " lg-mark" : ""}" href="${esc(hrefFor(item))}"><i style="background:${color}"></i><span class="donut-label">${esc(item.label)}</span><b>${item.pct.toFixed(1)}%<span class="donut-amt">${esc(moneyCompact(item.cents))}</span></b></a>`;
     })
     .join("");
   return `<div class="donutwrap"><svg viewBox="0 0 200 200" class="donut" role="img" aria-label="${esc(ariaLabel)}">${arcs}<text x="100" y="96" text-anchor="middle" class="dn1">${esc(center)}</text><text x="100" y="116" text-anchor="middle" class="dn2">${esc(centerNote)}</text></svg><div class="lgs">${legend}</div></div>`;

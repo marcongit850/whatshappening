@@ -151,6 +151,14 @@ describe("published import", () => {
     expect(Math.round(classes.reduce((sum, value) => sum + value, 0) * 10)).toBe(1000);
     expect(ledger.beach.reduce((sum, item) => sum + item.cents, 0)).toBe(188_000_000);
     expect(ledger.reserves.totalCents).toBe(43_883_432_900);
+    const interest = ledger.income.find((item) => item.key === "interest");
+    expect(interest?.cents).toBe(1_460_579_200);
+    expect(ledger.interest.fy2025.reduce((sum, line) => sum + (line.earnedCents || 0), 0)).toBe(1_460_579_200);
+    expect(ledger.interest.majorEarnedCents).toBe(1_406_212_300);
+    expect(ledger.interest.majorBudgetCents).toBe(400_738_000);
+    expect(ledger.interest.fy2027Cents).toBe(545_656_400);
+    expect(ledger.interest.excludedSelfInsuranceCents).toBe(4_500_000);
+    expect(ledger.interest.trend.map((point) => point.cents)).toEqual([-308_949_400, 988_649_900, 1_626_552_600, 1_460_579_200]);
   });
 
   it("fails when published source shares do not add to the total", () => {
@@ -182,6 +190,13 @@ describe("published import", () => {
     expect(loaded.reserves.totalCents).toBe(ledger.reserves.totalCents);
     expect(loaded.beach.map((item) => item.cents)).toEqual(ledger.beach.map((item) => item.cents));
     expect(loaded.budgets.map((year) => year.adoptedCents)).toEqual(ledger.budgets.map((year) => year.adoptedCents));
+    expect(loaded.interest.fy2025.map((line) => [line.label, line.earnedCents, line.budgetCents])).toEqual(
+      ledger.interest.fy2025.map((line) => [line.label, line.earnedCents, line.budgetCents]),
+    );
+    expect(loaded.interest.fy2027.map((line) => [line.label, line.budgetCents])).toEqual(
+      ledger.interest.fy2027.map((line) => [line.label, line.budgetCents]),
+    );
+    expect(loaded.interest.trend).toEqual(ledger.interest.trend);
   });
 
   it("writes a validated SQL file from the official source files", () => {
@@ -236,6 +251,34 @@ describe("revenue and reserves pages", () => {
     expect(revenue.match(/General Fund account 329004\./g)?.length).toBe(3);
     expect(reserves).not.toContain("The commissioners voted to use this for a stated purpose. The commissioners voted");
     expect(revenue).toContain("How much is in savings");
+    expect(revenue).toContain("Interest and investment earnings");
+    expect(revenue).toContain("The county budgets far less interest than it earns. In FY2025 the six major funds budgeted about $4.0M and earned $14.1M.");
+    expect(revenue).toContain("$4,722,609");
+    expect(revenue).toContain("$472,941");
+    expect(revenue).toContain("$14,062,123");
+    expect(revenue).toContain("$4,007,380");
+    expect(revenue).toContain("Smaller funds");
+    expect(revenue).toContain("Not combined");
+    expect(revenue).toContain("Sheriff fund");
+    expect(revenue).toContain("$2,205,000");
+    expect(revenue).toContain("$1,650,000");
+    expect(revenue).toContain("$1,500,000");
+    expect(revenue).toContain("$101,564");
+    expect(revenue).toContain("Other funds");
+    expect(revenue).toContain("$45,000");
+    expect(revenue).toContain("valued at quoted market");
+    expect(revenue).toContain("FY2022 was a loss, so the audited figure is not only cash interest.");
+    expect(revenue).toContain("offset any projected revenue shortfalls in the budget.");
+    expect(revenue).toContain("loss of $3.09M, then $9.89M, $16.27M, and $14.6M.");
+    expect(revenue).toContain('href="/reserves#cash"');
+    expect(revenue).toContain('class="lg lg-mark"');
+    expect(revenue).toContain('stroke="#8a5b12"');
+    const budgetsAt = revenue.indexOf('id="budgets"');
+    const budgetSlice = budgetsAt >= 0 ? revenue.slice(budgetsAt, revenue.indexOf('id="bed-collections"')) : "";
+    expect(budgetSlice).not.toContain("Interest and investment earnings");
+    expect(budgetSlice).not.toContain("bundled with miscellaneous");
+    expect(reserves).toContain('id="cash"');
+    expect(reserves).toContain('href="/revenue#interest"');
     expect(revenue).toContain("<svg");
     expect(reserves).toContain("Audited year-end balance, not a live balance");
     expect(reserves).toContain('href="/funds/111"');

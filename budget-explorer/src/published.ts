@@ -119,6 +119,31 @@ export interface PublishedLedger {
   trend: { year: number; cents: number }[];
   trendSourceUrl: string;
   trendPages: string;
+  interest: InterestReport;
+}
+
+export interface InterestLine {
+  key: string;
+  label: string;
+  fundCode: string;
+  earnedCents: number | null;
+  budgetCents: number | null;
+}
+
+export interface InterestReport {
+  fy2025: InterestLine[];
+  majorEarnedCents: number;
+  majorBudgetCents: number;
+  fy2027: InterestLine[];
+  fy2027Cents: number;
+  excludedSelfInsuranceCents: number;
+  trend: { year: number; cents: number }[];
+  budgetSourceUrl: string;
+  budgetPages: string;
+  fy2027SourceUrl: string;
+  fy2027Pages: string;
+  trendSourceUrl: string;
+  trendPages: string;
 }
 
 export interface PublishedRow {
@@ -371,6 +396,7 @@ export function buildLedger(revenue: unknown, reserves: unknown, beach: unknown)
     trend: trend.years,
     trendSourceUrl: trend.sourceUrl,
     trendPages: trend.pages,
+    interest: buildInterest(revenue, incomePack.income.find((item) => item.key === "interest")?.cents || 0),
   };
 }
 
@@ -741,6 +767,73 @@ export function rowsFromLedger(ledger: PublishedLedger): PublishedRow[] {
       detail: "",
     });
   });
+  const interest = ledger.interest;
+  interest.fy2025.forEach((line, index) => {
+    push({
+      section: "interest_line",
+      itemKey: line.key,
+      parentKey: "2025",
+      label: line.label,
+      amountCents: line.earnedCents || 0,
+      sortOrder: index,
+      basis: "audited_actual",
+      fiscalYear: 2025,
+      fundCode: line.fundCode,
+      status: "Audited actual",
+      sourceUrl: interest.budgetSourceUrl,
+      sourcePages: interest.budgetPages,
+      detail: line.budgetCents == null ? "" : String(line.budgetCents),
+    });
+  });
+  interest.fy2027.forEach((line, index) => {
+    push({
+      section: "interest_line",
+      itemKey: line.key,
+      parentKey: "2027",
+      label: line.label,
+      amountCents: line.budgetCents || 0,
+      sortOrder: index,
+      basis: "budget",
+      fiscalYear: 2027,
+      fundCode: line.fundCode,
+      status: "Budget",
+      sourceUrl: interest.fy2027SourceUrl,
+      sourcePages: interest.fy2027Pages,
+      detail: "",
+    });
+  });
+  interest.trend.forEach((point, index) => {
+    push({
+      section: "interest_trend",
+      itemKey: String(point.year),
+      parentKey: "",
+      label: String(point.year),
+      amountCents: point.cents,
+      sortOrder: index,
+      basis: "audited_actual",
+      fiscalYear: point.year,
+      fundCode: "",
+      status: "Audited actual",
+      sourceUrl: interest.trendSourceUrl,
+      sourcePages: interest.trendPages,
+      detail: "",
+    });
+  });
+  push({
+    section: "interest_meta",
+    itemKey: "excluded",
+    parentKey: "",
+    label: "Self-Insurance interest left out of the adopted budget",
+    amountCents: interest.excludedSelfInsuranceCents,
+    sortOrder: 0,
+    basis: "budget",
+    fiscalYear: 2027,
+    fundCode: "503",
+    status: "Excluded",
+    sourceUrl: interest.fy2027SourceUrl,
+    sourcePages: interest.fy2027Pages,
+    detail: "",
+  });
   return rows;
 }
 
@@ -872,6 +965,74 @@ export function ledgerFromRows(asOf: string, rows: PublishedRow[]): PublishedLed
     trend: of("trend").map((row) => ({ year: row.fiscalYear, cents: row.amountCents })),
     trendSourceUrl: of("trend")[0]?.sourceUrl || "",
     trendPages: of("trend")[0]?.sourcePages || "",
+    interest: interestFromRows(rows),
+  };
+}
+
+function interestFromRows(rows: PublishedRow[]): InterestReport {
+  const lines = rows.filter((row) => row.section === "interest_line");
+  if (!lines.length) return emptyInterest();
+  const fy2025 = lines
+    .filter((row) => row.parentKey === "2025")
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((row) => ({
+      key: row.itemKey,
+      label: row.label,
+      fundCode: row.fundCode,
+      earnedCents: row.amountCents,
+      budgetCents: row.detail ? Number(row.detail) : null,
+    }));
+  const fy2027 = lines
+    .filter((row) => row.parentKey === "2027")
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((row) => ({
+      key: row.itemKey,
+      label: row.label,
+      fundCode: row.fundCode,
+      earnedCents: null,
+      budgetCents: row.amountCents,
+    }));
+  const majors = fy2025.filter((line) => line.budgetCents != null);
+  const trend = rows
+    .filter((row) => row.section === "interest_trend")
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((row) => ({ year: row.fiscalYear, cents: row.amountCents }));
+  const excluded = rows.find((row) => row.section === "interest_meta" && row.itemKey === "excluded");
+  const budgetRow = lines.find((row) => row.parentKey === "2025");
+  const adoptedRow = lines.find((row) => row.parentKey === "2027");
+  const trendRow = rows.find((row) => row.section === "interest_trend");
+  return {
+    fy2025,
+    majorEarnedCents: sum(majors.map((line) => line.earnedCents || 0)),
+    majorBudgetCents: sum(majors.map((line) => line.budgetCents || 0)),
+    fy2027,
+    fy2027Cents: sum(fy2027.map((line) => line.budgetCents || 0)),
+    excludedSelfInsuranceCents: excluded?.amountCents || 0,
+    trend,
+    budgetSourceUrl: budgetRow?.sourceUrl || "",
+    budgetPages: budgetRow?.sourcePages || "",
+    fy2027SourceUrl: adoptedRow?.sourceUrl || "",
+    fy2027Pages: adoptedRow?.sourcePages || "",
+    trendSourceUrl: trendRow?.sourceUrl || "",
+    trendPages: trendRow?.sourcePages || "",
+  };
+}
+
+function emptyInterest(): InterestReport {
+  return {
+    fy2025: [],
+    majorEarnedCents: 0,
+    majorBudgetCents: 0,
+    fy2027: [],
+    fy2027Cents: 0,
+    excludedSelfInsuranceCents: 0,
+    trend: [],
+    budgetSourceUrl: "",
+    budgetPages: "",
+    fy2027SourceUrl: "",
+    fy2027Pages: "",
+    trendSourceUrl: "",
+    trendPages: "",
   };
 }
 
@@ -1004,7 +1165,7 @@ function buildIncome(revenue: unknown): { totalCents: number; income: AmountItem
       label: "Interest earned",
       dollars: interest,
       status: "Audited actual",
-      detail: `Interest is earnings on investments. The Tourist Development fund earned ${dollars(touristInterest)} of it.`,
+      detail: `Interest is earnings on investments. The audit line is investment earnings. The Tourist Development fund earned ${dollars(touristInterest)} of it. The earnings are recorded in the fund that earned them. The audit says investment earnings are used to offset any projected revenue shortfalls in the budget. Investments are reported at fair value, and U.S. Treasury notes are valued at quoted market. FY2022 was a loss, so the audited figure is not only cash interest.`,
     },
     {
       key: "other",
@@ -1284,6 +1445,104 @@ function budgetYear(
     }),
   );
   return { fiscalYear: year, basisLabel, totalCents: tableCents, adoptedCents, sourceUrl, sourcePages, detail, items, aside };
+}
+
+const INTEREST_LABEL: Record<string, string> = {
+  General: "General",
+  "County Transportation": "Transportation",
+  "Fine and Forfeiture (Sheriff funding)": "Fine and Forfeiture",
+  "Tourist Development": "Tourist Development",
+  "Solid Waste Landfill": "Solid Waste Landfill",
+  "Capital Projects": "Capital Projects",
+  "Nonmajor governmental": "Smaller funds",
+};
+
+function buildInterest(revenue: unknown, interestCents: number): InterestReport {
+  const file = asRecord(revenue, "revenue file");
+  const fund = asRecord(file.fy2025_actual_by_fund_and_source, "FY2025 fund statement");
+  const funds = stringList(fund.funds, "FY2025 funds");
+  const matrix = asRecord(fund.revenue, "FY2025 revenue matrix");
+  const earned = vector(matrix["Investment earnings"], "Investment earnings", funds.length);
+  const budgetPack = asRecord(fund.investment_earnings_budget, "FY2025 interest budgets");
+  const budgetRows = asList(budgetPack.by_fund, "FY2025 interest budget funds").map((item) => asRecord(item, "interest budget fund"));
+  const budgetByName = new Map(budgetRows.map((row) => [str(row.fund, "interest budget fund"), num(row.budget, "interest budget")]));
+  const fy2025: InterestLine[] = [];
+  for (let index = 0; index < funds.length - 1; index += 1) {
+    const name = funds[index];
+    const budget = budgetByName.get(name);
+    fy2025.push({
+      key: slug(INTEREST_LABEL[name] || name),
+      label: INTEREST_LABEL[name] || name,
+      fundCode: FUND_CODE[name] || "",
+      earnedCents: earned[index] * 100,
+      budgetCents: budget == null ? null : budget * 100,
+    });
+  }
+  fy2025.sort((a, b) => (b.earnedCents || 0) - (a.earnedCents || 0));
+  if (sum(fy2025.map((line) => line.earnedCents || 0)) !== interestCents) {
+    throw new ReconciliationError("Interest by fund does not match the audited investment earnings total.");
+  }
+  for (const name of budgetByName.keys()) {
+    if (!funds.includes(name)) throw new ReconciliationError(`Interest budget names a fund that is not on the audit: ${name}.`);
+  }
+  const majors = fy2025.filter((line) => line.budgetCents != null);
+  const majorEarnedCents = sum(majors.map((line) => line.earnedCents || 0));
+  const majorBudgetCents = sum(majors.map((line) => line.budgetCents || 0));
+  if (majors.length !== 6 || majorEarnedCents !== 1_406_212_300 || majorBudgetCents !== 400_738_000) {
+    throw new ReconciliationError("The six major funds' interest earned and budget do not match the audit.");
+  }
+  const smaller = fy2025.find((line) => line.budgetCents == null);
+  if (!smaller || smaller.earnedCents !== 54_366_900) {
+    throw new ReconciliationError("Smaller-fund interest does not match the audit.");
+  }
+  const fy2027File = asRecord(file.fy2027_adopted_by_source, "FY2027 budget");
+  const adopted = asRecord(fy2027File.interest_by_fund, "FY2027 interest by fund");
+  const adoptedLines = asList(adopted.lines, "FY2027 interest funds").map((item) => asRecord(item, "FY2027 interest fund"));
+  const fy2027: InterestLine[] = adoptedLines.map((row) => ({
+    key: slug(str(row.name, "FY2027 interest name")),
+    label: str(row.name, "FY2027 interest name"),
+    fundCode: str(row.fund, "FY2027 interest fund code"),
+    earnedCents: null,
+    budgetCents: num(row.amount, "FY2027 interest amount") * 100,
+  }));
+  fy2027.push({ key: "other-funds", label: "Other funds", fundCode: "", earnedCents: null, budgetCents: 0 });
+  const fy2027Cents = sum(fy2027.map((line) => line.budgetCents || 0));
+  const excluded = num(adopted.excluded_self_insurance, "Self-Insurance interest");
+  const gross = num(adopted.gross_including_self_insurance, "Interest including Self-Insurance");
+  if (excluded !== 45_000 || fy2027Cents + excluded * 100 !== gross * 100) {
+    throw new ReconciliationError("FY2027 interest by fund does not reconcile after leaving out Self-Insurance.");
+  }
+  const category = asList(fy2027File.by_category, "FY2027 categories")
+    .map((item) => asRecord(item, "FY2027 category"))
+    .find((item) => str(item.category, "category") === "Interest earned");
+  if (!category || num(category.fy2027_adopted, "FY2027 interest") * 100 !== fy2027Cents) {
+    throw new ReconciliationError("FY2027 interest by fund does not match the Interest earned budget category.");
+  }
+  const trendFile = asRecord(file.ten_year_trend, "trend");
+  const years = asList(trendFile.years, "trend years").map((year) => num(year, "year"));
+  const series = vector(asRecord(trendFile.series, "trend series")["Investment earnings"], "Investment earnings trend", years.length);
+  const expected: Record<number, number> = { 2022: -3_089_494, 2023: 9_886_499, 2024: 16_265_526 };
+  const trend = [2022, 2023, 2024].map((year) => {
+    const at = years.indexOf(year);
+    if (at < 0 || series[at] !== expected[year]) throw new ReconciliationError(`FY${year} investment earnings do not match the ten-year schedule.`);
+    return { year, cents: series[at] * 100 };
+  });
+  trend.push({ year: 2025, cents: interestCents });
+  return {
+    fy2025,
+    majorEarnedCents,
+    majorBudgetCents,
+    fy2027,
+    fy2027Cents,
+    excludedSelfInsuranceCents: excluded * 100,
+    trend,
+    budgetSourceUrl: str(budgetPack.source, "interest budget source"),
+    budgetPages: str(budgetPack.pages, "interest budget pages"),
+    fy2027SourceUrl: str(adopted.source, "FY2027 interest source"),
+    fy2027Pages: str(adopted.pages, "FY2027 interest pages"),
+    trendSourceUrl: ACFR_2025,
+    trendPages: "PDF p.184",
+  };
 }
 
 function buildBeach(beach: unknown, revenue: unknown): { lines: AmountItem[]; note: string; sources: string[] } {

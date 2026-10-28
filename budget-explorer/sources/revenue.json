@@ -208,6 +208,18 @@
    "Solid Waste Landfill": "Taxes = the one-cent small county discretionary sales surtax, 41,566,141 (PDF p.64 fund description, p.30)",
    "Nonmajor governmental": "Taxes 1,714,783 = N. Walton Mosquito Control District property tax (PDF p.135); permits 4,156,539 = Building Department (PDF p.135)",
    "County Transportation": "Taxes = local option and voted fuel taxes (PDF p.64)"
+  },
+  "investment_earnings_budget": {
+   "source": "https://www.flauditor.gov/pages/county_efile%20rpts/2025%20walton%20county.pdf",
+   "pages": "PDF pp.49-55 (General, Transportation, Fine and Forfeiture, Tourist Development, Solid Waste Landfill) and PDF p.140 (Capital Projects). Original budget equals final budget on each line.",
+   "by_fund": [
+    {"fund": "Tourist Development", "budget": 472941},
+    {"fund": "General", "budget": 1593123},
+    {"fund": "Fine and Forfeiture (Sheriff funding)", "budget": 690000},
+    {"fund": "County Transportation", "budget": 437588},
+    {"fund": "Solid Waste Landfill", "budget": 350000},
+    {"fund": "Capital Projects", "budget": 463728}
+   ]
   }
  },
  "fy2025_plain_language_by_source": {
@@ -669,6 +681,18 @@
     "amount": 43225
    }
   ],
+  "interest_by_fund": {
+   "source": "https://budget-waltoncountyfl.com/assets/data/revenues.csv",
+   "pages": "Accounts 361100 to 361111",
+   "excluded_self_insurance": 45000,
+   "gross_including_self_insurance": 5501564,
+   "lines": [
+    {"fund": "001", "name": "General", "amount": 2205000},
+    {"fund": "101", "name": "Transportation", "amount": 1650000},
+    {"fund": "107", "name": "Sheriff fund", "amount": 1500000},
+    {"fund": "112", "name": "Solid Waste", "amount": 101564}
+   ]
+  },
   "lines": [
    {
     "code": "311000",
