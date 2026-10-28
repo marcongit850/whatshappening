@@ -534,10 +534,11 @@ function orgVendorWhereSql(): string {
            AND NOT ${CONSTITUTIONAL_SQL}`;
 }
 
+/** Longest stored name per vendor, via ROW_NUMBER, then one aggregate. Same rows as the previous per-group sort. */
 export async function organizationVendors(db: D1Database, importId: number, asOf: string, limit = 10): Promise<OrgVendor[]> {
   const rows = await db
     .prepare(
-      `WITH scoped AS (
+      `WITH scoped AS MATERIALIZED (
          SELECT
            CASE WHEN trim(COALESCE(vendor_number, '')) = '' THEN vendor_name ELSE vendor_number END AS vendor_key,
            vendor_number,
@@ -546,20 +547,25 @@ export async function organizationVendors(db: D1Database, importId: number, asOf
            object_code
          FROM payments
          WHERE ${orgVendorWhereSql()}
+       ),
+       ranked AS (
+         SELECT
+           vendor_key,
+           vendor_name,
+           ROW_NUMBER() OVER (
+             PARTITION BY vendor_key
+             ORDER BY length(trim(vendor_name)) DESC, vendor_name DESC
+           ) AS rn
+         FROM scoped
        )
-       SELECT s.vendor_key AS vendor_key,
-              MAX(s.vendor_number) AS vendor_number,
-              (
-                SELECT s2.vendor_name FROM scoped s2
-                WHERE s2.vendor_key = s.vendor_key AND trim(COALESCE(s2.vendor_name, '')) != ''
-                ORDER BY length(trim(s2.vendor_name)) DESC, s2.vendor_name DESC
-                LIMIT 1
-              ) AS vendor_name,
-              SUM(s.amount_cents) AS cents,
+       SELECT MAX(scoped.vendor_number) AS vendor_number,
+              MAX(ranked.vendor_name) AS vendor_name,
+              SUM(scoped.amount_cents) AS cents,
               COUNT(*) AS payments,
-              SUM(CASE WHEN s.object_code = '561000' THEN s.amount_cents ELSE 0 END) AS land_cents
-       FROM scoped s
-       GROUP BY s.vendor_key
+              SUM(CASE WHEN scoped.object_code = '561000' THEN scoped.amount_cents ELSE 0 END) AS land_cents
+       FROM scoped
+       LEFT JOIN ranked ON ranked.vendor_key = scoped.vendor_key AND ranked.rn = 1
+       GROUP BY scoped.vendor_key
        ORDER BY cents DESC
        LIMIT ?`,
     )

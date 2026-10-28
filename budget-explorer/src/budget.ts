@@ -170,8 +170,12 @@ export interface VendorSpendRow {
   checks: number;
 }
 
+/**
+ * Longest stored name per vendor, via ROW_NUMBER, then one aggregate.
+ * A blank trimmed name is not displayed, and it still counts in the totals.
+ */
 export const TOP_VENDOR_SQL = `
-WITH scoped AS (
+WITH scoped AS MATERIALIZED (
   SELECT
     CASE WHEN trim(COALESCE(vendor_number, '')) = '' THEN vendor_name ELSE vendor_number END AS vendor_key,
     vendor_name,
@@ -187,32 +191,29 @@ WITH scoped AS (
     AND (? = 1 OR is_person_name = 0)
     AND (? = '' OR fund_code = ?)
     AND (? = '' OR dept_code = ?)
+),
+ranked AS (
+  SELECT
+    vendor_key,
+    vendor_name,
+    ROW_NUMBER() OVER (
+      PARTITION BY vendor_key
+      ORDER BY length(trim(vendor_name)) DESC, vendor_name DESC
+    ) AS rn
+  FROM scoped
+  WHERE trim(COALESCE(vendor_name, '')) != ''
 )
 SELECT
-  (
-    SELECT s2.vendor_name FROM scoped s2
-    WHERE s2.vendor_key = s.vendor_key AND trim(COALESCE(s2.vendor_name, '')) != ''
-    ORDER BY length(trim(s2.vendor_name)) DESC, s2.vendor_name DESC
-    LIMIT 1
-  ) AS vendor_name,
-  COALESCE(SUM(s.amount_cents), 0) AS cents,
+  MAX(ranked.vendor_name) AS vendor_name,
+  COALESCE(SUM(scoped.amount_cents), 0) AS cents,
   COUNT(*) AS lines,
-  COUNT(DISTINCT CASE WHEN trim(COALESCE(s.check_number, '')) != '' THEN s.check_number END) AS checks,
-  COALESCE(SUM(CASE WHEN s.object_code = '561000' THEN s.amount_cents ELSE 0 END), 0) AS land_cents
-FROM scoped s
-GROUP BY s.vendor_key
+  COUNT(DISTINCT CASE WHEN trim(COALESCE(scoped.check_number, '')) != '' THEN scoped.check_number END) AS checks,
+  COALESCE(SUM(CASE WHEN scoped.object_code = '561000' THEN scoped.amount_cents ELSE 0 END), 0) AS land_cents
+FROM scoped
+LEFT JOIN ranked ON ranked.vendor_key = scoped.vendor_key AND ranked.rn = 1
+GROUP BY scoped.vendor_key
 ORDER BY cents DESC
 LIMIT 80
-`;
-
-export const VENDOR_NAME_SQL = `
-SELECT vendor_name AS name
-FROM payments
-WHERE import_id = ? AND is_person_name = 0 AND vendor_name != '' AND length(vendor_name) >= 12
-UNION
-SELECT description AS name
-FROM payments
-WHERE import_id = ? AND description != '' AND length(description) BETWEEN 12 AND 80
 `;
 
 export async function loadBudgetFacts(db: D1Database, importId: number): Promise<BudgetFacts> {
@@ -350,11 +351,6 @@ export async function loadLargestPayments(
   const netByVendor = new Map<string, number>();
   for (const row of nets.results || []) netByVendor.set(row.vendor_name, Number(row.cents) || 0);
   return netPaymentReversals([...(positives.results || []), ...(negatives.results || [])], netByVendor);
-}
-
-export async function loadVendorNames(db: D1Database, importId: number): Promise<string[]> {
-  const rows = await db.prepare(VENDOR_NAME_SQL).bind(importId, importId).all<{ name: string }>();
-  return (rows.results || []).map((row) => row.name);
 }
 
 /** Payments to county offices that are not already counted as object 591000 transfers. */

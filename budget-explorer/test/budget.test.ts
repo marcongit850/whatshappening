@@ -125,13 +125,13 @@ describe("vendor names", () => {
   });
 
   it("shows the report's name and marks a 20 character cutoff", () => {
-    const display = buildVendorIndex(["WALTON COUNTY SHERIFF OFFICE", "ZEHNDER COMMUNICATIONS INC", "FLORIDA DEPARTMENT OF REVENUE"]);
+    const display = buildVendorIndex();
     expect(display("WALTON COUNTY SHERIF").text).toBe("Walton County Sherif");
     expect(display("ZEHNDER COMMUNICATIO").text).toBe("Zehnder Communicatio");
     expect(display("ZEHNDER COMMUNICATIO").shortened).toBe(true);
     expect(display("JANE Q PUBLIC").text).toBe("JANE Q PUBLIC");
     expect(display("Payroll (batch total)").text).toBe("Payroll (batch total)");
-    const alone = buildVendorIndex([]);
+    const alone = buildVendorIndex();
     expect(alone("ZEHNDER COMMUNICATIO")).toEqual({ text: "Zehnder Communicatio", shortened: true });
     expect(alone("Adkinson Law Firm Ll")).toEqual({ text: "Adkinson Law Firm Ll", shortened: true });
     expect(alone("C&A Landscape Mainte").text).toBe("C&A Landscape Mainte");
