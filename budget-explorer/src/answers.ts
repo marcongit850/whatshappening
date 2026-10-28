@@ -52,11 +52,15 @@ export function publicFactText(facts: BudgetFacts, asOfLabel: string): string {
   ].join(" ");
 }
 
+/** How the adopted budget grew to the mid-year limit. Open purchase orders are not part of this. */
+export const LIMIT_GROWTH_NOTE =
+  "The Nov 24, 2025 carry-forward resolution (Resolution 2025-82) totals $185,438,075.92 (about $185.4M): $144,713,465.48 cash carried forward for unfinished projects and open purchase orders plus $40,724,610.44 of grants carried over. About $2.7M of new grants are visible in the report. About $7.3M is not itemized in the records we have. Total growth is $195,495,223.26. The higher limit is a ceiling, not a spending plan.";
+
 export function countyBudgetAnswer(facts: BudgetFacts, asOfLabel: string): string {
   const takeaway = `Commissioners adopted a ${moneyWords(facts.adopted)} budget. Through ${asOfLabel} the county's books show ${moneyWords(facts.spent)} paid out.`;
   const raised =
     facts.current > facts.adopted
-      ? ` Budget limits were raised to ${moneyWords(facts.current)} during the year after commissioners re-approved about $192M of unfinished projects, grants and last-year commitments (Resolution 2025-82). The higher limit is a ceiling, not a spending plan.`
+      ? ` Budget limits were raised to ${moneyWords(facts.current)} during the year. ${LIMIT_GROWTH_NOTE}`
       : "";
   const rest = ` About ${moneyWords(facts.transfer)} moved between county funds and is not counted again.`;
   return `${takeaway}${raised}${rest}`;
