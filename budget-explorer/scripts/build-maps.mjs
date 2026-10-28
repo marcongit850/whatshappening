@@ -242,6 +242,14 @@ for (const item of stateFeatures) {
   const projected = mapRings(stateRings.get(item.id) || [], ([x, y]) => [shiftX(x), shiftY(y)]);
   let d = encode(projected);
   const box = bboxOf(projected);
+  const cx = Math.round((box.minX + box.maxX) / 2);
+  const cy = Math.round((box.minY + box.maxY) / 2);
+  let silhouette = {
+    x: box.minX,
+    y: box.minY,
+    w: Math.max(1, box.maxX - box.minX),
+    h: Math.max(1, box.maxY - box.minY),
+  };
   let hit;
   if (fips === "11") {
     const raw = stateRings.get(item.id) || [];
@@ -254,10 +262,16 @@ for (const item of stateFeatures) {
     const oy = dest.y + (dest.h - drawnH) / 2;
     const inset = mapRings(raw, ([x, y]) => [Math.round(ox + (x - src.minX) * scale), Math.round(oy + (y - src.minY) * scale)]);
     d += encode(inset);
-  } else if (Math.min(box.maxX - box.minX, box.maxY - box.minY) < 22) {
-    hit = { cx: Math.round((box.minX + box.maxX) / 2), cy: Math.round((box.minY + box.maxY) / 2), r: 16 };
+    silhouette = { x: dcBox.x, y: dcBox.y, w: dcBox.w, h: dcBox.h };
+    hit = { cx, cy, r: 28 };
+  } else if (fips === "44" || fips === "10") {
+    hit = { cx, cy, r: 32 };
+  } else if (fips === "15") {
+    hit = { cx, cy, r: 42 };
+  } else if (Math.min(box.maxX - box.minX, box.maxY - box.minY) < 28) {
+    hit = { cx, cy, r: 24 };
   }
-  states.push({ fips, abbr, name, slug, d, ...(hit ? { hit } : {}) });
+  states.push({ fips, abbr, name, slug, d, box: silhouette, ...(hit ? { hit } : {}) });
 }
 
 states.sort((a, b) => a.fips.localeCompare(b.fips));
@@ -320,7 +334,15 @@ for (const state of states) {
       const cy = project([0, (rawBox.minY + rawBox.maxY) / 2])[1];
       rings = [squareAt(cx, cy, 8)];
     }
-    counties.push({ fips: row.fips, slug, name: displayName(row.row.name, kind), kind, d: encode(rings) });
+    const drawn = bboxOf(rings);
+    const county = { fips: row.fips, slug, name: displayName(row.row.name, kind), kind, d: encode(rings) };
+    if (slug === "walton") {
+      const midX = Math.round((drawn.minX + drawn.maxX) / 2);
+      const midY = Math.round((drawn.minY + drawn.maxY) / 2);
+      county.label = { x: midX, y: Math.max(18, drawn.minY - 6) };
+      county.hit = { cx: midX, cy: midY, r: 56 };
+    }
+    counties.push(county);
   }
   counties.sort((a, b) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug));
   const payload = { viewBox: `0 0 ${width} ${height}`, counties };
@@ -333,9 +355,15 @@ for (const state of states) {
   if (!stateByFips.has(state.fips)) throw new Error(state.name);
 }
 
+function insetFrame(abbr, label) {
+  const state = states.find((item) => item.abbr === abbr);
+  const box = state.box;
+  return { id: abbr.toLowerCase(), label, x: box.x - 4, y: box.y - 22, w: box.w + 8, h: box.h + 26 };
+}
+
 const stateFile = {
   viewBox: `0 0 ${viewWidth} ${viewHeight}`,
-  insets: [{ id: "dc", label: "DC", x: dcBox.x, y: dcBox.y, w: dcBox.w, h: dcBox.h }],
+  insets: [insetFrame("AK", "AK"), insetFrame("HI", "HI"), { id: "dc", label: "DC", x: dcBox.x, y: dcBox.y, w: dcBox.w, h: dcBox.h }],
   states,
 };
 const statesJson = JSON.stringify(stateFile);

@@ -4,7 +4,7 @@ Private prototype for reading a Walton County year to date budget report. It is 
 
 The Walton County pages are not indexed. On budget.whatshappeningnetwork.com and the workers.dev host, every response sends `X-Robots-Tag: noindex, nofollow, noarchive`, pages include a robots meta tag, and `robots.txt` disallows all crawlers. Every page except the sign-in screen and `/report` requires the shared site password. `/report` is how a visitor flags a number or shares an idea. It stays `noindex`.
 
-howtheyspendmytaxes.com and www.howtheyspendmytaxes.com use this same Worker as a public front door. `/` is a national page with a Census state map and a state and county picker. Florida is the only state with a county map. Walton County is the only live county. Every other state opens a coming soon page with a request form. The dashboard moves to `/walton` behind the same password. Search engines may index `/`, `/florida`, and the logged-out `/walton` page. Other state pages and coming soon county pages stay noindex. See `ARCHITECTURE.md` in this folder. Map paths are regenerated with `npm run maps`.
+howtheyspendmytaxes.com and www.howtheyspendmytaxes.com use this same Worker as a public front door. `/` is a national page with a Census state map and a state and county picker. Florida is the only state with a county map. Walton County is the only live county and the only clickable county on that map. Every other state opens a coming soon page with a request form. The dashboard moves to `/walton` behind the same password. Search engines may index `/`, `/florida`, and the logged-out `/walton` page. Other state pages and coming soon county pages stay noindex. See `ARCHITECTURE.md` in this folder. Map paths are regenerated with `npm run maps`.
 
 ## Architecture
 

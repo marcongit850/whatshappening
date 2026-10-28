@@ -14,6 +14,8 @@ export interface CountyShape {
   name: string;
   kind: CountyKind;
   d: string;
+  label?: { x: number; y: number };
+  hit?: StateHit;
 }
 
 export interface CountyFile {
@@ -33,6 +35,7 @@ export interface StateShape {
   name: string;
   slug: string;
   d: string;
+  box: { x: number; y: number; w: number; h: number };
   hit?: StateHit;
 }
 

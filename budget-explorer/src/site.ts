@@ -12,7 +12,7 @@ import {
 } from "./host";
 import type { AppEnv } from "./env";
 import { handleCountyForm, handleReport } from "./intake";
-import { countiesIn, countyByPath, countyChoices, countyHref, stateBySlug } from "./places";
+import { countiesIn, countyChoices, stateBySlug } from "./places";
 import { applyPublicHeaders, publicHtml, publicJson, publicRedirect } from "./public-http";
 import { safeRedirectLocation, unsafeRequestPath } from "./redirect-path";
 import { renderAboutSite, renderPublicHome, renderPublicMissing, renderRequestStart, renderStatePage, renderWaltonLanding } from "./public-page";
@@ -91,10 +91,9 @@ async function taxesRequest(c: Context<{ Bindings: AppEnv }>, dashboard: Dashboa
   const countyMatch = /^\/([a-z-]+)\/([a-z0-9-]+)$/.exec(pathname);
   if (countyMatch && !pathname.startsWith(`${WALTON_PREFIX}/`) && pathname !== WALTON_PREFIX) {
     const state = stateBySlug(countyMatch[1]);
-    const county = state ? countyByPath(state.slug, countyMatch[2]) : undefined;
-    if (state && county) {
-      if (county.live && county.href) return redirect(county.href, 301);
-      return handleCountyForm(c.req.raw, c.env, { action: pathname, state, county });
+    if (state?.slug === "florida") {
+      if (countyMatch[2] === "walton") return redirect("/walton", 301);
+      return redirect("/florida/request", 301);
     }
   }
 
@@ -127,9 +126,9 @@ function pickResponse(c: Context<{ Bindings: AppEnv }>): Response {
   if (!state) return redirect("/", 303);
   if (url.searchParams.get("to") === "request") return redirect(`/${state.slug}/request`, 303);
   const countySlug = (url.searchParams.get("county") || "").toLowerCase();
-  if (/^[a-z0-9-]+$/.test(countySlug)) {
-    const county = countyByPath(state.slug, countySlug);
-    if (county) return redirect(countyHref(county), 303);
+  if (state.slug === "florida" && /^[a-z0-9-]+$/.test(countySlug)) {
+    if (countySlug === "walton") return redirect("/walton", 303);
+    if (countySlug === "request") return redirect("/florida/request", 303);
   }
   return redirect(`/${state.slug}`, 303);
 }
