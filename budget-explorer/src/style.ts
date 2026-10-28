@@ -865,7 +865,16 @@ a.drow::after, a.vrow::after, a.brow::after, .reserve-link::after {
   color: var(--muted);
   font-weight: 700;
 }
-.cmp p:has(> span):has(> b) > b { font-weight: 700; text-align: right; color: var(--navy); }
+.cmp p:has(> span):has(> b) > b { font-size: 16px; font-weight: 700; text-align: right; color: var(--navy); }
+a.lg.lg-mark { background: #f8f1de; border-radius: 6px; padding: 4px 6px; font-weight: 700; }
+a.lg.lg-mark .donut-amt { font-size: 16px; color: var(--navy); font-weight: 700; }
+.interest-call { font-size: 16px; margin: 8px 0 0; }
+.interest-note, .interest-trend { font-size: 15px; margin: 6px 0; }
+.interest-table { width: 100%; border-collapse: collapse; margin: 4px 0 8px; }
+.interest-table th, .interest-table td { padding: 3px 8px 3px 0; font-size: 15px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+.interest-table .num { text-align: right; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--navy); }
+.interest-table th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.interest-table tr.interest-total td { font-weight: 700; }
 .holder-list b { margin-left: auto; font-weight: 700; text-align: right; }
 .chg-up { color: var(--up); font-weight: 700; }
 .chg-down { color: var(--down); font-weight: 700; }
