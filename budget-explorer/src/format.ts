@@ -7,6 +7,22 @@ export function esc(value: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
+/** First sentence of text that is already on the page. */
+export function firstSentence(value: string): string {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  const end = clean.search(/[.!?](?=\s|$)/);
+  return end === -1 ? clean : clean.slice(0, end + 1);
+}
+
+/** Gold question-mark control. The sentence must already exist on the page. */
+export function infoTip(id: string, sentence: string): string {
+  const text = firstSentence(sentence);
+  if (!text || text.toLowerCase() === "n/a") return "";
+  const slug = id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "tip";
+  return `<span class="tip"><button type="button" class="tip-btn" aria-label="What is this?" aria-expanded="false" aria-controls="tip-${esc(slug)}">?</button><span class="tip-pop" id="tip-${esc(slug)}" role="tooltip" hidden>${esc(text)}</span></span>`;
+}
+
 /** Display name for the body of water, when that phrase appears. */
 export function gulfName(value: string): string {
   return value.replace(/gulf of mexico/gi, "Gulf of America");
