@@ -80,7 +80,7 @@ import { uploadAllowed } from "./limits";
 import { parseReport } from "./parser";
 import { safeNext } from "./safe-next";
 import { loadPublishedLedger } from "./published-db";
-import { AI_MODEL, modelText } from "./qa";
+import { AI_MODEL, alignAnswer, modelText } from "./qa";
 import { isTaxesHost } from "./host";
 import { handleReport } from "./intake";
 import { BRAND_ASSETS, brandBody } from "./brand-files";
@@ -643,6 +643,7 @@ app.post("/ask", async (c) => {
     answer = "";
   }
   if (!answer) answer = "The question could not be answered just now. The records below are what the import contains for this question.";
+  answer = alignAnswer(question, answer, pack.records);
   const finalAnswer = await finalizeAnswer(c.env.DB, current.id, answer, pack.records, shown);
   return c.html(renderAsk({ row: current, csrf: session.csrf, question, answer: finalAnswer.answer, records: finalAnswer.records, error: "", isAdmin: isAdmin(c), showNames: shown }));
 });

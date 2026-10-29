@@ -2,7 +2,17 @@ import { TRANSFER_OBJECT } from "./budget";
 import { departmentRollups, fundRollups, vendorPaymentRows, type PaymentRow, type SearchFilters } from "./db";
 import { accountKey, moneyExact, pace } from "./format";
 import { QA_MAX_CHARS } from "./auth";
-import { QA_SYSTEM, mentionedCodes, nameMatchesQuestion, vendorTokens, type QaPack, type QaRecord } from "./qa";
+import {
+  QA_SYSTEM,
+  isInterestPaidAccount,
+  mentionedCodes,
+  nameMatchesQuestion,
+  questionMoneyIntent,
+  vendorTokens,
+  type MoneyIntent,
+  type QaPack,
+  type QaRecord,
+} from "./qa";
 import { isTransferDepartment } from "./overview";
 import { ORG_NAME_TOKENS, looksLikePersonName, sqlIsPersonName } from "./parser";
 import { vendorCompact, vendorCompactSql } from "./vendors";
@@ -662,12 +672,13 @@ async function sumAccounts(db: D1Database, importId: number, whereSql: string, b
   };
 }
 
-function factRecord(label: string, totals: AccountSum): QaRecord {
+function factRecord(label: string, totals: AccountSum, note = ""): QaRecord {
   const shown = totals.keys.slice(0, 8);
   const more = totals.keys.length > shown.length ? `, and ${totals.keys.length - shown.length} more` : "";
+  const extra = note ? ` ${note}` : "";
   return {
     kind: "total",
-    text: `FACT: ${label} spent ${moneyExact(totals.ytd)}. Revised budget ${moneyExact(totals.rev)}. Encumbered ${moneyExact(totals.enc)}. Available ${moneyExact(totals.avail)}. Account count ${totals.n}. Account keys: ${shown.join(", ")}${more}.`,
+    text: `FACT: ${label} spent ${moneyExact(totals.ytd)}. Revised budget ${moneyExact(totals.rev)}. Encumbered ${moneyExact(totals.enc)}. Available ${moneyExact(totals.avail)}. Account count ${totals.n}. Account keys: ${shown.join(", ")}${more}.${extra}`,
   };
 }
 
@@ -757,9 +768,239 @@ async function titleFact(db: D1Database, importId: number, question: string): Pr
   if (tokens.length < 1) return null;
   const score = tokenScoreSql("title", tokens);
   if (!score.needed) return null;
-  const totals = await sumAccounts(db, importId, `(${score.sql}) >= ?`, [...score.binds, score.needed]);
+  const where = `(${score.sql}) >= ?`;
+  const totals = await sumAccounts(db, importId, where, [...score.binds, score.needed]);
   if (!totals) return null;
+  const named = await db
+    .prepare(
+      `SELECT title, object_code FROM accounts
+       WHERE import_id = ? AND ${where} AND object_code != '${TRANSFER_OBJECT}'`,
+    )
+    .bind(importId, ...score.binds, score.needed)
+    .all<{ title: string | null; object_code: string }>();
+  const rows = named.results || [];
+  const interestPaid = rows.length > 0 && rows.every((row) => isInterestPaidAccount(row.title, row.object_code));
+  if (interestPaid) {
+    return factRecord(
+      `Interest paid (debt service), not interest earned. Accounts whose title matches ${tokens.join(", ")}`,
+      totals,
+      "These accounts are interest the county paid. They do not answer how much interest was earned.",
+    );
+  }
   return factRecord(`Accounts whose title matches ${tokens.join(", ")}`, totals);
+}
+
+interface PublishedFactRow {
+  section: string;
+  item_key: string;
+  parent_key: string;
+  label: string;
+  amount_cents: number;
+  basis: string;
+  fiscal_year: number;
+  fund_code: string;
+  status: string;
+  source_url: string;
+  source_pages: string;
+  detail: string;
+}
+
+const INCOME_TOPICS: { pattern: RegExp; key: string; noun: string; label: RegExp }[] = [
+  { pattern: /\b(interest|investment earnings)\b/i, key: "interest", noun: "interest and investment earnings", label: /interest|investment earning/i },
+  { pattern: /\bproperty tax(?:es)?\b/i, key: "property-taxes", noun: "property taxes", label: /property tax/i },
+  { pattern: /\bsales tax(?:es)?\b/i, key: "sales-taxes", noun: "sales taxes", label: /sales tax/i },
+  { pattern: /\b(bed tax|tourist(?: development)? tax)\b/i, key: "bed-tax", noun: "tourist (bed) tax", label: /bed tax|tourist/i },
+  { pattern: /\b(gas tax(?:es)?|fuel tax(?:es)?)\b/i, key: "gas-taxes", noun: "gas taxes", label: /gas tax|fuel tax/i },
+  { pattern: /\bgrants?\b/i, key: "grants", noun: "grants and other state or federal money", label: /grant/i },
+  { pattern: /\bfees\b/i, key: "fees", noun: "fees and charges", label: /^fees/i },
+  { pattern: /\bpermits?\b/i, key: "permits", noun: "permits and licenses", label: /permit/i },
+  { pattern: /\bfines\b/i, key: "fines", noun: "fines", label: /^fines/i },
+  { pattern: /\bother tax(?:es)?\b/i, key: "other-taxes", noun: "other taxes", label: /other tax/i },
+];
+
+function publishedCite(row: PublishedFactRow): string {
+  const parts = [row.status, row.source_pages, row.source_url].map((part) => (part || "").trim()).filter(Boolean);
+  return parts.join(", ") || "published county records";
+}
+
+function factLine(text: string): QaRecord {
+  return { kind: "total", text: `FACT: ${text}` };
+}
+
+function matchesTopic(topic: (typeof INCOME_TOPICS)[number], row: PublishedFactRow): boolean {
+  if (row.item_key === topic.key) return true;
+  if (topic.key === "interest" && topic.label.test(row.label)) return true;
+  return topic.label.test(row.label) && row.item_key !== "excluded";
+}
+
+async function loadPublishedRows(db: D1Database): Promise<PublishedFactRow[]> {
+  const snap = await db.prepare("SELECT id FROM published_snapshots ORDER BY id DESC LIMIT 1").first<{ id: number }>();
+  if (!snap) return [];
+  const result = await db
+    .prepare(
+      `SELECT section, item_key, parent_key, label, amount_cents, basis, fiscal_year, fund_code, status,
+              source_url, source_pages, detail
+       FROM published_amounts WHERE snapshot_id = ?`,
+    )
+    .bind(snap.id)
+    .all<PublishedFactRow>();
+  return result.results || [];
+}
+
+function earnedSentence(row: PublishedFactRow, noun: string): string {
+  const year = row.fiscal_year ? `FY${row.fiscal_year}` : "the published year";
+  return `In ${year} the county earned ${moneyExact(row.amount_cents)} in ${noun}, according to ${publishedCite(row)}.`;
+}
+
+function budgetSentence(row: PublishedFactRow, noun: string): string {
+  const year = row.fiscal_year ? `FY${row.fiscal_year}` : "the budget year";
+  return `The ${year} adopted budget for ${noun} is ${moneyExact(row.amount_cents)}, according to ${publishedCite(row)}. This is a budget, not money already earned.`;
+}
+
+function budgetSentenceFromLines(lines: PublishedFactRow[], noun: string, total: number): string {
+  const row = lines[0];
+  const year = row?.fiscal_year ? `FY${row.fiscal_year}` : "FY2027";
+  const source = row ? publishedCite(row) : "published county records";
+  return `The ${year} adopted budget for ${noun} is ${moneyExact(total)}, according to ${source}. This is a budget, not money already earned.`;
+}
+
+function interestFundLine(row: PublishedFactRow, kind: "earned" | "budget"): string {
+  const fund = row.fund_code ? ` (fund ${row.fund_code})` : "";
+  const year = row.fiscal_year ? `FY${row.fiscal_year}` : row.parent_key ? `FY${row.parent_key}` : "the published year";
+  if (kind === "budget") {
+    return `${year} interest budget by fund. ${row.label}${fund}: ${moneyExact(row.amount_cents)}. Source: ${publishedCite(row)}.`;
+  }
+  const budget = /^\d+$/.test(row.detail) ? ` The interest budget on that fund was ${moneyExact(Number(row.detail))}.` : "";
+  return `${year} interest earned by fund. ${row.label}${fund}: ${moneyExact(row.amount_cents)}.${budget} Source: ${publishedCite(row)}.`;
+}
+
+function topicFacts(rows: PublishedFactRow[], topic: (typeof INCOME_TOPICS)[number], intent: MoneyIntent): QaRecord[] {
+  const income = rows.find((row) => row.section === "income" && (row.item_key === topic.key || topic.label.test(row.label)));
+  const budgetRows = rows
+    .filter((row) => row.section === "budget" && matchesTopic(topic, row))
+    .sort((a, b) => b.fiscal_year - a.fiscal_year || b.amount_cents - a.amount_cents);
+  const leadBudget = budgetRows[0];
+  const earnedLines =
+    topic.key === "interest"
+      ? rows.filter((row) => row.section === "interest_line" && (row.parent_key === "2025" || (row.fiscal_year === 2025 && row.basis !== "budget")))
+      : [];
+  const budgetLines =
+    topic.key === "interest"
+      ? rows.filter((row) => row.section === "interest_line" && (row.parent_key === "2027" || (row.fiscal_year === 2027 && row.basis === "budget")))
+      : [];
+  const earnedTotal = earnedLines.reduce((sum, row) => sum + Number(row.amount_cents), 0);
+  const budgetTotal = budgetLines.reduce((sum, row) => sum + Number(row.amount_cents), 0);
+  const earnedText = income
+    ? earnedSentence(income, topic.noun)
+    : earnedLines.length
+      ? `In FY${earnedLines[0].fiscal_year || earnedLines[0].parent_key || "2025"} the county earned ${moneyExact(earnedTotal)} in ${topic.noun}, according to ${publishedCite(earnedLines[0])}.`
+      : "";
+  const budgetText = leadBudget
+    ? budgetSentence(leadBudget, topic.noun)
+    : budgetLines.length
+      ? budgetSentenceFromLines(budgetLines, topic.noun, budgetTotal)
+      : "";
+  const facts: QaRecord[] = [];
+  if (intent === "budgeted" && budgetText) {
+    facts.push(factLine(`${budgetText}${earnedText ? ` ${earnedText}` : ""}`));
+  } else if (earnedText) {
+    facts.push(factLine(`${earnedText}${budgetText ? ` ${budgetText}` : ""}`));
+  } else if (budgetText) {
+    facts.push(factLine(`No audited earnings figure is in the published records. ${budgetText} This does not say how much was earned.`));
+  }
+  const primaryLines = intent === "budgeted" ? budgetLines : earnedLines;
+  const secondaryLines = intent === "budgeted" ? earnedLines : budgetLines;
+  const primaryKind = intent === "budgeted" ? "budget" : "earned";
+  const secondaryKind = intent === "budgeted" ? "earned" : "budget";
+  const ranked = (lines: PublishedFactRow[]) =>
+    lines.filter((row) => row.amount_cents !== 0).sort((a, b) => b.amount_cents - a.amount_cents).slice(0, 8);
+  for (const line of ranked(primaryLines)) facts.push(factLine(interestFundLine(line, primaryKind)));
+  for (const line of ranked(secondaryLines)) facts.push(factLine(interestFundLine(line, secondaryKind)));
+  if (topic.key === "interest") {
+    const excluded = rows.find((row) => row.section === "interest_meta" && row.item_key === "excluded");
+    if (excluded && excluded.amount_cents) {
+      facts.push(
+        factLine(
+          `The FY${excluded.fiscal_year || 2027} budget leaves out ${moneyExact(excluded.amount_cents)} of interest in the Self-Insurance fund. That fund is outside the adopted total. Source: ${publishedCite(excluded)}.`,
+        ),
+      );
+    }
+  }
+  if (topic.key === "bed-tax") {
+    for (const row of rows.filter((item) => item.section === "bed_tax").slice(0, 4)) {
+      facts.push(
+        factLine(
+          `Bed tax figure. ${row.label}: ${moneyExact(row.amount_cents)}. Year FY${row.fiscal_year || "unknown"}. Status: ${row.status || row.basis}. Source: ${publishedCite(row)}.`,
+        ),
+      );
+    }
+  }
+  return facts;
+}
+
+function genericIncomeFacts(rows: PublishedFactRow[], question: string, intent: MoneyIntent): QaRecord[] {
+  const taxesOnly = /\btax/i.test(question) && !/\b(income|revenue)\b/i.test(question);
+  const income = rows.filter((row) => row.section === "income" && (!taxesOnly || /tax/i.test(row.label)));
+  if (intent === "budgeted") {
+    const year = Math.max(0, ...rows.filter((row) => row.section === "budget").map((row) => row.fiscal_year));
+    const budget = rows.filter((row) => row.section === "budget" && row.fiscal_year === year && (!taxesOnly || /tax/i.test(row.label)));
+    if (!budget.length) return [];
+    const total = budget.reduce((sum, row) => sum + Number(row.amount_cents), 0);
+    const facts = [
+      factLine(
+        `The FY${year} adopted budget for ${taxesOnly ? "these taxes" : "published income"} is ${moneyExact(total)}, according to ${publishedCite(budget[0])}. This is a budget, not money already earned.`,
+      ),
+    ];
+    for (const row of budget.slice(0, 12)) {
+      facts.push(factLine(`FY${row.fiscal_year} budget line. ${row.label}: ${moneyExact(row.amount_cents)}. Source: ${publishedCite(row)}.`));
+    }
+    return facts;
+  }
+  if (!income.length) return [];
+  const total = income.reduce((sum, row) => sum + Number(row.amount_cents), 0);
+  const year = income[0].fiscal_year ? `FY${income[0].fiscal_year}` : "the published year";
+  const noun = taxesOnly ? "these taxes" : "audited income";
+  const facts = [factLine(`In ${year} the county earned ${moneyExact(total)} in ${noun}, according to ${publishedCite(income[0])}.`)];
+  for (const row of income.slice(0, 12)) {
+    facts.push(factLine(`${year} income line. ${row.label}: ${moneyExact(row.amount_cents)}. Source: ${publishedCite(row)}.`));
+  }
+  return facts;
+}
+
+async function publishedMoneyFacts(db: D1Database, question: string, intent: MoneyIntent): Promise<QaRecord[]> {
+  if (intent !== "earned" && intent !== "budgeted") return [];
+  const rows = await loadPublishedRows(db);
+  if (!rows.length) return [];
+  const topic = INCOME_TOPICS.find((item) => item.pattern.test(question));
+  if (topic) return topicFacts(rows, topic, intent);
+  if (/\b(income|revenues?|taxes|earn(?:ed|ing|ings)?)\b/i.test(question)) return genericIncomeFacts(rows, question, intent);
+  return [];
+}
+
+function intentNote(question: string, records: QaRecord[]): string {
+  const intent = questionMoneyIntent(question);
+  const hasEarned = records.some((record) => /the county earned/i.test(record.text));
+  const hasBudget = records.some((record) => /The FY\d+ adopted budget for/i.test(record.text));
+  const hasPaid = records.some((record) => /interest paid/i.test(record.text));
+  if (intent === "earned" && hasEarned) {
+    return "Question meaning: money the county earned. Start with one sentence that states the earned amount and cites the source and year from that FACT. A later sentence marked as a budget is not money already earned. An expense account is not interest earned.";
+  }
+  if (intent === "budgeted" && hasBudget) {
+    return "Question meaning: a budgeted amount. Start with one sentence that states the budget amount and cites the source and year from that FACT. Say it is a budget, not money already earned. Do not answer with an expense account's spent amount.";
+  }
+  if (intent === "earned" && hasPaid) {
+    return "Question meaning: money the county earned. These records do not match. They show interest paid (debt service). Say what was found and say how much was earned cannot be answered from these records. Do not say the county earned the spent amount.";
+  }
+  if (intent === "earned") {
+    return "Question meaning: income, revenue, or money earned. Use published revenue FACT lines. Start with one sentence that states the amount and cites the source and year. If the records are spending accounts, say what was found and say the earned amount cannot be answered. Do not describe the spent amount as money earned.";
+  }
+  if (intent === "budgeted") {
+    return "Question meaning: a budgeted amount. Use budget FACT lines. Start with one sentence that states the amount and cites the source and year. A budget is not money already earned.";
+  }
+  if (intent === "spent" && hasPaid) {
+    return "Question meaning: interest the county paid. Describe it as interest paid (debt service). Never describe it as interest earned or investment earnings.";
+  }
+  return "Start with one sentence that summarizes the answer and cites the source.";
 }
 
 export async function buildQuestionContext(
@@ -770,6 +1011,7 @@ export async function buildQuestionContext(
   factText = "",
 ): Promise<QaPack> {
   const records: QaRecord[] = [];
+  const intent = questionMoneyIntent(question);
   const codes = mentionedCodes(question);
   const catalog = await loadQuestionNames(db, importId);
   const fundHits = hitsFor(question, catalog.funds, codes.funds);
@@ -777,31 +1019,39 @@ export async function buildQuestionContext(
   const asksDepartment = /\bdepartments?\b/i.test(question) || codes.depts.length > 0;
   let structured = false;
 
-  if (asksDepartment && deptHits.length) {
+  if (intent === "earned" || intent === "budgeted") {
+    const published = await publishedMoneyFacts(db, question, intent);
+    if (published.length) {
+      records.push(...published);
+      structured = true;
+    }
+  }
+
+  if (!structured && asksDepartment && deptHits.length) {
     structured = true;
     for (const hit of deptHits.slice(0, 3)) {
       const totals = await sumAccounts(db, importId, "dept_code = ?", [hit.code]);
       if (totals) records.push(factRecord(`Department ${hit.code} (${hit.label})`, totals));
     }
-  } else if (fundHits.length) {
+  } else if (!structured && fundHits.length) {
     structured = true;
     for (const hit of fundHits.slice(0, 3)) {
       const totals = await sumAccounts(db, importId, "fund_code = ?", [hit.code]);
       if (totals) records.push(factRecord(`Fund ${hit.code} (${hit.label})`, totals));
     }
-  } else if (deptHits.length) {
+  } else if (!structured && deptHits.length) {
     structured = true;
     for (const hit of deptHits.slice(0, 3)) {
       const totals = await sumAccounts(db, importId, "dept_code = ?", [hit.code]);
       if (totals) records.push(factRecord(`Department ${hit.code} (${hit.label})`, totals));
     }
-  } else if (codes.objects.length) {
+  } else if (!structured && codes.objects.length) {
     structured = true;
     for (const code of codes.objects.slice(0, 3)) {
       const totals = await sumAccounts(db, importId, "object_code = ?", [code]);
       if (totals) records.push(factRecord(`Object ${code}`, totals));
     }
-  } else if (/\bover\b/i.test(question) && /\bbudget\b/i.test(question)) {
+  } else if (!structured && /\bover\b/i.test(question) && /\bbudget\b/i.test(question)) {
     const departments = await departmentRollups(db, importId);
     const over = departments
       .filter((row) => !isTransferDepartment(row.report_name) && pace(row.rev_cents, row.ytd_cents, row.enc_cents, 100) !== "green")
@@ -813,7 +1063,7 @@ export async function buildQuestionContext(
       if (totals) records.push(factRecord(`Over revised budget: department ${row.code} (${row.report_name || row.code})`, totals));
     }
     structured = records.length > 0;
-  } else if (/\b(which|what)\s+fund\b/i.test(question) && /\b(most|largest|highest|biggest)\b/i.test(question)) {
+  } else if (!structured && /\b(which|what)\s+fund\b/i.test(question) && /\b(most|largest|highest|biggest)\b/i.test(question)) {
     const funds = await fundRollups(db, importId);
     const top = [...funds].sort((a, b) => b.ytd_cents - a.ytd_cents)[0];
     if (top) {
@@ -848,11 +1098,13 @@ export async function buildQuestionContext(
     return true;
   }).slice(0, 40);
   const body = unique.map((record, index) => `[${index + 1}] ${record.text}`).join("\n");
+  const spendingQuestion = intent === "spent" || intent === "other";
   const prompt = [
     `Question: ${question.slice(0, QA_MAX_CHARS)}`,
     "",
-    factText ? `Countywide facts, already net of money moved between funds. ${factText}` : "",
-    "FACTS computed in SQL. Copy dollar figures from FACT lines only. Do not add, subtract, multiply, divide, or round. Cite the account count and account keys from the FACT you use.",
+    intentNote(question, unique),
+    spendingQuestion && factText ? `Countywide facts, already net of money moved between funds. ${factText}` : "",
+    "FACTS computed in SQL. Copy dollar figures from FACT lines only. Do not add, subtract, multiply, divide, or round. Cite the account count and account keys from the FACT you use. If a FACT is labeled interest paid, it is debt service and is not interest earned. If a FACT does not match the question, say what it shows and what cannot be answered.",
     body || "(no computed total)",
   ].filter((line) => line !== "").join("\n");
   return { records: unique, prompt };
