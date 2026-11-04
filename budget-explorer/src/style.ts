@@ -248,7 +248,10 @@ input:hover, select:hover, textarea:hover { border-color: #b7b1a6; }
 .icon { width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px; }
 .ask-hero h2 { font-size: 32px; }
 .pay-find, .paid-list { margin-bottom: 22px; }
-.pay-find h2 { font-size: clamp(32px, 4vw, 44px); }
+.pay-find h2, .pay-find h3 { font-size: clamp(22px, 3vw, 28px); margin: 8px 0 4px; }
+.count-details { margin-top: 14px; }
+.count-details summary { font-weight: 600; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.count-details p { margin: 8px 0 0; }
 .pay-find .btn, .sort-row .btn { min-height: 56px; font-size: 18px; padding: 14px 22px; }
 .sort-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 .paid-list .vv { font-family: var(--serif); font-size: clamp(22px, 3vw, 32px); line-height: 1.1; text-align: right; overflow-wrap: anywhere; }
@@ -526,6 +529,16 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
 .fund-savings { margin-bottom: 24px; }
 @media (max-width: 1100px) {
   .spend-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .chart-slot:empty { display: none; }
+}
+@media (min-width: 1101px) {
+  .spend-row { grid-template-rows: auto auto auto auto; }
+  .spend-row > .pie-card { display: grid; grid-template-rows: subgrid; grid-row: 1 / span 4; align-content: start; }
+  .spend-row > .card:not(.pie-card) { grid-row: 1 / span 4; }
+  .spend-row .donutwrap { display: contents; }
+  .spend-row > .pie-card > .donut { justify-self: center; align-self: start; width: min(260px, 100%); }
+  .spend-row > .pie-card > .lgs,
+  .spend-row > .pie-card > .chart-foot { align-self: start; width: 100%; }
 }
 @media (max-width: 980px) {
   .metrics, .split, .filters { grid-template-columns: 1fr 1fr; }
@@ -1040,6 +1053,31 @@ a.drow {
   min-height: 40px;
   padding: 4px 0;
 }
+.pace-chart {
+  display: grid;
+  grid-template-columns: minmax(10.5rem, 14rem) minmax(0, 1fr) max-content minmax(7.5rem, 11rem) 1rem;
+  column-gap: 10px;
+  align-items: center;
+}
+.pace-chart > .axis { grid-column: 2; margin: 0; position: relative; }
+.pace-chart > .pacew {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: auto;
+  pointer-events: none;
+}
+.pace-chart > a.drow {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.pace-chart .dplot { width: 100%; }
 .dname b { font-size: 15px; line-height: 1.2; }
 .dname span { display: block; font-size: 12px; line-height: 1.2; }
 .dnum b { display: inline; margin-right: 6px; }
@@ -1074,11 +1112,12 @@ a.vrow::after, a.brow::after, a.drow::after, .reserve-link::after {
   .vt { grid-column: 1 / -1; grid-row: 2; height: 6px; }
   .vv { grid-column: 2; grid-row: 1; }
   a.vrow::after { grid-column: 3; grid-row: 1; }
-  a.drow { grid-template-columns: minmax(0, 1fr) max-content 1rem; gap: 4px 8px; }
+  a.drow, .pace-chart > a.drow { grid-template-columns: minmax(0, 1fr) max-content 1rem; gap: 4px 8px; grid-column: auto; }
+  .pace-chart { display: block; }
   .dname { grid-column: 1; grid-row: 1; }
   .dnum { grid-column: 2; grid-row: 1; }
-  a.drow::after { grid-column: 3; grid-row: 1; }
-  .dplot { grid-column: 1 / -1; grid-row: 2; }
+  a.drow::after, .pace-chart > a.drow::after { grid-column: 3; grid-row: 1; }
+  .dplot, .pace-chart .dplot { grid-column: 1 / -1; grid-row: 2; width: auto; }
   .dstat { grid-column: 1 / -1; grid-row: 3; }
   .btop { flex-direction: row; align-items: baseline; }
   .bval { text-align: right; }

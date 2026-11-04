@@ -1,5 +1,5 @@
 import { TRANSFER_OBJECT, factsFromRow, type BudgetFacts, type FundRollup } from "./budget";
-import { fiscalPosition, moneyExact, moneyWords, spentTerm } from "./format";
+import { fiscalPosition, leftLabel, money, moneyCompact, moneyExact, moneyWords, spentTerm } from "./format";
 import { directoryPersonSql } from "./parser";
 import { CONSTITUTIONAL_SQL, SHERIFF_FUND_CAPTION, SHERIFF_FUND_LABEL, VENDOR_SOURCES, isSheriffRelease } from "./overview";
 import type { QaRecord } from "./qa";
@@ -82,6 +82,43 @@ export function fy2027CountNote(facts: BudgetFacts): string {
     parts.push(`Expense original minus those transfers is ${moneyExact(facts.adopted)}, which is ${moneyExact(Math.abs(gap))} ${direction} the adopted resolution. The resolution does not itemize that difference.`);
   }
   return parts.join(" ");
+}
+
+/** Round a small gap to the nearest thousand dollars for the plain count sentence. */
+export function aboutDollars(cents: number): string {
+  const dollars = Math.abs(cents) / 100;
+  if (dollars >= 1_000_000) return `about ${moneyCompact(cents)}`;
+  if (dollars >= 1000) {
+    const rounded = Math.round(dollars / 1000) * 1000;
+    return `about $${rounded.toLocaleString("en-US")}`;
+  }
+  return money(cents);
+}
+
+/** Plain overview sentence. Exact object codes and dollar figures stay in the details. */
+export function howWeCountLead(facts: BudgetFacts, asOf: string | null | undefined): string {
+  const fiscal = fiscalPosition(asOf);
+  const left = leftLabel(facts.current, facts.spent, facts.encumbered);
+  const leftSentence = left.over
+    ? `${spentTerm(asOf)} is over the mid-year limit by ${left.value} after open orders.`
+    : left.unbudgeted
+      ? "No budget is set in the county report."
+      : `${moneyCompact(Math.max(facts.current - facts.spent - Math.max(facts.encumbered, 0), 0))} is not yet spent or promised.`;
+  if (fiscal.fyLabel !== "2027") {
+    return `Commissioners adopted ${money(facts.adopted)}. The books show ${money(facts.spent)} spent. The budget limit after mid-year changes is ${money(facts.current)}. ${leftSentence}`;
+  }
+  const gap = Math.abs(FY2027_ADOPTED_CENTS - facts.adopted);
+  const match =
+    gap === 0
+      ? `That brings the books to ${moneyCompact(facts.adopted)}, matching the adopted budget.`
+      : `That brings the books to ${moneyCompact(facts.adopted)}, matching the adopted budget within ${aboutDollars(gap)}.`;
+  return [
+    `Commissioners adopted ${moneyCompact(FY2027_ADOPTED_CENTS)} for FY2027 on September 28, 2026.`,
+    `The Clerk's books list ${moneyCompact(facts.grossOrig)}, but ${moneyCompact(facts.transferOrig)} of that is money moved from one county fund to another.`,
+    "That money gets spent by the fund that receives it, so we count it once and leave the transfer out of the charts.",
+    match,
+    `So far, ${moneyCompact(facts.spent)} has been spent and ${leftSentence}`,
+  ].join(" ");
 }
 
 export function publicFactText(facts: BudgetFacts, asOfLabel: string): string {

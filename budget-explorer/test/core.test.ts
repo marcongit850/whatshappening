@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 import { adminUnlockAllowed, constantTimeEqual, csrfOk, newSession, rateDecision, readSession, signSession, throttleDecision } from "../src/auth";
 import { historyStatuses, rowCountsMatch } from "../src/db";
 import { adminPasswordSet } from "../src/env";
+import { aboutDollars, howWeCountLead } from "../src/answers";
+import { factsFromRow } from "../src/budget";
 import { csvAmount, csvCell, fiscalPosition, pace, pct } from "../src/format";
+import { axisPercent } from "../src/overview";
 import { uploadAllowed } from "../src/limits";
 import { MAX_REPORT_LINE, MIN_PAYROLL_BATCH_LINES, dedupePayments, foldPayrollBatches, looksLikePersonName, parseReport, parseVendorRest, storedText, type ParsedPayrollBatch } from "../src/parser";
 import { safeNext } from "../src/safe-next";
@@ -131,6 +134,47 @@ describe("burn rate", () => {
     expect(elapsed.elapsedDays).toBe(350);
     expect(elapsed.totalDays).toBe(365);
     expect(elapsed.elapsedPct).toBeCloseTo(95.8904, 2);
+  });
+
+  it("uses 33 of 365 days for 2 November 2026, the start of FY2027", () => {
+    const fy = fiscalPosition("2026-11-02");
+    expect(fy.fyLabel).toBe("2027");
+    expect(fy.fyStart).toBe("2026-10-01");
+    expect(fy.fyEnd).toBe("2027-09-30");
+    expect(fy.elapsedDays).toBe(33);
+    expect(fy.totalDays).toBe(365);
+    expect(fy.elapsedPct).toBeCloseTo((33 / 365) * 100, 5);
+    expect(Math.round(fy.elapsedPct)).toBe(9);
+    const marker = axisPercent(9);
+    expect(marker).toBeCloseTo((9 / 140) * 100, 5);
+    expect(pace(10000, 0, 5000, fy.elapsedPct)).toBe("none");
+    expect(pace(10000, 500, 0, fy.elapsedPct)).toBe("under");
+    expect(pace(10000, 900, 0, fy.elapsedPct)).toBe("green");
+    expect(pace(10000, 2000, 0, fy.elapsedPct)).toBe("yellow");
+    expect(pace(10000, 11000, 0, fy.elapsedPct)).toBe("red");
+  });
+
+  it("describes the budgeted transfer, not a zero year-to-date transfer", () => {
+    const facts = factsFromRow({
+      orig_cents: 48_886_849_200,
+      rev_cents: 48_886_849_200,
+      ytd_cents: 3_210_000_000,
+      enc_cents: 1_950_000_000,
+      transfer_orig_cents: 14_366_398_400,
+      transfer_rev_cents: 14_366_398_400,
+      transfer_ytd_cents: 0,
+      transfer_enc_cents: 0,
+    });
+    expect(facts.transfer).toBe(0);
+    expect(facts.transferOrig).toBe(14_366_398_400);
+    expect(aboutDollars(1_900_000)).toBe("about $19,000");
+    const lead = howWeCountLead(facts, "2026-11-02");
+    expect(lead).toContain("Commissioners adopted $345.2M for FY2027 on September 28, 2026.");
+    expect(lead).toContain("$143.7M of that is money moved from one county fund to another.");
+    expect(lead).toContain("within about $19,000");
+    expect(lead).toContain("So far, $32.1M has been spent");
+    expect(lead).not.toContain("object 591000");
+    expect(lead).not.toContain("$0");
   });
 
   it("classifies pace from money spent, not from money promised but unpaid", () => {

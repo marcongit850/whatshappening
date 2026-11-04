@@ -1787,7 +1787,7 @@ function buildReserves(reserves: unknown, revenue: unknown): PublishedLedger["re
     changeCents: delta * 100,
     sourceUrl: total.source,
     sourcePages: total.pages,
-    detail: "Audited year-end balance, not a live balance. The next audited year-end balance will exist after the spring 2027 audit.",
+    detail: "Year-end balance as of September 30, 2025, from the county's annual comprehensive financial report. That report includes the independent auditor's report. It is not a live balance. The next year-end balance, for September 30, 2026, will exist after the spring 2027 audit.",
     classes: CLASS_ORDER.map((cls, index) => ({
       key: cls.key,
       label: cls.label,

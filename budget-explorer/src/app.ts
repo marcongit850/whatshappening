@@ -269,7 +269,7 @@ app.get("/", async (c) => {
       csrf: session.csrf,
       isAdmin: isAdmin(c),
       showNames,
-      income: ledger ? { items: ledger.income, totalCents: ledger.incomeTotalCents } : null,
+      income: ledger?.budgets.find((year) => year.fiscalYear === 2027) ?? null,
     }),
   );
 });

@@ -181,8 +181,12 @@ export function mergeVendorSpend<T extends { vendor_name: string; cents: number 
       groups.set(key, { ...row });
       continue;
     }
-    const keepName = row.cents > existing.cents ? row.vendor_name : existing.vendor_name;
+    const keepLarger = row.cents > existing.cents;
+    const keepName = keepLarger ? row.vendor_name : existing.vendor_name;
     const next = { ...existing, vendor_name: keepName, cents: existing.cents + row.cents };
+    if (keepLarger && "vendor_number" in row) {
+      (next as T & { vendor_number?: string }).vendor_number = (row as { vendor_number?: string }).vendor_number;
+    }
     const bag = next as unknown as Record<string, number>;
     const extra = row as unknown as Record<string, number>;
     for (const field of ["lines", "checks", "payments", "land_cents"]) {

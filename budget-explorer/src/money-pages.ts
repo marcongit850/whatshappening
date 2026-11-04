@@ -1,5 +1,6 @@
 import { esc, firstSentence, gulfName, infoTip, money, moneyCompact } from "./format";
-import { percentTenths, type AmountItem, type InterestLine, type InterestReport, type PublishedLedger, type ReserveFund } from "./published";
+import { FY2027_ADOPTED_URL } from "./answers";
+import { percentTenths, type AmountItem, type BudgetYear, type InterestLine, type InterestReport, type PublishedLedger, type ReserveFund } from "./published";
 
 const SLICE_COLORS = ["#17505c", "#1f6a78", "#c9a24b", "#8a6f9e", "#c5603f", "#1b6542", "#7fb0b9", "#8a5b12", "#4d6d8a", "#5c4a3a", "#b9b4a6"];
 const CLASS_COLORS: Record<string, string> = {
@@ -12,18 +13,34 @@ const CLASS_COLORS: Record<string, string> = {
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export function incomeCard(items: AmountItem[] | null, totalCents: number): string {
-  const ready = items && items.length > 0 && totalCents > 0;
-  const chart = ready ? donutChart(items, totalCents, moneyCompact(totalCents), "income", (item) => `/revenue#${item.key}`) : "";
+const FY2027_REVENUE_URL = "https://budget-waltoncountyfl.com/assets/data/revenues.csv";
+
+export function incomeCard(year: BudgetYear | null): string {
+  const slices = year
+    ? [...year.items, ...year.aside].filter((item) => item.cents > 0).sort((a, b) => b.cents - a.cents)
+    : [];
+  const total = slices.reduce((sum, item) => sum + item.cents, 0);
+  const ready = slices.length > 0 && total > 0;
+  const percents = percentTenths(slices.map((item) => item.cents));
+  const shown = slices.map((item, index) => ({ ...item, pct: percents[index] ?? 0 }));
+  const brought = shown.some((item) => /brought forward/i.test(item.label));
+  const chart = ready
+    ? donutChart(shown, total, moneyCompact(total), "budget", () => `/revenue#budget-${year?.fiscalYear || 2027}`)
+    : `<div class="chart-plot"><p class="cap">The adopted FY2027 budget by source will show here after the revenue figures are imported.</p></div><div class="chart-legend"></div>`;
   const caption = ready
-    ? `This circle is audited income for the year that ended September 30, 2025. It does not include money moved between county funds.`
-    : "Audited income by source will show here after the revenue figures are imported. It stays separate from what has been spent.";
+    ? `This circle is the adopted FY2027 budget by source, not money already collected. Money moved between county funds is left out, and so is the self-insurance fund.${brought ? " Cash and other balances brought forward are their own slice: they are part of the adopted budget, and they are not new taxes or fees." : ""}`
+    : "The adopted FY2027 budget by source will show here after the revenue figures are imported.";
+  const source = ready
+    ? `<p class="src">Source. <a href="${esc(year?.sourceUrl || FY2027_REVENUE_URL)}">FY2027 revenue file</a>. <a href="${FY2027_ADOPTED_URL}">Final budget resolution, September 28, 2026</a>.</p>`
+    : "";
   return `<div class="card income-card pie-card">
+<div class="chart-head">
 <div class="eyebrow">Income</div>
 <h2>Where the money comes from${infoTip("income-card", firstSentence(caption))}</h2>
 <p class="cap">${esc(caption)}</p>
+</div>
 ${chart}
-<p class="more-links"><a href="/revenue">See all income sources</a><a href="/reserves">How much is in savings</a></p>
+<div class="chart-foot">${source}<p class="more-links"><a href="/revenue">See all income sources</a><a href="/reserves">How much is in savings</a></p></div>
 </div>`;
 }
 
@@ -36,7 +53,7 @@ export function revenueDocument(ledger: PublishedLedger, fundCodes: Set<string>)
   const transfers = ledger.notIncome.find((item) => item.key === "transfers");
   return `<p class="crumb"><a href="/">Overview</a> / Income</p>
 <h1>Where the county's income comes from${infoTip("revenue-title", "The lead figures are audited actual income for the year that ended September 30, 2025.")}</h1>
-<p class="lead page-intro">The lead figures are audited actual income for the year that ended September 30, 2025. Later years on this page are budgets, not money already collected.</p>
+<p class="lead page-intro">The lead figures are audited actual income for the year that ended September 30, 2025, from the county's annual comprehensive financial report. That report includes the independent auditor's report. Later years on this page are budgets, not money already collected. The total is the audited fund-statement total. A few slices are this site's grouping of those audited lines, and the note on each slice says when that is so.</p>
 <section class="kpis">
 <div class="card kpi k1"><div class="l"><span>Audited actual</span>${infoTip("rev-actual", "Income received in FY2025.")}</div><a class="n" href="#income-chart">${esc(moneyCompact(total))}</a><div class="s">Income received in FY2025. Money moved between county funds is not included.</div></div>
 <div class="card kpi k2"><div class="l"><span>Property taxes</span>${property ? infoTip("rev-property", `${property.pct.toFixed(1)}% of audited income.`) : ""}</div><a class="n" href="#property-taxes">${esc(property ? moneyCompact(property.cents) : "")}</a><div class="s">${property ? `${property.pct.toFixed(1)}% of audited income.` : ""}</div></div>
@@ -49,7 +66,7 @@ export function revenueDocument(ledger: PublishedLedger, fundCodes: Set<string>)
 <p class="cap">Each slice is one source of income. Together they are ${esc(money(total))}.</p>
 ${donutChart(income, total, moneyCompact(total), "FY2025 income", (item) => `#${item.key}`, "FY2025 income", (item) => item.label === "Interest earned")}
 ${interest ? `<p class="interest-call"><a href="#interest">Interest earned</a> is ${esc(moneyCompact(interest.cents))} of this circle. <a href="/reserves#cash">Savings</a>.</p>` : ""}
-${sourceLine("FY2025 audited financial report", income[0]?.sourceUrl || "", income[0]?.sourcePages || "")}
+${sourceLine("FY2025 annual comprehensive financial report", income[0]?.sourceUrl || "", income[0]?.sourcePages || "")}
 </section>
 ${income.map((item) => (item.key === "interest" ? interestBlock(ledger, item, total, fundCodes) : sourceBlock(item, total))).join("")}
 ${beachBlock(ledger, fundCodes)}
@@ -64,15 +81,15 @@ ${trendBlock(ledger)}
 export function reservesDocument(ledger: PublishedLedger, fundCodes: Set<string>): string {
   const reserves = ledger.reserves;
   return `<p class="crumb"><a href="/">Overview</a> / Savings</p>
-<h1>Savings the county held${infoTip("reserves-title", "Audited year-end balance, not a live balance.")}</h1>
-<p class="lead page-intro">Audited year-end balance, not a live balance. The next audited year-end balance will exist after the spring 2027 audit.</p>
+<h1>Savings the county held${infoTip("reserves-title", "Year-end balance as of September 30, 2025, from the annual comprehensive financial report.")}</h1>
+<p class="lead page-intro">Year-end balance as of September 30, 2025, from the county's annual comprehensive financial report. That report includes the independent auditor's report. It is not a live balance. The next year-end balance, for September 30, 2026, will exist after the spring 2027 audit.</p>
 <section class="kpis">
 <div class="card kpi k1"><div class="l"><span>September 30, 2025</span>${infoTip("res-total", "Savings in all governmental funds.")}</div><a class="n" href="#by-type">${esc(moneyCompact(reserves.totalCents))}</a><div class="s">Savings in all governmental funds. A year earlier it was ${esc(moneyCompact(reserves.priorCents))}.</div></div>
 <div class="card kpi k2"><div class="l"><span>Free to spend</span>${infoTip("res-free", "General Fund money with no purpose set.")}</div><a class="n" href="#class-unassigned">${esc(moneyCompact(reserves.classes.find((item) => item.key === "unassigned")?.cents || 0))}</a><div class="s">General Fund money with no purpose set. The rest is already spoken for.</div></div>
 <div class="card kpi k4"><div class="l"><span>Policy cushion</span>${infoTip("res-policy", "Project calculation.")}</div><a class="n" href="#policy">about 5 months</a><div class="s">Project calculation. The rule asks for at least two months of General Fund spending.</div></div>
 </section>
 <section class="card" id="by-type">
-<div class="eyebrow">Audited year-end balance</div>
+<div class="eyebrow">September 30, 2025 balance</div>
 <h2>How the savings are labeled${infoTip("res-labels", "Fund balance means savings left in a fund.")}</h2>
 <p class="cap">Fund balance means savings left in a fund. Most of it is limited to a purpose. Only the free-to-spend piece has no strings.</p>
 ${classBar(reserves.classes, "savings")}
@@ -83,7 +100,7 @@ ${reserves.classes
   )
   .join("")}
 </div>
-${sourceLine("FY2025 audited financial report", reserves.sourceUrl, reserves.sourcePages)}
+${sourceLine("FY2025 annual comprehensive financial report", reserves.sourceUrl, reserves.sourcePages)}
 </section>
 ${reserves.classes
   .map((item) => {
@@ -111,7 +128,7 @@ ${holders
 <h2>Which fund holds the savings${infoTip("res-by-fund", "Open a fund to see its spending page, when this site has that fund.")}</h2>
 <p class="cap">Open a fund to see its spending page, when this site has that fund. The color bar is the same split as above.</p>
 ${reserves.funds.map((fund) => fundRow(fund, fundCodes)).join("")}
-${sourceLine("FY2025 audited financial report", reserves.sourceUrl, reserves.sourcePages)}
+${sourceLine("FY2025 annual comprehensive financial report", reserves.sourceUrl, reserves.sourcePages)}
 </section>
 <section class="card" id="policy">
 <div class="eyebrow">Project calculation</div>
@@ -126,7 +143,7 @@ ${sourceLine("Fund Balance Policy, Resolution 2012-59", reserves.policy.sourceUr
 <section class="card" id="cash">
 <h2>Savings are not the same as cash${infoTip("res-cash", firstSentence(gulfName(reserves.cashDetail)))}</h2>
 <p class="cap">${esc(gulfName(reserves.cashDetail))} Cash and equivalents were ${esc(money(reserves.cashCents))}. Investments on those same lines were ${esc(money(reserves.investmentsCents))}. <a href="/revenue#interest">Interest earned</a> on investments is income.</p>
-${sourceLine("FY2025 audited financial report", reserves.cashSourceUrl, reserves.cashPages)}
+${sourceLine("FY2025 annual comprehensive financial report", reserves.cashSourceUrl, reserves.cashPages)}
 </section>
 `;
 }
@@ -134,10 +151,10 @@ ${sourceLine("FY2025 audited financial report", reserves.cashSourceUrl, reserves
 export function fundSavings(fund: ReserveFund, asOf: string): string {
   const when = longDate(asOf);
   return `<section class="card fund-savings">
-<div class="eyebrow">Audited year-end balance</div>
-<h2>Savings in this fund${infoTip(`save-${fund.key}`, "This is the audited year-end balance, not a live balance.")}</h2>
+<div class="eyebrow">September 30, 2025 balance</div>
+<h2>Savings in this fund${infoTip(`save-${fund.key}`, "This is the September 30, 2025 balance from the annual comprehensive financial report, not a live balance.")}</h2>
 <p class="figure-n">${esc(moneyCompact(fund.cents))}</p>
-<p class="cap">Held on ${esc(when)}. This is the audited year-end balance, not a live balance. A year earlier it was ${esc(moneyCompact(fund.priorCents))}.</p>
+<p class="cap">Held on ${esc(when)}. This is the year-end balance from the annual comprehensive financial report, not a live balance. A year earlier it was ${esc(moneyCompact(fund.priorCents))}.</p>
 ${classBar(
   fund.classes.map((item) => ({ ...item, pct: fund.cents ? (item.cents / fund.cents) * 100 : 0 })),
   `save-${fund.key}`,
@@ -155,13 +172,13 @@ ${fund.detail ? `<p>${esc(gulfName(fund.detail))}</p>` : ""}
 
 export function revenueEmpty(): string {
   return `<h1>Where the county's income comes from</h1>
-<p class="lead">Audited income by source is not loaded in this copy of the database yet.</p>
+<p class="lead">FY2025 income from the annual comprehensive financial report is not loaded in this copy of the database yet.</p>
 <p class="more-links"><a href="/reserves">How much is in savings</a></p>`;
 }
 
 export function reservesEmpty(): string {
   return `<h1>Savings the county held</h1>
-<p class="lead">Audited year-end savings are not loaded in this copy of the database yet.</p>
+<p class="lead">Year-end savings from the annual comprehensive financial report are not loaded in this copy of the database yet.</p>
 <p class="more-links"><a href="/revenue">See all income sources</a></p>`;
 }
 
@@ -199,7 +216,7 @@ ${report.excludedSelfInsuranceCents ? `<p class="interest-note">The FY2027 budge
 <p class="interest-note">Investments are reported at fair value, and U.S. Treasury notes are valued at quoted market. FY2022 was a loss, so the audited figure is not only cash interest.</p>
 ${interestTrend(report)}
 <p class="more-links"><a href="/reserves#cash">How much is in savings</a></p>
-${sourceLine("FY2025 audited financial report", item.sourceUrl, item.sourcePages)}
+${sourceLine("FY2025 annual comprehensive financial report", item.sourceUrl, item.sourcePages)}
 ${sourceLine("FY2025 budget to actual", report.budgetSourceUrl, report.budgetPages)}
 ${sourceLine("Ten-year schedule", report.trendSourceUrl, report.trendPages)}
 ${sourceLine("County FY2027 revenue file", report.fy2027SourceUrl, report.fy2027Pages)}
@@ -244,7 +261,7 @@ function sourceBlock(item: AmountItem, total: number): string {
 <p class="figure-n">${esc(moneyCompact(item.cents))}</p>
 <p class="cap">${share}% of audited FY2025 income. Exact amount ${esc(money(item.cents))}.</p>
 <p>${esc(gulfName(item.detail))}</p>
-${sourceLine("FY2025 audited financial report", item.sourceUrl, item.sourcePages)}
+${sourceLine("FY2025 annual comprehensive financial report", item.sourceUrl, item.sourcePages)}
 </section>`;
 }
 
@@ -286,7 +303,7 @@ ${ledger.notIncome
   )
   .join("")}
 <p class="more-links"><a href="/reserves">How much is in savings</a></p>
-${sourceLine("FY2025 audited financial report", ledger.notIncome[0]?.sourceUrl || "", ledger.notIncome[0]?.sourcePages || "")}
+${sourceLine("FY2025 annual comprehensive financial report", ledger.notIncome[0]?.sourceUrl || "", ledger.notIncome[0]?.sourcePages || "")}
 </section>`;
 }
 
