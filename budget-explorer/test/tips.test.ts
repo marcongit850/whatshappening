@@ -163,6 +163,28 @@ const tips = [
 ];
 const outside = new HTMLElement("p");
 body.appendChild(outside);
+const paceBtn = new HTMLButtonElement("button");
+paceBtn.className = "tip-btn pace-label";
+paceBtn.setAttribute("id", "pace-ahead-btn");
+paceBtn.setAttribute("aria-expanded", "false");
+paceBtn.setAttribute("aria-describedby", "tip-pace-ahead");
+paceBtn.setAttribute("aria-controls", "tip-pace-ahead");
+paceBtn.rect = { left: 10, top: 200, width: 110, height: 24, right: 120, bottom: 224 };
+const pacePop = new HTMLElement("span");
+pacePop.className = "tip-pop";
+pacePop.setAttribute("id", "tip-pace-ahead");
+pacePop.hidden = true;
+pacePop.naturalHeight = 60;
+const paceRow = new HTMLElement("a");
+paceRow.className = "drow";
+const pacePill = new HTMLElement("span");
+pacePill.className = "pill yellow";
+pacePill.setAttribute("data-pace-tip", "pace-ahead-btn");
+pacePill.rect = { left: 300, top: 400, width: 100, height: 28, right: 400, bottom: 428 };
+paceRow.appendChild(pacePill);
+body.appendChild(paceBtn);
+body.appendChild(pacePop);
+body.appendChild(paceRow);
 ${CLIENT_JS}
 function fire(type, init) {
   const event = {
@@ -182,7 +204,7 @@ function scroll() {
   for (const fn of listeners.window.scroll || []) fn(event);
   for (const fn of listeners.document.scroll || []) fn(event);
 }
-globalThis.__tips = { tips, outside, document, window, fire, scroll };
+globalThis.__tips = { tips, outside, document, window, fire, scroll, paceBtn, pacePop, pacePill, paceRow };
 `;
 
 type TipBox = {
@@ -211,6 +233,10 @@ type TipPair = { button: TipNode; pop: TipNode; wrap: TipNode };
 type TipWorld = {
   tips: TipPair[];
   outside: TipNode;
+  paceBtn: TipNode;
+  pacePop: TipNode & { style: Record<string, string>; hidden: boolean };
+  pacePill: TipNode;
+  paceRow: TipNode;
   document: { activeElement: TipNode | null; body: TipNode };
   window: { innerWidth: number; innerHeight: number };
   fire(type: string, init?: { target?: TipNode | null; relatedTarget?: TipNode | null; pointerType?: string; key?: string }): void;
@@ -370,5 +396,39 @@ describe("info tip behavior", () => {
     expect(top).toBeGreaterThanOrEqual(8);
     expect(top + height).toBeLessThanOrEqual(world.window.innerHeight - 8);
     expect(world.tips[1].pop.hidden).toBe(true);
+  });
+
+  it("opens ahead of pace on focus, hover, and tap, and leaves other tips closed on focus", () => {
+    const world = boot();
+    const { paceBtn, pacePop, pacePill, paceRow, outside } = world;
+    expect(pacePop.hidden).toBe(true);
+    world.fire("focusin", { target: world.tips[0].button });
+    expect(pacePop.hidden).toBe(true);
+    expect(openCount(world)).toBe(0);
+
+    world.fire("focusin", { target: paceBtn });
+    expect(paceBtn.getAttribute("aria-expanded")).toBe("true");
+    expect(pacePop.hidden).toBe(false);
+    world.fire("focusout", { target: paceBtn, relatedTarget: outside });
+    expect(pacePop.hidden).toBe(true);
+
+    world.fire("focusin", { target: paceRow });
+    expect(pacePop.hidden).toBe(false);
+    expect(parseFloat(pacePop.style.left)).toBeGreaterThan(200);
+    world.fire("focusout", { target: paceRow, relatedTarget: outside });
+    expect(pacePop.hidden).toBe(true);
+
+    world.fire("pointerover", { target: pacePill, pointerType: "mouse" });
+    expect(pacePop.hidden).toBe(false);
+    world.fire("pointerout", { target: pacePill, relatedTarget: null, pointerType: "mouse" });
+    expect(pacePop.hidden).toBe(true);
+
+    world.fire("click", { target: pacePill });
+    expect(paceBtn.getAttribute("aria-expanded")).toBe("true");
+    expect(pacePop.hidden).toBe(false);
+    world.fire("pointerout", { target: pacePill, relatedTarget: null, pointerType: "mouse" });
+    expect(pacePop.hidden).toBe(false);
+    world.fire("click", { target: pacePill });
+    expect(pacePop.hidden).toBe(true);
   });
 });

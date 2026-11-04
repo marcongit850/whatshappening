@@ -10,7 +10,7 @@ import { historyStatuses, rowCountsMatch } from "../src/db";
 import { adminPasswordSet } from "../src/env";
 import { aboutDollars, howWeCountLead } from "../src/answers";
 import { factsFromRow } from "../src/budget";
-import { csvAmount, csvCell, fiscalPosition, pace, pct } from "../src/format";
+import { aheadPaceNote, csvAmount, csvCell, fiscalPosition, pace, pct } from "../src/format";
 import { axisPercent } from "../src/overview";
 import { uploadAllowed } from "../src/limits";
 import { MAX_REPORT_LINE, MIN_PAYROLL_BATCH_LINES, dedupePayments, foldPayrollBatches, looksLikePersonName, parseAccountDetail, parseReport, parseVendorRest, storedText, type ParsedPayrollBatch } from "../src/parser";
@@ -138,6 +138,20 @@ describe("burn rate", () => {
     expect(elapsed.elapsedDays).toBe(350);
     expect(elapsed.totalDays).toBe(365);
     expect(elapsed.elapsedPct).toBeCloseTo(95.8904, 2);
+  });
+
+  it("explains ahead of pace with the same year percent the chart rounds", () => {
+    const early = fiscalPosition("2026-11-02");
+    expect(early.elapsedDays).toBe(33);
+    expect(early.totalDays).toBe(365);
+    expect(Math.round(early.elapsedPct)).toBe(9);
+    expect(aheadPaceNote(early.elapsedPct)).toBe(
+      "Has used more of its yearly budget than the share of the year that has passed (9%). Often normal for bills paid up front.",
+    );
+    expect(aheadPaceNote(elapsed.elapsedPct)).toBe(
+      "Has used more of its yearly budget than the share of the year that has passed (96%). Often normal for bills paid up front.",
+    );
+    expect(aheadPaceNote(early.elapsedPct)).not.toMatch(/\u2014|\u2013/);
   });
 
   it("uses 33 of 365 days for 2 November 2026, the start of FY2027", () => {
