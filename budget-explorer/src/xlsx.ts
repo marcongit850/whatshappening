@@ -1,9 +1,10 @@
 import { strFromU8, Unzip, UnzipInflate, type UnzipFile } from "fflate";
 
-export const XLSX_MAX_ENTRY_BYTES = 2_000_000;
-export const XLSX_MAX_TOTAL_BYTES = 8_000_000;
-/** Compressed .xlsx cap. Rejected before any unzip. */
-export const XLSX_MAX_COMPRESSED_BYTES = 2_000_000;
+/** A two month account detail sheet is about 9 MB uncompressed. A later monthly file can be larger. */
+export const XLSX_MAX_ENTRY_BYTES = 64_000_000;
+export const XLSX_MAX_TOTAL_BYTES = 80_000_000;
+/** Compressed .xlsx cap. Rejected before any unzip. Matches the upload cap. */
+export const XLSX_MAX_COMPRESSED_BYTES = 20_000_000;
 /** Push this much compressed input at a time so a forged size can be stopped early. */
 export const ZIP_PUSH_BYTES = 4096;
 

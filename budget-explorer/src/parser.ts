@@ -1,4 +1,4 @@
-import { isoDate } from "./format";
+import { gulfName, isoDate } from "./format";
 
 const AMT = String.raw`-?[\d,]+\.\d\d`;
 const accountHeader = new RegExp(String.raw`^(\d{8})\s+(\d{6})(?:\s+(\d{5}))?\s{2,}(\S.*?)\s*$`);
@@ -401,6 +401,7 @@ export function payrollEmployeeName(rest: string): string {
     .trim()
     .replace(PAY_TYPE, "")
     .trim();
+  if (/^(REGULAR|SALARY|HOURLY|OVERTIME|BENEFIT|WAGES|WAGE|SUPPLEMENT)$/i.test(text)) return "";
   return text.slice(0, 80);
 }
 
@@ -707,6 +708,310 @@ export function parseReport(text: string): ParseResult {
     printed,
     afterCutoffCount: payments.filter((payment) => payment.afterCutoff).length,
     reconMismatches: accountList.filter((account) => account.reconDiffCents !== 0),
+    foldedPayrollBatches: folded.foldedCount,
+  };
+}
+
+/** Sources stored as vendor payments. Same set as VENDOR_SOURCES in overview.ts. */
+const ACCOUNT_DETAIL_PAYMENT_SOURCES = new Set(["API", "APM", "GRV"]);
+
+function normHeader(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function columnIndex(headers: string[], names: string[]): number {
+  const normalized = headers.map(normHeader);
+  for (const name of names) {
+    const want = normHeader(name);
+    const exact = normalized.indexOf(want);
+    if (exact >= 0) return exact;
+  }
+  for (const name of names) {
+    const want = normHeader(name);
+    const partial = normalized.findIndex((header) => header.includes(want));
+    if (partial >= 0) return partial;
+  }
+  return -1;
+}
+
+/** Text dates, or an Excel serial date from a later monthly export. */
+function detailDate(raw: string): string {
+  const iso = isoDate(raw);
+  if (iso) return iso;
+  if (!/^\d+(\.\d+)?$/.test(raw.trim())) return "";
+  const serial = Number(raw);
+  if (serial <= 20000 || serial >= 80000) return "";
+  const utc = Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000;
+  const date = new Date(utc);
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function detailCents(raw: string | undefined): number {
+  const cleaned = (raw || "").trim();
+  if (!cleaned) return 0;
+  const value = Number(cleaned.replace(/,/g, ""));
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value * 100);
+}
+
+function isTotalDescription(description: string): boolean {
+  const text = description.trim().toLowerCase();
+  return text === "revenue total" || text === "expense total" || text === "grand total" || text.startsWith("total ");
+}
+
+function totalLabel(description: string, code: string): string {
+  const stripped = description.trim().replace(/^total\s+/i, "").trim();
+  if (code && stripped.toUpperCase().startsWith(code.toUpperCase())) return stripped.slice(code.length).trim();
+  return stripped;
+}
+
+/** True when the first worksheet is the Clerk's ACCOUNT DETAIL export. */
+export function isAccountDetail(rows: string[][]): boolean {
+  const header = rows.find((row) => row.some((cell) => cell.trim()));
+  if (!header) return false;
+  const normalized = header.map(normHeader);
+  return normalized.includes("fund") && normalized.includes("org") && normalized.includes("obj") && normalized.some((cell) => cell.includes("original"));
+}
+
+/**
+ * Clerk ACCOUNT DETAIL workbook. One account row, then transaction lines.
+ * Total rows, and revenue accounts (object codes starting with 3), are not added into the expense budget.
+ * The as of date is the latest transaction date in the file.
+ */
+export function parseAccountDetail(rows: string[][]): ParseResult {
+  if (!isAccountDetail(rows)) throw new Error("This workbook is not an account detail report.");
+  const headerAt = rows.findIndex((row) => row.some((cell) => normHeader(cell) === "fund"));
+  const header = rows[headerAt] || [];
+  const col = {
+    fund: columnIndex(header, ["fund"]),
+    org: columnIndex(header, ["org"]),
+    obj: columnIndex(header, ["obj"]),
+    project: columnIndex(header, ["project"]),
+    description: columnIndex(header, ["account description", "description"]),
+    orig: columnIndex(header, ["original approp", "original"]),
+    adj: columnIndex(header, ["tranfrs/adjsmts", "adjustments"]),
+    rev: columnIndex(header, ["revised budget", "revised"]),
+    ytd: columnIndex(header, ["ytd actual", "ytd"]),
+    enc: columnIndex(header, ["encumbrances"]),
+    avail: columnIndex(header, ["available budget", "available"]),
+    journal: columnIndex(header, ["yr/per/jnl", "journal"]),
+    date: columnIndex(header, ["eff date", "date"]),
+    source: columnIndex(header, ["src", "source"]),
+    amount: columnIndex(header, ["amount"]),
+    vendorNumber: columnIndex(header, ["vendor/ref 1", "vendor"]),
+    invoice: columnIndex(header, ["invoice #", "invoice"]),
+    check: columnIndex(header, ["check #", "check"]),
+    vendorName: columnIndex(header, ["vendor name"]),
+    comment: columnIndex(header, ["comment"]),
+    item: columnIndex(header, ["item description"]),
+  };
+  const cell = (row: string[], index: number) => (index >= 0 ? (row[index] || "").trim() : "");
+
+  const accounts: ParsedAccount[] = [];
+  const funds = new Map<string, string>();
+  const departments = new Map<string, { fund: string; reportName: string }>();
+  const payments: ParsedPayment[] = [];
+  const payroll = new Map<string, ParsedPayrollBatch>();
+  const payrollLines: ParsedPayrollLine[] = [];
+  let printed: ParseResult["printed"] = null;
+  let current: ParsedAccount | null = null;
+  let skipping = false;
+  let latest = "";
+
+  const noteDate = (raw: string) => {
+    const iso = detailDate(raw);
+    if (iso && iso > latest) latest = iso;
+  };
+
+  const rememberDept = (code: string, fundCode: string, name: string) => {
+    if (!code) return;
+    const existing = departments.get(code);
+    const reportName = gulfName(name || existing?.reportName || "");
+    departments.set(code, { fund: fundCode || existing?.fund || code.slice(0, 3), reportName });
+  };
+
+  const addTransaction = (row: string[], account: ParsedAccount) => {
+    const journal = cell(row, col.journal);
+    const payDate = detailDate(cell(row, col.date));
+    const source = cell(row, col.source).toUpperCase();
+    const amountRaw = cell(row, col.amount);
+    if (!journal && !payDate && !source && !amountRaw) return;
+    if (payDate) noteDate(cell(row, col.date));
+    const amountCents = detailCents(amountRaw);
+    const comment = cell(row, col.comment);
+    account.lineCount += 1;
+    const payrollLine = source === "PRJ" || /\bWARRANT=/.test(comment);
+    if (payrollLine) {
+      account.isPayroll = true;
+      const batchKey = batchKeyFrom(comment, journal);
+      const employeeName = payrollEmployeeName(comment);
+      const pkey = [account.fund, account.dept, account.objectCode, account.project, batchKey, payDate].join("|");
+      const existing = payroll.get(pkey);
+      if (existing) {
+        existing.amountCents += amountCents;
+        existing.lineCount += 1;
+      } else {
+        payroll.set(pkey, {
+          fund: account.fund,
+          dept: account.dept,
+          objectCode: account.objectCode,
+          project: account.project,
+          batchKey,
+          payDate,
+          amountCents,
+          lineCount: 1,
+          belowMinimum: false,
+        });
+      }
+      payrollLines.push({
+        fund: account.fund,
+        dept: account.dept,
+        objectCode: account.objectCode,
+        project: account.project,
+        journal,
+        payDate,
+        source,
+        amountCents,
+        employeeName,
+        batchKey,
+        description: "",
+        afterCutoff: false,
+        dedupeKey: [account.fund, account.dept, account.objectCode, account.project, journal, payDate, String(amountCents)].join("|"),
+      });
+      return;
+    }
+    if (!ACCOUNT_DETAIL_PAYMENT_SOURCES.has(source)) return;
+    const vendorName = cell(row, col.vendorName);
+    const vendorNumber = /^\d+$/.test(cell(row, col.vendorNumber)) ? cell(row, col.vendorNumber) : "";
+    const checkRaw = cell(row, col.check);
+    const checkNumber = /^0+$/.test(checkRaw) ? "" : checkRaw;
+    const description = (comment || cell(row, col.item)).slice(0, 120);
+    payments.push({
+      fund: account.fund,
+      dept: account.dept,
+      objectCode: account.objectCode,
+      project: account.project,
+      journal,
+      payDate,
+      source,
+      amountCents,
+      vendorNumber,
+      vendorName,
+      invoice: cell(row, col.invoice).slice(0, 40),
+      checkNumber,
+      description,
+      afterCutoff: false,
+      dedupeKey: [account.fund, account.dept, account.objectCode, account.project, journal, payDate, String(amountCents), vendorNumber, checkNumber].join("|"),
+      isPersonName: looksLikePersonName(vendorName),
+    });
+  };
+
+  for (const row of rows.slice(headerAt + 1)) {
+    const fundCode = cell(row, col.fund);
+    const org = cell(row, col.org);
+    const objectCode = cell(row, col.obj);
+    const description = cell(row, col.description);
+    const dated = cell(row, col.date);
+    if (dated) noteDate(dated);
+
+    if (isTotalDescription(description) && !objectCode) {
+      const kind = description.trim().toLowerCase();
+      if (kind === "expense total") {
+        printed = {
+          origCents: detailCents(cell(row, col.orig)),
+          adjCents: detailCents(cell(row, col.adj)),
+          revCents: detailCents(cell(row, col.rev)),
+          ytdCents: detailCents(cell(row, col.ytd)),
+          encCents: detailCents(cell(row, col.enc)),
+          availCents: detailCents(cell(row, col.avail)),
+        };
+      } else if (fundCode && !org) {
+        const name = totalLabel(description, fundCode);
+        if (!funds.has(fundCode) || name) funds.set(fundCode, gulfName(name));
+      } else if (org) {
+        rememberDept(org, fundCode, totalLabel(description, org));
+      }
+      current = null;
+      skipping = true;
+      continue;
+    }
+
+    if (objectCode) {
+      const fund = fundCode || org.slice(0, 3);
+      if (fund && !funds.has(fund)) funds.set(fund, "");
+      if (objectCode.startsWith("3")) {
+        current = null;
+        skipping = true;
+        continue;
+      }
+      const account: ParsedAccount = {
+        fund,
+        dept: org,
+        objectCode,
+        project: cell(row, col.project),
+        title: gulfName(description),
+        origCents: detailCents(cell(row, col.orig)),
+        adjCents: detailCents(cell(row, col.adj)),
+        revCents: detailCents(cell(row, col.rev)),
+        ytdCents: detailCents(cell(row, col.ytd)),
+        encCents: detailCents(cell(row, col.enc)),
+        availCents: detailCents(cell(row, col.avail)),
+        paymentSumCents: 0,
+        reconDiffCents: 0,
+        isPayroll: isPayrollObject(objectCode),
+        lineCount: 0,
+      };
+      accounts.push(account);
+      rememberDept(org, fund, "");
+      current = account;
+      skipping = false;
+      addTransaction(row, account);
+      continue;
+    }
+
+    if (!skipping && current) addTransaction(row, current);
+  }
+
+  const cutoff = latest || "9999-12-31";
+  for (const payment of payments) payment.afterCutoff = Boolean(latest) && payment.payDate > cutoff;
+  for (const line of payrollLines) line.afterCutoff = Boolean(latest) && line.payDate > cutoff;
+
+  const folded = foldPayrollBatches([...payroll.values()]);
+  for (const line of payrollLines) {
+    const target = folded.redirect.get(batchIdentity(line));
+    if (target) line.batchKey = target.batchKey;
+  }
+  const keptPayments = dedupePayments(payments);
+  const sums = new Map<string, number>();
+  for (const payment of keptPayments) {
+    if (payment.afterCutoff) continue;
+    const key = `${payment.dept}|${payment.objectCode}|${payment.project}`;
+    sums.set(key, (sums.get(key) || 0) + payment.amountCents);
+  }
+  for (const batch of folded.batches) {
+    const key = `${batch.dept}|${batch.objectCode}|${batch.project}`;
+    sums.set(key, (sums.get(key) || 0) + batch.amountCents);
+  }
+  for (const account of accounts) {
+    const sumKey = `${account.dept}|${account.objectCode}|${account.project}`;
+    account.paymentSumCents = sums.get(sumKey) || 0;
+    account.reconDiffCents = account.paymentSumCents - account.ytdCents;
+  }
+
+  return {
+    dataAsOf: latest,
+    funds: [...funds.entries()].map(([code, reportName]) => ({ code, reportName })),
+    departments: [...departments.entries()].map(([code, value]) => ({ code, fund: value.fund, reportName: value.reportName })),
+    accounts,
+    payments: keptPayments,
+    payrollBatches: folded.batches,
+    payrollLines,
+    printed,
+    afterCutoffCount: keptPayments.filter((payment) => payment.afterCutoff).length,
+    reconMismatches: accounts.filter((account) => account.reconDiffCents !== 0),
     foldedPayrollBatches: folded.foldedCount,
   };
 }

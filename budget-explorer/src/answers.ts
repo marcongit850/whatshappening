@@ -1,5 +1,5 @@
 import { TRANSFER_OBJECT, factsFromRow, type BudgetFacts, type FundRollup } from "./budget";
-import { moneyExact, moneyWords, spentTerm } from "./format";
+import { fiscalPosition, moneyExact, moneyWords, spentTerm } from "./format";
 import { directoryPersonSql } from "./parser";
 import { CONSTITUTIONAL_SQL, SHERIFF_FUND_CAPTION, SHERIFF_FUND_LABEL, VENDOR_SOURCES, isSheriffRelease } from "./overview";
 import type { QaRecord } from "./qa";
@@ -58,9 +58,39 @@ function availableFact(facts: BudgetFacts): string {
   return `Not yet spent or promised: ${moneyExact(facts.left)}.`;
 }
 
+/** September 28, 2026 final budget resolution. The posted copy leaves the resolution number blank. */
+export const FY2027_ADOPTED_CENTS = 34_522_350_800;
+export const FY2027_MOSQUITO_CENTS = 142_993_700;
+export const FY2027_ADOPTED_URL = "https://walton.civicweb.net/document/538081/";
+
+export function fy2027CountNote(facts: BudgetFacts): string {
+  const gap = FY2027_ADOPTED_CENTS - facts.adopted;
+  const parts = [
+    `Commissioners adopted ${moneyExact(FY2027_ADOPTED_CENTS)} for FY2027 on September 28, 2026, including ${moneyExact(FY2027_MOSQUITO_CENTS)} for the North Walton Mosquito Control District.`,
+    `The Clerk's account detail lists ${moneyExact(facts.grossOrig)} as the expense original appropriation.`,
+    `Of that, ${moneyExact(facts.transferOrig)} is interfund transfers (object 591000) and is left out of the charts.`,
+  ];
+  if (facts.reserveOrig) parts.push(`${moneyExact(facts.reserveOrig)} is contingency and reserves (other object codes starting with 59).`);
+  if (facts.debtOrig) parts.push(`${moneyExact(facts.debtOrig)} is debt service (object codes starting with 57).`);
+  if (facts.aidOrig) {
+    parts.push(`Aid to other governments and organizations (object codes 581, 582, and 583) is ${moneyExact(facts.aidOrig)} and stays in the budget. Object 581 is not a transfer between county funds in this chart.`);
+  }
+  if (gap === 0) {
+    parts.push("That matches the original appropriation in the account detail after leaving out interfund transfers.");
+  } else {
+    const direction = gap > 0 ? "under" : "over";
+    parts.push(`Expense original minus those transfers is ${moneyExact(facts.adopted)}, which is ${moneyExact(Math.abs(gap))} ${direction} the adopted resolution. The resolution does not itemize that difference.`);
+  }
+  return parts.join(" ");
+}
+
 export function publicFactText(facts: BudgetFacts, asOfLabel: string): string {
+  const fy = fiscalPosition(asOfLabel).fyLabel;
+  const adopted = fy === "2027"
+    ? `Adopted budget passed by commissioners: ${moneyExact(FY2027_ADOPTED_CENTS)}. Source: the September 28, 2026 final budget resolution, ${FY2027_ADOPTED_URL}. ${fy2027CountNote(facts)}`
+    : `Adopted budget passed by commissioners: ${moneyExact(facts.adopted)}.`;
   return [
-    `Adopted budget passed by commissioners: ${moneyExact(facts.adopted)}.`,
+    adopted,
     `Budget limit after mid-year changes: ${moneyExact(facts.current)}. That limit is a ceiling, not a spending plan.`,
     `${spentTerm(asOfLabel)}: ${moneyExact(facts.spent)}.`,
     `Share of the mid-year limit: ${facts.spentOfCurrentPct.toFixed(1)}%.`,
@@ -70,15 +100,14 @@ export function publicFactText(facts: BudgetFacts, asOfLabel: string): string {
   ].join(" ");
 }
 
-/** How the adopted budget grew to the mid-year limit. Open purchase orders are not part of this. */
-export const LIMIT_GROWTH_NOTE =
-  "The Nov 24, 2025 carry-forward resolution (Resolution 2025-82) totals $185,438,075.92 (about $185.4M): $144,713,465.48 cash carried forward for unfinished projects and open purchase orders plus $40,724,610.44 of grants carried over. About $2.7M of new grants are visible in the report. About $7.3M is not itemized in the records we have. Total growth is $195,495,223.26. The higher limit is a ceiling, not a spending plan.";
-
 export function countyBudgetAnswer(facts: BudgetFacts, asOfLabel: string): string {
+  if (fiscalPosition(asOfLabel).fyLabel === "2027") {
+    return `Commissioners adopted a ${moneyWords(FY2027_ADOPTED_CENTS)} budget for FY2027. ${fy2027CountNote(facts)} Through ${asOfLabel} the county's books show ${moneyWords(facts.spent)} spent.`;
+  }
   const takeaway = `Commissioners adopted a ${moneyWords(facts.adopted)} budget. Through ${asOfLabel} the county's books show ${moneyWords(facts.spent)} spent.`;
   const raised =
     facts.current > facts.adopted
-      ? ` Budget limits were raised to ${moneyWords(facts.current)} during the year. ${LIMIT_GROWTH_NOTE}`
+      ? ` Budget limits in this file are ${moneyWords(facts.current)}. That figure is a ceiling, not a spending plan.`
       : "";
   const rest = ` About ${moneyWords(facts.transfer)} moved between county funds and is not counted again.`;
   return `${takeaway}${raised}${rest}`;

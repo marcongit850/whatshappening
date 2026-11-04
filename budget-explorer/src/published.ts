@@ -1394,7 +1394,7 @@ function buildBudgets(revenue: unknown): BudgetYear[] {
   const grouped2027 = new Map<string, { cents: number; income: boolean }>();
   for (const item of rollup.income) grouped2027.set(item.label, { cents: item.cents, income: true });
   for (const item of rollup.notIncome) grouped2027.set(item.label, { cents: item.cents, income: false });
-  const year2027 = budgetYear(2027, "Budget", adopted2027.amount * 100, adopted2027.amount * 100, str(fy2027.source, "FY2027 source"), "", grouped2027, "Adopted at the September 28, 2026 hearing. The figure is from the county's agenda packet. The signed resolution is not posted yet.");
+  const year2027 = budgetYear(2027, "Budget", adopted2027.amount * 100, adopted2027.amount * 100, str(fy2027.source, "FY2027 source"), "", grouped2027, "Adopted at the September 28, 2026 hearing. The posted final budget resolution sets the total at $345,223,508, of which $1,429,937 is for the North Walton Mosquito Control District. The posted copy leaves the resolution number blank.");
   return [year2026, year2027];
 }
 

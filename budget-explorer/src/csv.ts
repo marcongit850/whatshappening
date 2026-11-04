@@ -112,3 +112,14 @@ export function chartFromRows(rows: string[][]): ChartNames | null {
 export function chartFromCsv(text: string): ChartNames | null {
   return chartFromRows(parseCsv(text));
 }
+
+/** Org lines from the county GL chart of accounts text export or a PDF text extract. */
+export function chartFromGlText(text: string): ChartNames {
+  const departments: { code: string; name: string }[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^(\d{8})\s{2,}([A-Za-z0-9][A-Za-z0-9 /&.,'()#-]{1,80})$/.exec(line.trim());
+    if (!match) continue;
+    departments.push({ code: match[1], name: match[2].trim() });
+  }
+  return { funds: [], departments: mostCommon(departments), objects: [] };
+}

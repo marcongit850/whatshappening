@@ -20,7 +20,17 @@ export interface BudgetFacts {
   left: number;
   amendments: number;
   transfer: number;
-  /** One-decimal percents from the SQL sums. Adopted is the budget commissioners passed. */
+  /** Contingency and reserves: object codes starting with 59, other than 591 interfund transfers. */
+  reserveOrig: number;
+  /** Debt service: object codes starting with 57. */
+  debtOrig: number;
+  /** Aid to other governments and organizations: object codes 581, 582, and 583. */
+  aidOrig: number;
+  /**
+   * One-decimal percents from the SQL sums.
+   * `adopted` is the account detail original appropriation minus object 591000.
+   * For FY2027 the overview headline uses the adopted resolution instead of this figure.
+   */
   spentOfCurrentPct: number;
   spentOfAdoptedPct: number;
 }
@@ -34,6 +44,9 @@ interface FactRow {
   transfer_rev_cents: number;
   transfer_ytd_cents: number;
   transfer_enc_cents: number;
+  reserve_orig_cents?: number;
+  debt_orig_cents?: number;
+  aid_orig_cents?: number;
   spent_of_current_tenths?: number;
   spent_of_adopted_tenths?: number;
 }
@@ -73,6 +86,9 @@ export function factsFromRow(row: FactRow): BudgetFacts {
     left: current - spent - encumbered,
     amendments: current - adopted,
     transfer: transferYtd,
+    reserveOrig: Number(row.reserve_orig_cents) || 0,
+    debtOrig: Number(row.debt_orig_cents) || 0,
+    aidOrig: Number(row.aid_orig_cents) || 0,
     spentOfCurrentPct: percentOf(row.spent_of_current_tenths, spent, current),
     spentOfAdoptedPct: percentOf(row.spent_of_adopted_tenths, spent, adopted),
   };
@@ -91,6 +107,9 @@ SELECT
   ${transferCase("rev_cents")} AS transfer_rev_cents,
   ${transferCase("ytd_cents")} AS transfer_ytd_cents,
   ${transferCase("enc_cents")} AS transfer_enc_cents,
+  COALESCE(SUM(CASE WHEN object_code LIKE '59%' AND object_code NOT LIKE '591%' THEN orig_cents ELSE 0 END), 0) AS reserve_orig_cents,
+  COALESCE(SUM(CASE WHEN object_code LIKE '57%' THEN orig_cents ELSE 0 END), 0) AS debt_orig_cents,
+  COALESCE(SUM(CASE WHEN object_code LIKE '581%' OR object_code LIKE '582%' OR object_code LIKE '583%' THEN orig_cents ELSE 0 END), 0) AS aid_orig_cents,
   ROUND(CASE
     WHEN (COALESCE(SUM(rev_cents), 0) - ${transferCase("rev_cents")}) = 0 THEN 0
     ELSE ((COALESCE(SUM(ytd_cents), 0) - ${transferCase("ytd_cents")}) * 1000.0)

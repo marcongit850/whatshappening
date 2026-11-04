@@ -1,7 +1,7 @@
 import type { AccountSpend, BudgetFacts, CapitalLine, CategorySpend, VendorSpendRow } from "./budget";
 import { TRANSFER_OBJECT, capitalLinesCovering, factsFromRow } from "./budget";
 import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters, VendorDescription, VendorDetail, VendorListSort, VendorSummary, VendorWhyRow } from "./db";
-import { LIMIT_GROWTH_NOTE } from "./answers";
+import { FY2027_ADOPTED_CENTS, FY2027_ADOPTED_URL, fy2027CountNote } from "./answers";
 import type { QaRecord } from "./qa";
 import {
   PACE_LABEL,
@@ -76,7 +76,7 @@ export const PUBLIC_PATHS = NAV.map((item) => item[1]);
 export const PAYMENT_CSV_LIMIT = 2000;
 
 const BUDGET_BOOK_LINK = "Planned budget (county's budget book)";
-const BUDGET_BOOK_LABEL = "The county's own FY2027 tentative budget book";
+const BUDGET_BOOK_LABEL = "The county's own FY2027 budget book";
 
 function budgetBookLink(): string {
   return `<a href="${BUDGET_BOOK_URL}">${esc(BUDGET_BOOK_LINK)}</a>`;
@@ -139,7 +139,7 @@ function plainDate(iso: string | null | undefined): string {
 
 function limitNote(facts: BudgetFacts): string {
   if (facts.current <= facts.adopted) return "";
-  return `Budget limits were raised to ${moneyCompact(facts.current)} during the year. ${LIMIT_GROWTH_NOTE}`;
+  return `Budget limits in this file are ${moneyCompact(facts.current)}. That figure is a ceiling, not a spending plan.`;
 }
 
 /** Short figure for the overview card. Full dollars stay in the count section. */
@@ -303,6 +303,7 @@ export function renderOverview(opts: {
 }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const facts = opts.facts;
+  const adoptedShown = fiscal.fyLabel === "2027" ? FY2027_ADOPTED_CENTS : facts.adopted;
   const limitShare = facts.spentOfCurrentPct;
   const yearShown = Math.round(fiscal.elapsedPct);
   const spentLabel = spentTerm(opts.row.data_as_of);
@@ -318,8 +319,8 @@ export function renderOverview(opts: {
   const slices = fundSlices(fundRows, fundLabelOf);
   const paced = paceDepartments(deptRows, opts.names.department);
   const looks = lookPicks(deptRows, fundRows, deptLabelOf, fundLabelOf, opts.landByDept, fiscal.elapsedPct, opts.names.department);
-  const limitScale = Math.max(facts.current, facts.adopted, 1);
-  const adoptedWidth = (Math.max(facts.adopted, 0) / limitScale) * 100;
+  const limitScale = Math.max(facts.current, adoptedShown, 1);
+  const adoptedWidth = (Math.max(adoptedShown, 0) / limitScale) * 100;
   const addedWidth = facts.amendments > 0 ? (facts.amendments / limitScale) * 100 : 0;
   const paidMark = Math.min(100, (Math.max(facts.spent, 0) / limitScale) * 100);
   const raised = limitNote(facts);
@@ -332,10 +333,10 @@ ${whoPaidCard(opts.vendors, fiscal, opts.displayName, opts.showNames)}
 <section class="hero">
 <div>
 <div class="eyebrow">Fiscal year ${esc(fiscal.fyLabel)} &middot; Oct 1, ${esc(fiscal.fyStart.slice(0, 4))} to Sep 30, ${esc(fiscal.fyEnd.slice(0, 4))}</div>
-<h1>Commissioners adopted a ${esc(moneyCompact(facts.adopted))} budget for FY${esc(fiscal.fyLabel)}. Through ${esc(plainDate(opts.row.data_as_of))} the county's books show <em><a href="/search">${esc(moneyCompact(facts.spent))}</a></em> spent.${infoTip("overview-totals", "These totals leave out money moved between county funds.")}</h1>
+<h1>Commissioners adopted a ${esc(moneyCompact(adoptedShown))} budget for FY${esc(fiscal.fyLabel)}. Through ${esc(plainDate(opts.row.data_as_of))} the county's books show <em><a href="/search">${esc(moneyCompact(facts.spent))}</a></em> spent.${infoTip("overview-totals", "These totals leave out money moved between county funds.")}</h1>
 <p class="book-link">${budgetBookLink()}</p>
 <p class="book-caption">${esc(BUDGET_BOOK_LABEL)}.</p>
-<p class="lead">From the county's year to date report. These totals leave out money moved between county funds.</p>
+<p class="lead">${fiscal.fyLabel === "2027" ? "From the Clerk's account detail. These totals leave out money moved between county funds." : "From the county's year to date report. These totals leave out money moved between county funds."}</p>
 ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 </div>
 <div class="card pace">
@@ -352,7 +353,7 @@ ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 </div>
 </section>
 <section class="kpis">
-<div class="card kpi k1"><div class="l"><span>Budget passed by commissioners</span>${infoTip("kpi-adopted", "The budget the commissioners voted on.")}</div><a class="n" href="/departments">${esc(moneyCompact(facts.adopted))}</a><div class="s">The budget the commissioners voted on</div></div>
+<div class="card kpi k1"><div class="l"><span>Budget passed by commissioners</span>${infoTip("kpi-adopted", "The budget the commissioners voted on.")}</div><a class="n" href="/departments">${esc(moneyCompact(adoptedShown))}</a><div class="s">The budget the commissioners voted on</div></div>
 <div class="card kpi k2"><div class="l"><span>${esc(spentLabel)}</span>${infoTip("kpi-spent", `Share of the mid-year limit: ${limitShare.toFixed(1)}%.`)}</div><a class="n" href="/search">${esc(moneyCompact(facts.spent))}</a><div class="s">Share of the mid-year limit: ${limitShare.toFixed(1)}%</div></div>
 <div class="card kpi k3"><div class="l"><span>Promised, not paid</span>${infoTip("kpi-enc", "Committed to open orders and contracts.")}</div><a class="n" href="/departments?sort=enc">${esc(moneyCompact(facts.encumbered))}</a><div class="s">Committed to open orders and contracts</div></div>
 <div class="card kpi k4"><div class="l"><span>${esc(leftLabel(facts.current, facts.spent, facts.encumbered).title)}</span>${infoTip("kpi-left", "Mid-year limit minus paid out minus open orders.")}</div><a class="n" href="/departments?sort=avail">${esc(kpiLeftValue(facts.current, facts.spent, facts.encumbered))}</a><div class="s">Mid-year limit minus paid out minus open orders. This matches the county's own Available Budget.</div></div>
@@ -384,7 +385,7 @@ ${lookCard(looks)}
 ${platCard(opts.funds, opts.names, fyMonths, platIndex, opts.row.data_as_of || "")}
 </section>
 ${askBox(opts.csrf)}
-<p class="sources"><b>Sources.</b> Walton County year to date budget report, data as of ${esc(shortDate(opts.row.data_as_of))}, as provided by the Walton County Clerk and Comptroller. Money moved between county funds is shown on its own and is not included in the spent total. ${laterLinesSentence(opts.row, opts.afterCutoffCents || 0)}</p>`;
+<p class="sources"><b>Sources.</b> ${fiscal.fyLabel === "2027" ? `Walton County account detail, transactions through ${esc(shortDate(opts.row.data_as_of))}, as provided by the Walton County Clerk and Comptroller. Commissioners adopted ${esc(moneyExact(FY2027_ADOPTED_CENTS))} on September 28, 2026. <a href="${FY2027_ADOPTED_URL}">Final budget resolution</a>.` : `Walton County year to date budget report, data as of ${esc(shortDate(opts.row.data_as_of))}, as provided by the Walton County Clerk and Comptroller.`} Money moved between county funds is shown on its own and is not included in the spent total. ${laterLinesSentence(opts.row, opts.afterCutoffCents || 0)}</p>`;
   return page({
     title: "Overview. Budget Explorer",
     active: "overview",
@@ -749,6 +750,8 @@ function laterLinesSentence(row: ImportRow, cents: number): string {
 }
 
 function countCard(facts: BudgetFacts, asOf: string | null | undefined): string {
+  const fiscal = fiscalPosition(asOf);
+  const adoptedShown = fiscal.fyLabel === "2027" ? FY2027_ADOPTED_CENTS : facts.adopted;
   const left = leftLabel(facts.current, facts.spent, facts.encumbered);
   const leftSentence = left.over
     ? `${spentTerm(asOf)} is over the mid-year limit by ${left.value} after open orders.`
@@ -756,12 +759,18 @@ function countCard(facts: BudgetFacts, asOf: string | null | undefined): string 
       ? "No budget is set in the county report."
       : `${left.value} is not yet spent or promised. That is the mid-year limit minus what the books show minus open orders.`;
   const raised = limitNote(facts);
+  const adoptedSentence = fiscal.fyLabel === "2027"
+    ? fy2027CountNote(facts)
+    : `Commissioners adopted ${money(facts.adopted)}. The books show ${money(facts.spent)} spent. The budget limit after mid-year changes is ${money(facts.current)}. ${leftSentence}`;
+  const source = fiscal.fyLabel === "2027"
+    ? ` <a href="${FY2027_ADOPTED_URL}">Final budget resolution, September 28, 2026</a>.`
+    : "";
   return `<section class="card count-card" id="how-we-count">
-<h2>How we count the budget${infoTip("how-we-count", `Commissioners adopted ${money(facts.adopted)}.`)}</h2>
-<p>Commissioners adopted ${money(facts.adopted)}. The books show ${money(facts.spent)} spent. The budget limit after mid-year changes is ${money(facts.current)}. ${leftSentence}</p>
+<h2>How we count the budget${infoTip("how-we-count", `Commissioners adopted ${money(adoptedShown)}.`)}</h2>
+<p>${fiscal.fyLabel === "2027" ? esc(adoptedSentence) : adoptedSentence} ${fiscal.fyLabel === "2027" ? `The books show ${money(facts.spent)} spent. The budget limit after changes in this file is ${money(facts.current)}. ${leftSentence}` : ""}</p>
 ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 <div class="transfer-row"><span>Money moved between county funds</span> <b>${money(facts.transfer)}</b></div>
-<p class="cap">The report lists the transfer out of one fund. The fund that receives it then spends or releases the money, so adding both would count the same dollars twice. This site counts it once and shows the transfer amount on its own. <a href="https://walton.civicweb.net/document/511445/">Minutes of the 9/22/2025 final hearing</a>. <a href="https://midbaynews.com/post/walton-county-passes-328m-budget-in-narrow-3-2-vote">Mid Bay News, 9/24/2025</a>. <a href="https://walton.civicweb.net/document/509733/">Carry-forward resolution</a>. <a href="https://walton.civicweb.net/document/520074/">Minutes</a>.</p>
+<p class="cap">The report lists the transfer out of one fund. The fund that receives it then spends or releases the money, so adding both would count the same dollars twice. This site counts it once and shows the transfer amount on its own.${source}</p>
 </section>`;
 }
 
@@ -1755,7 +1764,7 @@ export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolea
 <h1>About the data</h1>
 <section class="panel about-source">
 <h2>Source</h2>
-<p>Figures come from a year to date budget report produced by the Walton County Clerk and Comptroller, imported by an administrator. The published snapshot is what the pages read. Older imports are kept.</p>
+<p>Figures come from a year to date budget report, or from the Clerk's account detail workbook, produced by the Walton County Clerk and Comptroller and imported by an administrator. The published snapshot is what the pages read. Older imports are kept. For FY2027, the countywide budget in the headline is the September 28, 2026 final budget resolution, not the expense original appropriation in the account detail.</p>
 <p class="book-link">${budgetBookLink()}</p>
 <p class="book-caption">${esc(BUDGET_BOOK_LABEL)}.</p>
 <p><a href="/revenue">Income</a> and <a href="/reserves">savings</a> are separate. They come from the audited financial report and the adopted budget files, not from the year to date payment report. Transfers between county funds are not treated as income.</p>
@@ -1850,11 +1859,11 @@ export function renderAdminHome(
 <p class="lede">Import a budget report, check it against the printed totals, then publish. Older imports stay in the history. Chart names on file: ${chartCount.toLocaleString("en-US")}.</p>
 <section class="panel">
 <h2>Import a file</h2>
-<p class="hint">The text export of the year to date budget report is the primary format. CSV and the first worksheet of an Excel file can load a chart of accounts. PDF text extraction is not available in this Worker. Export the report as text, or upload a .txt file.</p>
+<p class="hint">Upload the Clerk's ACCOUNT DETAIL workbook (.xlsx). The first worksheet needs FUND, ORG, OBJ, and ORIGINAL APPROP. Total rows are skipped. The older text year to date report still imports. CSV and Excel can also load a chart of accounts. A chart PDF is read by scripts/seed-local.sh, not by this upload.</p>
 <form method="post" action="/admin/import" enctype="multipart/form-data" data-busy>
 <input type="hidden" name="csrf" value="${esc(optsCsrf(csrf))}">
 <div class="drop">
-<strong>Drop a text, CSV, or Excel file</strong>
+<strong>Drop a text or Excel account detail file</strong>
 <p class="hint">You can also choose a file below. A full year report is large and can take a minute to save.</p>
 <input name="file" type="file" accept=".txt,.csv,.xlsx,.pdf,text/plain,text/csv,application/pdf" required>
 </div>
@@ -1940,6 +1949,7 @@ ${metric("", "After report date", opts.row.after_cutoff_count.toLocaleString("en
 <h2>Reconciliation</h2>
 <p>${esc(printed)}</p>
 <p>${opts.mismatches.length ? `${opts.mismatches.length} accounts whose payments do not sum to year to date spending.` : "Every account's payment lines, including payroll batches, sum to its year to date spending."}</p>
+${opts.row.printed_orig_cents != null && opts.row.printed_orig_cents === opts.row.orig_cents && opts.row.printed_ytd_cents === opts.row.ytd_cents && opts.mismatches.length ? `<p class="hint">Stored payments are invoices and similar disbursements, plus payroll batches. Purchase orders, commitments, and journal lines stay in the year to date and encumbrance columns, so those columns will not match the payment lines account by account. The printed expense total is what the spent and budget figures use.</p>` : ""}
 ${
   opts.mismatches.length
     ? `<div class="table-wrap"><table><thead><tr><th>Account</th><th>Title</th><th class="num">YTD</th><th class="num">Payments</th><th class="num">Difference</th></tr></thead><tbody>${mismatchRows}</tbody></table></div>`
