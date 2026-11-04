@@ -28,7 +28,7 @@ describe("account detail workbook", () => {
       ["", "", "", "", "Grand Total", "1", "0", "1", "1", "1", "1", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
     ];
     expect(isAccountDetail(rows)).toBe(true);
-    const parsed = parseAccountDetail(rows);
+    const parsed = parseAccountDetail(rows, { today: "2026-12-01" });
     expect(parsed.dataAsOf).toBe("2026-11-12");
     expect(parsed.accounts.map((row) => row.objectCode).sort()).toEqual(["512000", "534000", "571000", "581000", "591000", "599000"]);
     expect(parsed.accounts.reduce((sum, row) => sum + row.origCents, 0)).toBe(585000);
@@ -44,6 +44,23 @@ describe("account detail workbook", () => {
     expect(parsed.departments.find((row) => row.code === "00101000")?.reportName).toBe("BCC/LEGISLATIVE");
     expect(parsed.funds.find((row) => row.code === "001")?.reportName).toBe("GENERAL FUND");
     expect(parsed.accounts.some((row) => row.objectCode.startsWith("3"))).toBe(false);
+  });
+
+  it("ignores transaction dates after the day the importer runs", () => {
+    const rows = [
+      header,
+      ["001", "00101000", "534000", "", "OTHER SERVICES", "500", "0", "500", "125.50", "0", "374.50", "2027/02/000010", "11/02/2026", "API", "25.50", "001374", "", "", "", "", "", "INV-1", "", "700019809", "HEALTHIEST YOU", "OCTOBER", "", "", ""],
+      ["", "", "", "", "", "", "", "", "", "", "", "2027/02/000099", "11/12/2026", "API", "100", "001999", "", "", "", "", "", "INV-9", "", "700019900", "FUTURE VENDOR CO", "LATER", "", "", ""],
+    ];
+    const parsed = parseAccountDetail(rows, { today: "2026-11-04" });
+    expect(parsed.dataAsOf).toBe("2026-11-02");
+    expect(parsed.accounts[0].ytdCents).toBe(12550);
+    const future = parsed.payments.find((row) => row.vendorName === "FUTURE VENDOR CO");
+    const current = parsed.payments.find((row) => row.vendorName === "HEALTHIEST YOU");
+    expect(future?.payDate).toBe("2026-11-12");
+    expect(future?.afterCutoff).toBe(true);
+    expect(current?.afterCutoff).toBe(false);
+    expect(parsed.afterCutoffCount).toBe(1);
   });
 
   it("states the adopted resolution apart from the account detail", () => {

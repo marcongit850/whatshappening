@@ -62,7 +62,7 @@ The monthly workbook stays outside git. From `budget-explorer/`:
 1. `npm run seed -- /path/to/account-detail.xlsx /path/to/chart-of-accounts.pdf`
 2. The script applies local migrations, parses the first worksheet, and skips Total rows. Revenue accounts (object codes starting with 3) are not loaded into the spending tables, because the county stores them as negative amounts.
 3. It checks the parsed expense original, revised, and year to date totals against the Expense Total row. If those differ, the script stops.
-4. Data as of is the latest transaction date in the workbook.
+4. Data as of is the latest transaction date on or before the day the importer runs. A later date stays in the county's year to date and encumbrance columns and does not set the as of date.
 5. Stored payments are API, APM, and GRV lines, plus payroll batches from PRJ lines. Purchase orders and journal lines stay in the year to date and encumbrance columns.
 6. A chart PDF needs `python3 -m pip install pypdf`. If that read fails, department names still come from the Total rows in the workbook.
 7. This writes the local D1 file only. Do not run `wrangler d1 migrations apply --remote` from here. An administrator can also upload the same .xlsx on Admin Import, then publish after the preview matches the Expense Total.

@@ -776,13 +776,23 @@ export function isAccountDetail(rows: string[][]): boolean {
   return normalized.includes("fund") && normalized.includes("org") && normalized.includes("obj") && normalized.some((cell) => cell.includes("original"));
 }
 
+/** Calendar date of a run, as YYYY-MM-DD in UTC. */
+export function importerRunDate(now = new Date()): string {
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * Clerk ACCOUNT DETAIL workbook. One account row, then transaction lines.
  * Total rows, and revenue accounts (object codes starting with 3), are not added into the expense budget.
- * The as of date is the latest transaction date in the file.
+ * The as of date is the latest transaction date on or before the day the importer runs.
+ * Later dates stay in the county's year to date and encumbrance columns, and they do not set the as of date.
  */
-export function parseAccountDetail(rows: string[][]): ParseResult {
+export function parseAccountDetail(rows: string[][], opts: { today?: string } = {}): ParseResult {
   if (!isAccountDetail(rows)) throw new Error("This workbook is not an account detail report.");
+  const today = isoDate(opts.today || "") || importerRunDate();
   const headerAt = rows.findIndex((row) => row.some((cell) => normHeader(cell) === "fund"));
   const header = rows[headerAt] || [];
   const col = {
@@ -819,11 +829,11 @@ export function parseAccountDetail(rows: string[][]): ParseResult {
   let printed: ParseResult["printed"] = null;
   let current: ParsedAccount | null = null;
   let skipping = false;
-  let latest = "";
+  let asOf = "";
 
   const noteDate = (raw: string) => {
     const iso = detailDate(raw);
-    if (iso && iso > latest) latest = iso;
+    if (iso && iso <= today && iso > asOf) asOf = iso;
   };
 
   const rememberDept = (code: string, fundCode: string, name: string) => {
@@ -975,9 +985,9 @@ export function parseAccountDetail(rows: string[][]): ParseResult {
     if (!skipping && current) addTransaction(row, current);
   }
 
-  const cutoff = latest || "9999-12-31";
-  for (const payment of payments) payment.afterCutoff = Boolean(latest) && payment.payDate > cutoff;
-  for (const line of payrollLines) line.afterCutoff = Boolean(latest) && line.payDate > cutoff;
+  const cutoff = asOf || today;
+  for (const payment of payments) payment.afterCutoff = Boolean(payment.payDate) && payment.payDate > cutoff;
+  for (const line of payrollLines) line.afterCutoff = Boolean(line.payDate) && line.payDate > cutoff;
 
   const folded = foldPayrollBatches([...payroll.values()]);
   for (const line of payrollLines) {
@@ -1002,7 +1012,7 @@ export function parseAccountDetail(rows: string[][]): ParseResult {
   }
 
   return {
-    dataAsOf: latest,
+    dataAsOf: asOf,
     funds: [...funds.entries()].map(([code, reportName]) => ({ code, reportName })),
     departments: [...departments.entries()].map(([code, value]) => ({ code, fund: value.fund, reportName: value.reportName })),
     accounts,
