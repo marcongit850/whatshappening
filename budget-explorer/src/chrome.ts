@@ -119,7 +119,7 @@ export function siteFooter(opts: ChromeOpts): string {
 <nav class="footer-col" aria-label="Sources">
 <p class="footer-label">Sources</p>
 <a href="${BUDGET_BOOK_URL}">County budget book</a>
-<a href="${AUDIT_REPORT_URL}">Audited financial report</a>
+<a href="${AUDIT_REPORT_URL}">FY2025 annual comprehensive financial report</a>
 </nav>
 ${request}
 </div>

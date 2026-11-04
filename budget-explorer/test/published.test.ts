@@ -285,7 +285,9 @@ describe("revenue and reserves pages", () => {
     expect(reserves).toContain('id="cash"');
     expect(reserves).toContain('href="/revenue#interest"');
     expect(revenue).toContain("<svg");
-    expect(reserves).toContain("Audited year-end balance, not a live balance");
+    expect(reserves).toContain("Year-end balance as of September 30, 2025, from the county's annual comprehensive financial report");
+    expect(reserves).toContain("independent auditor's report");
+    expect(reserves).toContain("spring 2027 audit");
     expect(reserves).toContain('href="/funds/111"');
     expect(reserves).toContain("Resolution 2012-59");
     expect(overview).toContain("See all income sources");
@@ -306,7 +308,12 @@ describe("revenue and reserves pages", () => {
     expect(spendCard).toContain('r="72"');
     expect(spendCard).toContain('class="lgs"');
     expect(incomeCard.startsWith('<div class="card income-card pie-card">')).toBe(true);
-    expect(incomeCard).toContain('class="dn2">income</text>');
+    expect(incomeCard).toContain('class="dn2">budget</text>');
+    expect(incomeCard).toContain("adopted FY2027 budget by source");
+    expect(incomeCard).toContain("Cash and other balances brought forward");
+    expect(incomeCard).toContain("https://budget-waltoncountyfl.com/assets/data/revenues.csv");
+    expect(incomeCard).toContain("https://walton.civicweb.net/document/538081/");
+    expect(incomeCard).not.toContain("audited income for the year that ended September 30, 2025");
     expect(incomeCard).toContain('stroke-width="26"');
     expect(incomeCard).toContain('r="72"');
     expect(incomeCard).toContain('class="lgs"');

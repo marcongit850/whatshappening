@@ -1,7 +1,7 @@
 import type { AccountSpend, BudgetFacts, CapitalLine, CategorySpend, VendorSpendRow } from "./budget";
 import { TRANSFER_OBJECT, capitalLinesCovering, factsFromRow } from "./budget";
 import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters, VendorDescription, VendorDetail, VendorListSort, VendorSummary, VendorWhyRow } from "./db";
-import { FY2027_ADOPTED_CENTS, FY2027_ADOPTED_URL, fy2027CountNote } from "./answers";
+import { FY2027_ADOPTED_CENTS, FY2027_ADOPTED_URL, fy2027CountNote, howWeCountLead } from "./answers";
 import type { QaRecord } from "./qa";
 import {
   PACE_LABEL,
@@ -40,7 +40,7 @@ import {
   paceDepartments,
   type SpendRow,
 } from "./overview";
-import type { AmountItem, PublishedLedger, ReserveFund } from "./published";
+import type { BudgetYear, PublishedLedger, ReserveFund } from "./published";
 import { VENDOR_DIRECTORY_CAPTION, mergeVendorSpend, reversalNote, titleCaseVendor, vendorPurposeSentence, type VendorLabel } from "./vendors";
 
 export interface ShellOpts {
@@ -299,7 +299,7 @@ export function renderOverview(opts: {
   csrf: string;
   isAdmin: boolean;
   showNames: boolean;
-  income?: { items: AmountItem[]; totalCents: number } | null;
+  income?: BudgetYear | null;
 }): string {
   const fiscal = fiscalPosition(opts.row.data_as_of);
   const facts = opts.facts;
@@ -328,8 +328,6 @@ export function renderOverview(opts: {
   const platIndex = new Map(opts.platMonths.map((row) => [row.ym, row]));
   const fyMonths = fiscalYearMonths(opts.row.data_as_of);
   const body = `
-${paySearchBox(opts.showNames)}
-${whoPaidCard(opts.vendors, fiscal, opts.displayName, opts.showNames)}
 <section class="hero">
 <div>
 <div class="eyebrow">Fiscal year ${esc(fiscal.fyLabel)} &middot; Oct 1, ${esc(fiscal.fyStart.slice(0, 4))} to Sep 30, ${esc(fiscal.fyEnd.slice(0, 4))}</div>
@@ -361,19 +359,26 @@ ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 ${countCard(facts, opts.row.data_as_of)}
 <section class="grid2 spend-row">
 <div class="card">
+<div class="chart-head">
 <div class="eyebrow">By fund</div>
 <h2>Where the money is, fund by fund${infoTip("by-fund", "Spending against each fund's revised budget.")}</h2>
 <p class="cap">Spending against each fund's revised budget.</p>
 <div class="legend"><span><i style="background:var(--teal)"></i>Spent</span><span><i class="swatch-enc"></i>Encumbered</span><span><i style="background:#e9e5d8"></i>Revised budget</span></div>
-${fundBars(slices)}
+</div>
+<div class="chart-plot">${fundBars(slices)}</div>
+<div class="chart-slot"></div>
+<div class="chart-slot"></div>
 </div>
 <div class="card pie-card">
+<div class="chart-head">
 <div class="eyebrow">Share of spending</div>
 <h2>Where the money goes${infoTip("where-goes", `Each fund's share of the ${moneyCompact(facts.spent)} spent so far.`)}</h2>
 <p class="cap">Each fund's share of the ${esc(moneyCompact(facts.spent))} spent so far. Money moved between funds is not in this chart.</p>
-${shareDonut(slices, facts.spent)}
 </div>
-${incomeCard(opts.income?.items ?? null, opts.income?.totalCents ?? 0)}
+${shareDonut(slices, facts.spent)}
+<div class="chart-slot"></div>
+</div>
+${incomeCard(opts.income ?? null)}
 </section>
 ${paceSection(paced, opts, fiscal.elapsedPct, facts.transfer, deptLabels)}
 <section class="grid2b">
@@ -400,9 +405,8 @@ ${askBox(opts.csrf)}
 
 function paySearchBox(showNames: boolean): string {
   const label = showNames ? "Vendor, employee, invoice, check, or description" : "Vendor, invoice, check, or description";
-  return `<section class="ask-hero card pay-find">
-<div class="eyebrow">Who was paid</div>
-<h2>Search any vendor or payment${infoTip("pay-search", "Search payment lines in the published import.")}</h2>
+  return `<div class="pay-find">
+<h3>Search any vendor or payment${infoTip("pay-search", "Search payment lines in the published import.")}</h3>
 <p class="cap">Search payment lines in the published import.</p>
 <form method="get" action="/search">
 <div class="ask-row">
@@ -411,8 +415,8 @@ function paySearchBox(showNames: boolean): string {
 <button class="btn" type="submit">Search</button>
 </div>
 </form>
-<p class="more-links"><a class="btn" href="/vendors">All vendors</a> <a class="btn secondary" href="/search">All payments</a></p>
-</section>`;
+<p class="more-links"><a class="btn" href="/vendors">See all vendors</a> <a class="btn secondary" href="/search">All payments</a></p>
+</div>`;
 }
 
 function vendorPageHref(vendor: OrgVendor, fiscal: { fyStart: string; asOf: string }): string {
@@ -437,35 +441,6 @@ function vendorBarRow(row: { href: string; label: VendorLabel; width: number; am
 
 function vendorBarList(rows: string, ranked: boolean): string {
   return `<div class="vlist${ranked ? " ranked" : ""}">${rows}</div>`;
-}
-
-function whoPaidCard(vendors: OrgVendor[], fiscal: { fyStart: string; asOf: string }, displayName: (raw: string) => VendorLabel, showNames: boolean): string {
-  const shown = vendors.slice(0, RANKED_LIMIT);
-  const max = Math.max(shown[0]?.cents || 0, 1);
-  const through = vendorPaidRange(fiscal.fyStart, fiscal.asOf);
-  const rows = vendorBarList(
-    shown
-      .map((vendor, index) => {
-        const width = max ? (vendor.cents / max) * 100 : 0;
-        const label = displayName(vendor.vendor_name);
-        const count = `${vendor.payments.toLocaleString("en-US")} payment${vendor.payments === 1 ? "" : "s"}`;
-        return vendorBarRow({
-          href: vendorPageHref(vendor, fiscal),
-          label,
-          width,
-          amount: moneyCompact(vendor.cents),
-          count,
-          rank: index + 1,
-        });
-      })
-      .join(""),
-    true,
-  );
-  return `<section class="card paid-list"><div class="eyebrow">Who was paid</div><h2>Who was paid the most money${infoTip("who-paid", through)}</h2>
-<p class="cap">Total paid. ${esc(through)} Payments to other county offices are not in these bars.</p>
-${rows || `<p class="cap">No vendor payments are in this import.</p>`}
-<p class="mnote">${esc(vendorListNote(showNames))}</p>
-<a class="btn" href="/vendors">See all vendors</a></section>`;
 }
 
 function vendorListNote(showNames: boolean): string {
@@ -562,7 +537,7 @@ function paceSection(
   return `<section class="card pace-card"><div class="eyebrow">By department</div><h2>Are departments spending on pace?${infoTip("pace", `The ${rows.length} departments with the largest budgets.`)}</h2>
 <p class="cap">The ${rows.length} departments with the largest budgets. The dark line is ${yearShown}% of the year. In line means within 1 percentage point of that. Spending more than the year's progress is higher than that. Under is lower.</p>
 <div class="legend"><span><i style="background:var(--g)"></i>In line</span><span><i style="background:var(--teal2)"></i>Under</span><span><i style="background:var(--y)"></i>Spending more than the year's progress</span><span><i style="background:var(--r)"></i>Over budget</span><span><i class="swatch-hatch"></i>Promised, not paid</span><span>Releases to the Sheriff</span><span>Paid on schedule</span></div>
-<div class="plotarea"><div class="axis top"></div><div class="pacew"><div class="tag" style="left:${marker.toFixed(2)}%">Year ${yearShown}%</div>${guides}</div>
+<div class="plotarea pace-chart"><div class="axis top"></div><div class="pacew"><div class="tag" style="left:${marker.toFixed(2)}%">Year ${yearShown}%</div>${guides}</div>
 ${list}
 <div class="axis">${axis}</div></div>
 <div class="mobpace">In line means within 1 percentage point of ${yearShown}% of the year. Higher than that is spending more than the year's progress.</div>
@@ -639,8 +614,15 @@ function vendorCard(
       .map((vendor, index) => {
         const width = max ? (vendor.cents / max) * 100 : 0;
         const label = displayName(vendor.vendor_name);
-        const href = `/search?vendor=${encodeURIComponent(vendor.vendor_name)}&from=${fiscal.fyStart}&to=${fiscal.asOf}`;
-        return vendorBarRow({ href, label, width, amount: moneyCompact(vendor.cents), rank: index + 1 });
+        const count = `${vendor.payments.toLocaleString("en-US")} payment${vendor.payments === 1 ? "" : "s"}`;
+        return vendorBarRow({
+          href: vendorPageHref(vendor, fiscal),
+          label,
+          width,
+          amount: moneyCompact(vendor.cents),
+          count,
+          rank: index + 1,
+        });
       })
       .join(""),
     true,
@@ -650,8 +632,9 @@ function vendorCard(
   const officeRow = officeCents > 0 ? `<div class="transfer-row"><span>Payments to other county offices</span> <b>${esc(moneyCompact(officeCents))}</b></div>` : "";
   const transferRow = transferCents > 0 ? `<div class="transfer-row"><span>Money moved between county funds</span> <b>${esc(moneyCompact(transferCents))}</b></div>` : "";
   const through = vendorPaidRange(fiscal.fyStart, fiscal.asOf);
-  return `<div class="card"><div class="eyebrow">Vendors</div><h2>Top vendors by amount paid${infoTip("vendors", through)}</h2>
-<p class="cap">${esc(through)} Payments to other county offices are not in these bars.</p>
+  return `<div class="card paid-list"><div class="eyebrow">Vendors</div><h2>Top vendors by amount paid${infoTip("vendors", through)}</h2>
+<p class="cap">${esc(through)} Payments to other county offices are not in these bars. Each bar links to that vendor's page.</p>
+${paySearchBox(showNames)}
 ${rows || `<p class="cap">No vendor payments are in this import.</p>`}
 ${officeRow}
 ${transferRow}
@@ -752,25 +735,23 @@ function laterLinesSentence(row: ImportRow, cents: number): string {
 function countCard(facts: BudgetFacts, asOf: string | null | undefined): string {
   const fiscal = fiscalPosition(asOf);
   const adoptedShown = fiscal.fyLabel === "2027" ? FY2027_ADOPTED_CENTS : facts.adopted;
-  const left = leftLabel(facts.current, facts.spent, facts.encumbered);
-  const leftSentence = left.over
-    ? `${spentTerm(asOf)} is over the mid-year limit by ${left.value} after open orders.`
-    : left.unbudgeted
-      ? "No budget is set in the county report."
-      : `${left.value} is not yet spent or promised. That is the mid-year limit minus what the books show minus open orders.`;
   const raised = limitNote(facts);
-  const adoptedSentence = fiscal.fyLabel === "2027"
-    ? fy2027CountNote(facts)
-    : `Commissioners adopted ${money(facts.adopted)}. The books show ${money(facts.spent)} spent. The budget limit after mid-year changes is ${money(facts.current)}. ${leftSentence}`;
+  const detail = fiscal.fyLabel === "2027"
+    ? esc(fy2027CountNote(facts))
+    : "The report lists the transfer out of one fund. The fund that receives it then spends or releases the money, so adding both would count the same dollars twice. This site counts it once and shows the transfer amount on its own.";
   const source = fiscal.fyLabel === "2027"
-    ? ` <a href="${FY2027_ADOPTED_URL}">Final budget resolution, September 28, 2026</a>.`
+    ? `<p class="src">Source. <a href="${FY2027_ADOPTED_URL}">Final budget resolution, September 28, 2026</a>.</p>`
     : "";
   return `<section class="card count-card" id="how-we-count">
 <h2>How we count the budget${infoTip("how-we-count", `Commissioners adopted ${money(adoptedShown)}.`)}</h2>
-<p>${fiscal.fyLabel === "2027" ? esc(adoptedSentence) : adoptedSentence} ${fiscal.fyLabel === "2027" ? `The books show ${money(facts.spent)} spent. The budget limit after changes in this file is ${money(facts.current)}. ${leftSentence}` : ""}</p>
+<p>${esc(howWeCountLead(facts, asOf))}</p>
 ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
-<div class="transfer-row"><span>Money moved between county funds</span> <b>${money(facts.transfer)}</b></div>
-<p class="cap">The report lists the transfer out of one fund. The fund that receives it then spends or releases the money, so adding both would count the same dollars twice. This site counts it once and shows the transfer amount on its own.${source}</p>
+<div class="transfer-row"><span>Money moved between county funds</span> <b>${money(facts.transferOrig)}</b></div>
+${source}
+<details class="count-details">
+<summary>See the details</summary>
+<p>${detail}</p>
+</details>
 </section>`;
 }
 
@@ -1767,7 +1748,7 @@ export function renderAbout(row: ImportRow | null, csrf: string, isAdmin: boolea
 <p>Figures come from a year to date budget report, or from the Clerk's account detail workbook, produced by the Walton County Clerk and Comptroller and imported by an administrator. The published snapshot is what the pages read. Older imports are kept. For FY2027, the countywide budget in the headline is the September 28, 2026 final budget resolution, not the expense original appropriation in the account detail.</p>
 <p class="book-link">${budgetBookLink()}</p>
 <p class="book-caption">${esc(BUDGET_BOOK_LABEL)}.</p>
-<p><a href="/revenue">Income</a> and <a href="/reserves">savings</a> are separate. They come from the audited financial report and the adopted budget files, not from the year to date payment report. Transfers between county funds are not treated as income.</p>
+<p><a href="/revenue">Income</a> and <a href="/reserves">savings</a> are separate. The FY2025 figures come from the county's annual comprehensive financial report, which includes the independent auditor's report. Later years come from the adopted budget files. They do not come from the year to date payment report. Transfers between county funds are not treated as income.</p>
 <p>Department and object names come from a chart of accounts when one has been imported. Until then, a code is tagged name from county report. Every figure is keyed by fund, department, object, and project codes.</p>
 <p>Payroll lines in this report are batch totals. No employee names appear. Payment lines dated after the report date are stored, flagged, and left out of search, department payments, and questions.</p>
 <p>Status compares spent plus encumbered with the share of the fiscal year that has passed. The fiscal year starts on October 1.</p>
