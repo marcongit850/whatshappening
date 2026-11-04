@@ -1,8 +1,13 @@
 import { strFromU8, Unzip, UnzipInflate, type UnzipFile } from "fflate";
+import { stripC0Controls } from "./text";
 
-/** A two month account detail sheet is about 9 MB uncompressed. A later monthly file can be larger. */
-export const XLSX_MAX_ENTRY_BYTES = 64_000_000;
-export const XLSX_MAX_TOTAL_BYTES = 80_000_000;
+/**
+ * Uncompressed caps for the Worker import.
+ * The FY2027 account detail workbook is about 9 MB uncompressed, so it still fits.
+ * One entry cannot be larger than the total.
+ */
+export const XLSX_MAX_ENTRY_BYTES = 30_000_000;
+export const XLSX_MAX_TOTAL_BYTES = 30_000_000;
 /** Compressed .xlsx cap. Rejected before any unzip. Matches the upload cap. */
 export const XLSX_MAX_COMPRESSED_BYTES = 20_000_000;
 /** Push this much compressed input at a time so a forged size can be stopped early. */
@@ -26,13 +31,71 @@ export function zipEntryAllowed(
 }
 
 function decodeXml(value: string): string {
-  return value
+  const decoded = value
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(Number(num)))
     .replace(/&amp;/g, "&");
+  return stripC0Controls(decoded);
+}
+
+function isNameBoundary(char: string | undefined): boolean {
+  return char === undefined || char === ">" || char === "/" || char === " " || char === "\t" || char === "\n" || char === "\r";
+}
+
+function tagEnd(xml: string, from: number): number {
+  let quote = "";
+  for (let i = from; i < xml.length; i += 1) {
+    const char = xml[i];
+    if (quote) {
+      if (char === quote) quote = "";
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === ">") return i;
+  }
+  return -1;
+}
+
+/** Find the next `<name` element. An unclosed tag stops the scan instead of backtracking. */
+function readTag(xml: string, name: string, from: number): { attrs: string; body: string; next: number } | null {
+  const needle = `<${name}`;
+  let pos = from;
+  while (pos < xml.length) {
+    const start = xml.indexOf(needle, pos);
+    if (start < 0) return null;
+    if (!isNameBoundary(xml[start + needle.length])) {
+      pos = start + needle.length;
+      continue;
+    }
+    const openEnd = tagEnd(xml, start + needle.length);
+    if (openEnd < 0) return null;
+    const selfClosing = xml[openEnd - 1] === "/";
+    const attrs = xml.slice(start + needle.length, selfClosing ? openEnd - 1 : openEnd);
+    if (selfClosing) return { attrs, body: "", next: openEnd + 1 };
+    const closeNeedle = `</${name}>`;
+    const close = xml.indexOf(closeNeedle, openEnd + 1);
+    if (close < 0) return null;
+    return { attrs, body: xml.slice(openEnd + 1, close), next: close + closeNeedle.length };
+  }
+  return null;
+}
+
+function textContent(xml: string, name: string): string {
+  let out = "";
+  let pos = 0;
+  while (pos < xml.length) {
+    const tag = readTag(xml, name, pos);
+    if (!tag) break;
+    out += decodeXml(tag.body);
+    pos = tag.next;
+  }
+  return out;
 }
 
 function columnIndex(letters: string): number {
@@ -133,32 +196,37 @@ export function xlsxToRows(buffer: Uint8Array, limits: ZipLimits = { entry: XLSX
   const shared = files["xl/sharedStrings.xml"];
   if (shared) {
     const xml = strFromU8(shared);
-    const items = xml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g);
-    for (const item of items) {
-      const texts = [...item[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((part) => decodeXml(part[1]));
-      strings.push(texts.join(""));
+    let pos = 0;
+    while (pos < xml.length) {
+      const item = readTag(xml, "si", pos);
+      if (!item) break;
+      strings.push(textContent(item.body, "t"));
+      pos = item.next;
     }
   }
   const sheetName = Object.keys(files).find((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
   if (!sheetName) return [];
   const xml = strFromU8(files[sheetName]);
   const rows: string[][] = [];
-  for (const rowMatch of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+  let pos = 0;
+  while (pos < xml.length) {
+    const row = readTag(xml, "row", pos);
+    if (!row) break;
+    pos = row.next;
     const cells: string[] = [];
     let cursor = 0;
-    for (const cell of rowMatch[1].matchAll(/<c\b([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
-      const attrs = cell[1];
-      const body = cell[2] || "";
-      const ref = /r="([A-Z]+)\d+"/.exec(attrs);
+    let cellPos = 0;
+    while (cellPos < row.body.length) {
+      const cell = readTag(row.body, "c", cellPos);
+      if (!cell) break;
+      cellPos = cell.next;
+      const ref = /r="([A-Z]+)\d+"/.exec(cell.attrs);
       const index = ref ? columnIndex(ref[1]) : cursor;
       while (cells.length < index) cells.push("");
-      const type = /t="([^"]+)"/.exec(attrs)?.[1] || "";
-      let value = /<v>([\s\S]*?)<\/v>/.exec(body)?.[1] || "";
-      value = decodeXml(value);
+      const type = /t="([^"]+)"/.exec(cell.attrs)?.[1] || "";
+      let value = textContent(cell.body, "v");
       if (type === "s") value = strings[Number(value)] || "";
-      if (type === "inlineStr") {
-        value = [...body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((part) => decodeXml(part[1])).join("");
-      }
+      if (type === "inlineStr") value = textContent(cell.body, "t");
       cells[index] = value;
       cursor = index + 1;
     }

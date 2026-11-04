@@ -70,7 +70,7 @@ chmod +x scripts/seed-local.sh
 npx wrangler dev
 ```
 
-The seed script parses the text report, checks parsed totals against the printed grand total, and tries to fetch the public chart of accounts CSVs. If those files are unreachable, department and object codes stay unmatched until you upload a chart on the Admin page. After migrations, sqlite3 loads the rows into the local D1 file wrangler created. The generated SQL is written in the operating system temp directory, outside this repository.
+The seed script parses the text report, checks parsed totals against the printed grand total, and tries to fetch the public chart of accounts CSVs. If those files are unreachable, department and object codes stay unmatched until you upload a chart on the Admin page. After migrations, the script inserts rows into the local D1 file wrangler created. Values are bound parameters, so a workbook cell cannot be executed as SQL.
 
 `npm run dev` serves the Worker locally. Sign in with `SITE_PASSWORD`.
 

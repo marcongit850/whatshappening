@@ -1,4 +1,5 @@
 import { gulfName, isoDate } from "./format";
+import { stripC0Controls } from "./text";
 
 const AMT = String.raw`-?[\d,]+\.\d\d`;
 const accountHeader = new RegExp(String.raw`^(\d{8})\s+(\d{6})(?:\s+(\d{5}))?\s{2,}(\S.*?)\s*$`);
@@ -89,6 +90,8 @@ export interface ParseResult {
   afterCutoffCount: number;
   reconMismatches: ParsedAccount[];
   foldedPayrollBatches: number;
+  /** Amount cells that were not plain dollar amounts and were stored as zero. */
+  rejectedCellCount: number;
 }
 
 export const MAX_REPORT_LINE = 4000;
@@ -381,6 +384,30 @@ export function sqlIsPersonName(column: string): string {
 
 export function foldedPayrollNote(count: number): string {
   return `Folded ${count} payroll batches with fewer than 3 lines into a combined monthly total.`;
+}
+
+export function rejectedAmountNote(count: number): string {
+  const n = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+  return `Rejected amount cells: ${n}.`;
+}
+
+/** Note stored on an import so the preview can show folded payroll and rejected amounts. */
+export function importNote(foldedPayrollBatches: number, rejectedCellCount: number): string {
+  const parts: string[] = [];
+  if (foldedPayrollBatches > 0) parts.push(foldedPayrollNote(foldedPayrollBatches));
+  parts.push(rejectedAmountNote(rejectedCellCount));
+  return parts.join(" ");
+}
+
+export function rejectedCellsInNote(note: string | null | undefined): number | null {
+  const match = /Rejected amount cells: (\d+)\./.exec(note || "");
+  if (!match) return null;
+  return Number(match[1]);
+}
+
+export function foldedNoteText(note: string | null | undefined): string {
+  if (!note || !note.startsWith("Folded ")) return "";
+  return note.replace(/\s*Rejected amount cells: \d+\.$/, "").trim();
 }
 
 export function batchIdentity(batch: { fund: string; dept: string; objectCode: string; project: string; batchKey: string; payDate: string }): string {
@@ -709,6 +736,7 @@ export function parseReport(text: string): ParseResult {
     afterCutoffCount: payments.filter((payment) => payment.afterCutoff).length,
     reconMismatches: accountList.filter((account) => account.reconDiffCents !== 0),
     foldedPayrollBatches: folded.foldedCount,
+    rejectedCellCount: 0,
   };
 }
 
@@ -749,12 +777,56 @@ function detailDate(raw: string): string {
   return `${y}-${m}-${d}`;
 }
 
-function detailCents(raw: string | undefined): number {
+/** $10 billion. A larger absolute amount is rejected. */
+export const MAX_DETAIL_CENTS = 1_000_000_000_000;
+/** Excel residue such as 292.52999999999997 is still the cent it rounds to. A real third digit is not. */
+const CENT_DUST = 1e-8;
+const PLAIN_AMOUNT = /^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d+))?$/;
+
+/**
+ * Parentheses are negative. Accept a plain decimal with an optional sign, thousands commas,
+ * and at most two decimal places. Longer fractions are accepted only when they are binary
+ * dust around a cent. Scientific notation and anything over $10 billion are rejected.
+ */
+export function parseDetailCents(raw: string | undefined): { cents: number; ok: boolean } {
   const cleaned = (raw || "").trim();
-  if (!cleaned) return 0;
-  const value = Number(cleaned.replace(/,/g, ""));
-  if (!Number.isFinite(value)) return 0;
-  return Math.round(value * 100);
+  if (!cleaned) return { cents: 0, ok: true };
+  let negative = false;
+  let body = cleaned;
+  if (body.startsWith("(") && body.endsWith(")") && body.length > 2) {
+    negative = true;
+    body = body.slice(1, -1).trim();
+  } else if (body.startsWith("+") && body.length > 1) {
+    body = body.slice(1).trim();
+  } else if (body.startsWith("-") && body.length > 1) {
+    negative = true;
+    body = body.slice(1).trim();
+  }
+  if (!body || /[+\-(]/.test(body[0])) return { cents: 0, ok: false };
+  const match = PLAIN_AMOUNT.exec(body);
+  if (!match) return { cents: 0, ok: false };
+  const fraction = match[1] || "";
+  const plain = body.replace(/,/g, "");
+  let cents: number;
+  if (fraction.length <= 2) {
+    const whole = plain.split(".")[0];
+    const wholeCents = Number(whole) * 100;
+    if (!Number.isSafeInteger(wholeCents)) return { cents: 0, ok: false };
+    const fracCents = fraction.length === 0 ? 0 : fraction.length === 1 ? Number(fraction) * 10 : Number(fraction);
+    cents = wholeCents + fracCents;
+  } else {
+    const value = Number(plain);
+    if (!Number.isFinite(value)) return { cents: 0, ok: false };
+    const signed = negative ? -value : value;
+    cents = Math.round(signed * 100);
+    if (!Number.isSafeInteger(cents)) return { cents: 0, ok: false };
+    if (Math.abs(signed - cents / 100) > CENT_DUST) return { cents: 0, ok: false };
+    if (cents < 0) cents = -cents;
+  }
+  if (!Number.isSafeInteger(cents) || cents > MAX_DETAIL_CENTS) return { cents: 0, ok: false };
+  if (negative) cents = -cents;
+  if (cents === 0) cents = 0;
+  return { cents, ok: true };
 }
 
 function isTotalDescription(description: string): boolean {
@@ -818,7 +890,16 @@ export function parseAccountDetail(rows: string[][], opts: { today?: string } = 
     comment: columnIndex(header, ["comment"]),
     item: columnIndex(header, ["item description"]),
   };
-  const cell = (row: string[], index: number) => (index >= 0 ? (row[index] || "").trim() : "");
+  const cell = (row: string[], index: number) => (index >= 0 ? stripC0Controls(row[index] || "").trim() : "");
+  const rejected = { count: 0 };
+  const money = (raw: string | undefined) => {
+    const parsed = parseDetailCents(raw);
+    if (!parsed.ok) {
+      rejected.count += 1;
+      return 0;
+    }
+    return parsed.cents;
+  };
 
   const accounts: ParsedAccount[] = [];
   const funds = new Map<string, string>();
@@ -850,7 +931,7 @@ export function parseAccountDetail(rows: string[][], opts: { today?: string } = 
     const amountRaw = cell(row, col.amount);
     if (!journal && !payDate && !source && !amountRaw) return;
     if (payDate) noteDate(cell(row, col.date));
-    const amountCents = detailCents(amountRaw);
+    const amountCents = money(amountRaw);
     const comment = cell(row, col.comment);
     account.lineCount += 1;
     const payrollLine = source === "PRJ" || /\bWARRANT=/.test(comment);
@@ -931,12 +1012,12 @@ export function parseAccountDetail(rows: string[][], opts: { today?: string } = 
       const kind = description.trim().toLowerCase();
       if (kind === "expense total") {
         printed = {
-          origCents: detailCents(cell(row, col.orig)),
-          adjCents: detailCents(cell(row, col.adj)),
-          revCents: detailCents(cell(row, col.rev)),
-          ytdCents: detailCents(cell(row, col.ytd)),
-          encCents: detailCents(cell(row, col.enc)),
-          availCents: detailCents(cell(row, col.avail)),
+          origCents: money(cell(row, col.orig)),
+          adjCents: money(cell(row, col.adj)),
+          revCents: money(cell(row, col.rev)),
+          ytdCents: money(cell(row, col.ytd)),
+          encCents: money(cell(row, col.enc)),
+          availCents: money(cell(row, col.avail)),
         };
       } else if (fundCode && !org) {
         const name = totalLabel(description, fundCode);
@@ -963,12 +1044,12 @@ export function parseAccountDetail(rows: string[][], opts: { today?: string } = 
         objectCode,
         project: cell(row, col.project),
         title: gulfName(description),
-        origCents: detailCents(cell(row, col.orig)),
-        adjCents: detailCents(cell(row, col.adj)),
-        revCents: detailCents(cell(row, col.rev)),
-        ytdCents: detailCents(cell(row, col.ytd)),
-        encCents: detailCents(cell(row, col.enc)),
-        availCents: detailCents(cell(row, col.avail)),
+        origCents: money(cell(row, col.orig)),
+        adjCents: money(cell(row, col.adj)),
+        revCents: money(cell(row, col.rev)),
+        ytdCents: money(cell(row, col.ytd)),
+        encCents: money(cell(row, col.enc)),
+        availCents: money(cell(row, col.avail)),
         paymentSumCents: 0,
         reconDiffCents: 0,
         isPayroll: isPayrollObject(objectCode),
@@ -1023,6 +1104,7 @@ export function parseAccountDetail(rows: string[][], opts: { today?: string } = 
     afterCutoffCount: keptPayments.filter((payment) => payment.afterCutoff).length,
     reconMismatches: accounts.filter((account) => account.reconDiffCents !== 0),
     foldedPayrollBatches: folded.foldedCount,
+    rejectedCellCount: rejected.count,
   };
 }
 
