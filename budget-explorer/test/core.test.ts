@@ -1,4 +1,7 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
@@ -10,10 +13,11 @@ import { factsFromRow } from "../src/budget";
 import { csvAmount, csvCell, fiscalPosition, pace, pct } from "../src/format";
 import { axisPercent } from "../src/overview";
 import { uploadAllowed } from "../src/limits";
-import { MAX_REPORT_LINE, MIN_PAYROLL_BATCH_LINES, dedupePayments, foldPayrollBatches, looksLikePersonName, parseReport, parseVendorRest, storedText, type ParsedPayrollBatch } from "../src/parser";
+import { MAX_REPORT_LINE, MIN_PAYROLL_BATCH_LINES, dedupePayments, foldPayrollBatches, looksLikePersonName, parseAccountDetail, parseReport, parseVendorRest, storedText, type ParsedPayrollBatch } from "../src/parser";
 import { safeNext } from "../src/safe-next";
 import { renderLogin, renderUnlock } from "../src/view";
-import { XLSX_MAX_COMPRESSED_BYTES, unzipChecked, uncompressedWithinLimits, xlsxToRows, zipEntryAllowed } from "../src/xlsx";
+import { q, seedDatabase } from "../scripts/seed-local";
+import { XLSX_MAX_COMPRESSED_BYTES, XLSX_MAX_ENTRY_BYTES, XLSX_MAX_TOTAL_BYTES, unzipChecked, uncompressedWithinLimits, xlsxToRows, zipEntryAllowed } from "../src/xlsx";
 
 const REPORT = `Walton County
 YEAR-TO-DATE BUDGET REPORT
@@ -232,7 +236,8 @@ describe("security fixes", () => {
     expect(assets).toMatch(/seed\.sql/);
     expect(git).toMatch(/budget-explorer\/data\//);
     expect(git).toMatch(/seed\.sql/);
-    expect(seed).toContain("tmpdir");
+    expect(seed).toContain("DatabaseSync");
+    expect(seed.includes('execFileSync("sqlite3"')).toBe(false);
     expect(seed.includes('data", "seed"')).toBe(false);
   });
 
@@ -435,6 +440,82 @@ describe("xlsx limits", () => {
     const packed = zipSync({ "xl/worksheets/sheet1.xml": strToU8(sheet) });
     const rows = xlsxToRows(packed);
     expect(rows[0][0]).toBe("HELLO");
+  });
+
+  it("keeps an empty shared string from shifting later strings", () => {
+    const shared = `<?xml version="1.0"?><sst><si><t/></si><si><t xml:space="preserve">NAME  </t></si></sst>`;
+    const sheet = `<?xml version="1.0"?><worksheet><sheetData><row><c r="A1" t="s"><v>1</v></c></row></sheetData></worksheet>`;
+    const packed = zipSync({ "xl/sharedStrings.xml": strToU8(shared), "xl/worksheets/sheet1.xml": strToU8(sheet) });
+    expect(xlsxToRows(packed)[0][0]).toBe("NAME  ");
+  });
+
+  it("strips a NUL entity so the cell cannot inject SQL", () => {
+    const payload = "&#0;\nINSERT INTO pwned(name) VALUES ('owned');--";
+    const sheet = `<?xml version="1.0"?><worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>${payload}</t></is></c><c r="B1"><v>A&#9;B&#1;C</v></c></row></sheetData></worksheet>`;
+    const packed = zipSync({ "xl/worksheets/sheet1.xml": strToU8(sheet) });
+    const rows = xlsxToRows(packed);
+    const value = rows[0][0];
+    expect(value.includes("\0")).toBe(false);
+    expect(value).toBe("\nINSERT INTO pwned(name) VALUES ('owned');--");
+    expect(rows[0][1]).toBe("A\tBC");
+    expect(() => q("a\0b")).toThrow(/NUL/);
+
+    const dir = mkdtempSync(join(tmpdir(), "budget-nul-"));
+    const dbPath = join(dir, "t.sqlite");
+    const sqlPath = join(dir, "seed.sql");
+    execFileSync("sqlite3", [dbPath, "CREATE TABLE t(v TEXT); CREATE TABLE pwned(name TEXT);"]);
+    writeFileSync(sqlPath, `INSERT INTO t(v) VALUES (${q(value)});\n`);
+    execFileSync("sqlite3", [dbPath, `.read ${sqlPath}`]);
+    const stored = execFileSync("sqlite3", [dbPath, "SELECT v FROM t;"], { encoding: "utf8" });
+    const injected = execFileSync("sqlite3", [dbPath, "SELECT COUNT(*) FROM pwned;"], { encoding: "utf8" });
+    expect(stored.replace(/\n$/, "")).toBe(value);
+    expect(injected.trim()).toBe("0");
+  });
+
+  it("stores a quote-bearing vendor name with bound parameters", () => {
+    const evil = "O'Brien'); INSERT INTO pwned(name) VALUES ('owned');--";
+    const header = [
+      "FUND", "ORG", "OBJ", "PROJECT", "ACCOUNT DESCRIPTION",
+      "ORIGINAL APPROP", "TRANFRS/ADJSMTS", "REVISED BUDGET", "YTD ACTUAL", "ENCUMBRANCES", "AVAILABLE BUDGET",
+      "YR/PER/JNL", "EFF DATE", "SRC", "AMOUNT", "VENDOR/REF 1", "REF 2", "REF 3", "REF 4",
+      "PO #", "VOUCHER", "INVOICE #", "DOC #", "CHECK #", "VENDOR NAME", "COMMENT", "AR REF", "ITEM DESCRIPTION", "TEXT",
+    ];
+    const parsed = parseAccountDetail([
+      header,
+      ["001", "00101000", "534000", "", "OTHER SERVICES", "10.00", "0", "10.00", "10.00", "0", "0", "2027/01/000673", "10/08/2026", "API", "10.00", "001374", "", "", "", "", "", "INV-1", "", "700019809", evil, "OCTOBER", "", "", ""],
+      ["", "", "", "", "Expense Total", "10.00", "0", "10.00", "10.00", "0", "0", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+    ], { today: "2026-12-01" });
+    const dir = mkdtempSync(join(tmpdir(), "budget-seed-"));
+    const dbPath = join(dir, "t.sqlite");
+    const setup = new DatabaseSync(dbPath);
+    const root = join(import.meta.dirname, "..", "migrations");
+    setup.exec(readFileSync(join(root, "0001_init.sql"), "utf8"));
+    setup.exec(readFileSync(join(root, "0002_settings.sql"), "utf8"));
+    setup.close();
+    const orig = parsed.accounts.reduce((sum, row) => sum + row.origCents, 0);
+    seedDatabase(dbPath, parsed, { funds: [{ code: "001", name: "General" }], departments: [], objects: [] }, orig, orig, orig);
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    const payment = db.prepare("SELECT vendor_name, amount_cents FROM payments").get() as { vendor_name: string; amount_cents: number };
+    const note = db.prepare("SELECT note, orig_cents FROM imports").get() as { note: string; orig_cents: number };
+    const pwned = db.prepare("SELECT name FROM sqlite_master WHERE name = 'pwned'").get();
+    db.close();
+    expect(payment.vendor_name).toBe(evil);
+    expect(payment.amount_cents).toBe(1000);
+    expect(note.orig_cents).toBe(1000);
+    expect(note.note).toContain("Rejected amount cells: 0.");
+    expect(pwned).toBeUndefined();
+  });
+
+  it("parses a megabyte of unclosed row tags quickly", () => {
+    expect(XLSX_MAX_TOTAL_BYTES).toBe(30_000_000);
+    expect(XLSX_MAX_ENTRY_BYTES).toBeLessThanOrEqual(XLSX_MAX_TOTAL_BYTES);
+    const tags = "<row>".repeat(200_000);
+    expect(tags.length).toBe(1_000_000);
+    const sheet = `<worksheet><sheetData>${tags}</sheetData></worksheet>`;
+    const packed = zipSync({ "xl/worksheets/sheet1.xml": strToU8(sheet) });
+    const started = performance.now();
+    expect(xlsxToRows(packed)).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 });
 

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { FY2027_ADOPTED_CENTS, fy2027CountNote } from "../src/answers";
 import { factsFromRow } from "../src/budget";
-import { isAccountDetail, parseAccountDetail } from "../src/parser";
+import { isAccountDetail, parseAccountDetail, parseDetailCents } from "../src/parser";
+import { renderPreview } from "../src/view";
+import type { ImportRow } from "../src/db";
 
 const header = [
   "FUND", "ORG", "OBJ", "PROJECT", "ACCOUNT DESCRIPTION",
@@ -44,6 +46,91 @@ describe("account detail workbook", () => {
     expect(parsed.departments.find((row) => row.code === "00101000")?.reportName).toBe("BCC/LEGISLATIVE");
     expect(parsed.funds.find((row) => row.code === "001")?.reportName).toBe("GENERAL FUND");
     expect(parsed.accounts.some((row) => row.objectCode.startsWith("3"))).toBe(false);
+    expect(parsed.rejectedCellCount).toBe(0);
+  });
+
+  it("reads parentheses as negative and rejects amounts that are not plain dollars", () => {
+    expect(parseDetailCents("(1,234.00)")).toEqual({ cents: -123400, ok: true });
+    expect(parseDetailCents("1,234.50")).toEqual({ cents: 123450, ok: true });
+    expect(parseDetailCents("-9000")).toEqual({ cents: -900000, ok: true });
+    expect(parseDetailCents("+12.5")).toEqual({ cents: 1250, ok: true });
+    expect(parseDetailCents("10,000,000,000.00")).toEqual({ cents: 1_000_000_000_000, ok: true });
+    expect(parseDetailCents("292.52999999999997")).toEqual({ cents: 29253, ok: true });
+    expect(parseDetailCents("")).toEqual({ cents: 0, ok: true });
+    expect(parseDetailCents("   ")).toEqual({ cents: 0, ok: true });
+    expect(parseDetailCents("1e300")).toEqual({ cents: 0, ok: false });
+    expect(parseDetailCents("1.234")).toEqual({ cents: 0, ok: false });
+    expect(parseDetailCents("10000000000.01")).toEqual({ cents: 0, ok: false });
+    expect(parseDetailCents("(10,000,000,000.01)")).toEqual({ cents: 0, ok: false });
+    expect(parseDetailCents("$1.00").ok).toBe(false);
+    expect(parseDetailCents("12,34.00").ok).toBe(false);
+
+    const rows = [
+      header,
+      ["001", "00101000", "534000", "", "OTHER SERVICES", "(1,234.00)", "0", "(1,234.00)", "10.00", "0", "0", "2027/01/000673", "10/08/2026", "API", "1e300", "001374", "", "", "", "", "", "INV-1", "", "700019809", "ACME\u0000'); INSERT INTO pwned(name) VALUES ('owned');--", "OCTOBER", "", "", ""],
+      ["", "", "", "", "Expense Total", "(1,234.00)", "0", "(1,234.00)", "10.00", "0", "0", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+    ];
+    const parsed = parseAccountDetail(rows, { today: "2026-12-01" });
+    expect(parsed.accounts[0].origCents).toBe(-123400);
+    expect(parsed.accounts[0].revCents).toBe(-123400);
+    expect(parsed.accounts[0].ytdCents).toBe(1000);
+    expect(parsed.payments).toHaveLength(1);
+    expect(parsed.payments[0].amountCents).toBe(0);
+    expect(parsed.payments[0].vendorName.includes("\0")).toBe(false);
+    expect(parsed.payments[0].vendorName.startsWith("ACME")).toBe(true);
+    expect(parsed.rejectedCellCount).toBe(1);
+    expect(parsed.printed?.origCents).toBe(-123400);
+
+    const row: ImportRow = {
+      id: 1,
+      created_at: "",
+      published_at: null,
+      data_as_of: "2026-11-02",
+      filename: "account-detail.xlsx",
+      status: "draft",
+      note: "Rejected amount cells: 1.",
+      fund_count: 1,
+      department_count: 1,
+      account_count: 1,
+      payment_count: 1,
+      payroll_batch_count: 0,
+      payroll_line_count: 0,
+      after_cutoff_count: 0,
+      recon_mismatch_count: 0,
+      orig_cents: -123400,
+      adj_cents: 0,
+      rev_cents: -123400,
+      ytd_cents: 1000,
+      enc_cents: 0,
+      avail_cents: 0,
+      printed_orig_cents: -123400,
+      printed_rev_cents: -123400,
+      printed_ytd_cents: 1000,
+    };
+    const html = renderPreview({
+      row,
+      mismatches: [],
+      unmatchedDepts: [],
+      unmatchedObjects: [],
+      overlap: null,
+      csrf: "token",
+      error: "",
+      showNames: false,
+    });
+    expect(html).toContain("1 amount cells were not plain dollar amounts and were counted as zero.");
+    const clean = renderPreview({
+      row: { ...row, note: "Folded 2 payroll batches with fewer than 3 lines into a combined monthly total. Rejected amount cells: 0." },
+      mismatches: [],
+      unmatchedDepts: [],
+      unmatchedObjects: [],
+      overlap: null,
+      csrf: "token",
+      error: "",
+      showNames: false,
+    });
+    expect(clean).toContain("0 amount cells were not plain dollar amounts and were counted as zero.");
+    expect(clean).toContain("Folded 2 payroll batches with fewer than 3 lines into a combined monthly total.");
+    expect(clean).toContain("Review this before publishing.");
   });
 
   it("ignores transaction dates after the day the importer runs", () => {

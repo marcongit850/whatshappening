@@ -1,7 +1,7 @@
 import { TRANSFER_OBJECT } from "./budget";
 import type { ChartNames } from "./csv";
 import { CONSTITUTIONAL_SQL, VENDOR_SOURCES } from "./overview";
-import { directoryPersonSql, foldedPayrollNote, type ParseResult, type ParsedPayment, type ParsedPayrollLine } from "./parser";
+import { directoryPersonSql, importNote, type ParseResult, type ParsedPayment, type ParsedPayrollLine } from "./parser";
 import { creditCardVendorSql } from "./vendors";
 
 export interface ImportRow {
@@ -234,9 +234,7 @@ export async function saveImport(db: D1Database, result: ParseResult, filename: 
     await markFailed(db, importId, "Stored rows do not match the parsed file.");
     throw new Error("Stored rows do not match the parsed file.");
   }
-  if (result.foldedPayrollBatches > 0) {
-    await db.prepare("UPDATE imports SET note = ? WHERE id = ?").bind(foldedPayrollNote(result.foldedPayrollBatches), importId).run();
-  }
+  await db.prepare("UPDATE imports SET note = ? WHERE id = ?").bind(importNote(result.foldedPayrollBatches, result.rejectedCellCount), importId).run();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Import failed";
     await markFailed(db, importId, message);

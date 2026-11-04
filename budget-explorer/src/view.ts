@@ -2,6 +2,7 @@ import type { AccountSpend, BudgetFacts, CapitalLine, CategorySpend, VendorSpend
 import { TRANSFER_OBJECT, capitalLinesCovering, factsFromRow } from "./budget";
 import type { AccountRow, DeptRollup, FundRollup, ImportRow, MonthParts, NameMaps, OrgVendor, PaymentRow, PlatSnapshot, SearchFilters, VendorDescription, VendorDetail, VendorListSort, VendorSummary, VendorWhyRow } from "./db";
 import { FY2027_ADOPTED_CENTS, FY2027_ADOPTED_URL, fy2027CountNote, howWeCountLead } from "./answers";
+import { foldedNoteText, rejectedCellsInNote } from "./parser";
 import type { QaRecord } from "./qa";
 import {
   PACE_LABEL,
@@ -1910,7 +1911,8 @@ export function renderPreview(opts: {
 </tr>`,
     )
     .join("");
-  const foldedWarning = opts.row.note && opts.row.note.startsWith("Folded ") ? opts.row.note : "";
+  const foldedWarning = foldedNoteText(opts.row.note);
+  const rejectedCells = rejectedCellsInNote(opts.row.note);
   const deptList = opts.unmatchedDepts
     .slice(0, 40)
     .map((dept) => `<li><span class="mono">${esc(dept.code)}</span> ${esc(dept.report_name || "unmatched")}</li>`)
@@ -1938,6 +1940,7 @@ ${
 }
 ${opts.overlap != null ? `<p class="hint">${opts.overlap.toLocaleString("en-US")} payment lines share a check key with the previously published import. Publishing this snapshot does not add those lines on top of the older one. The site reads only the latest published import.</p>` : ""}
 ${foldedWarning ? `<p class="warning">${esc(foldedWarning)} Review this before publishing.</p>` : ""}
+${rejectedCells == null ? "" : `<p>${rejectedCells.toLocaleString("en-US")} amount cells were not plain dollar amounts and were counted as zero.</p>`}
 <p class="hint">Employee names and individual pay are stored with this import. The admin switch controls whether pages show them.</p>
 ${
   opts.row.status !== "published"
