@@ -198,7 +198,7 @@ describe("overview dashboard", () => {
     expect(html).toContain('href="/vendors"');
     expect(html).toContain("https://budget-waltoncountyfl.com");
     expect(html).toContain("Planned budget (county&#39;s budget book)");
-    expect(html).toContain("The county&#39;s own FY2027 tentative budget book");
+    expect(html).toContain("The county&#39;s own FY2027 budget book");
     const who = html.slice(html.indexOf("Who was paid the most money"), html.indexOf("Commissioners adopted"));
     expect(who).toContain("North Builders LLC");
     expect(who).toContain("Waste Management");

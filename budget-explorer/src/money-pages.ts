@@ -65,7 +65,7 @@ export function reservesDocument(ledger: PublishedLedger, fundCodes: Set<string>
   const reserves = ledger.reserves;
   return `<p class="crumb"><a href="/">Overview</a> / Savings</p>
 <h1>Savings the county held${infoTip("reserves-title", "Audited year-end balance, not a live balance.")}</h1>
-<p class="lead page-intro">Audited year-end balance, not a live balance. The FY2026 year-end balance will exist after the spring 2027 audit.</p>
+<p class="lead page-intro">Audited year-end balance, not a live balance. The next audited year-end balance will exist after the spring 2027 audit.</p>
 <section class="kpis">
 <div class="card kpi k1"><div class="l"><span>September 30, 2025</span>${infoTip("res-total", "Savings in all governmental funds.")}</div><a class="n" href="#by-type">${esc(moneyCompact(reserves.totalCents))}</a><div class="s">Savings in all governmental funds. A year earlier it was ${esc(moneyCompact(reserves.priorCents))}.</div></div>
 <div class="card kpi k2"><div class="l"><span>Free to spend</span>${infoTip("res-free", "General Fund money with no purpose set.")}</div><a class="n" href="#class-unassigned">${esc(moneyCompact(reserves.classes.find((item) => item.key === "unassigned")?.cents || 0))}</a><div class="s">General Fund money with no purpose set. The rest is already spoken for.</div></div>
@@ -300,30 +300,28 @@ function budgetBlock(ledger: PublishedLedger): string {
     ["Permits", "permit"],
     ["Fines", "fine"],
   ];
-  const year = (fiscal: number) => ledger.budgets.find((item) => item.fiscalYear === fiscal);
-  const y2026 = year(2026);
-  const y2027 = year(2027);
+  const y2027 = ledger.budgets.find((item) => item.fiscalYear === 2027);
   const actual = (needle: string) => ledger.income.find((item) => item.label.toLowerCase().includes(needle) || item.key.includes(needle));
-  const budgetItem = (pack: typeof y2026, needle: string) =>
-    pack ? [...pack.items, ...pack.aside].find((item) => item.label.toLowerCase().includes(needle)) : undefined;
+  const budgetItem = (needle: string) =>
+    y2027 ? [...y2027.items, ...y2027.aside].find((item) => item.label.toLowerCase().includes(needle)) : undefined;
   const line = (cents: number | undefined, kind: string) =>
     `<p><span>${esc(kind)}</span><b>${cents == null ? "Not a separate line" : esc(moneyCompact(cents))}</b></p>`;
   return `<section class="card" id="budgets">
 <div class="eyebrow">Budget, not actual</div>
-<h2>Adopted budgets next to the audit${infoTip("budgets", "FY2025 is audited actual.")}</h2>
-<p class="cap">FY2025 is audited actual. FY2026 and FY2027 are budgets. The FY2026 lines are the last by-source table published before the final hearing. The adopted FY2026 total is ${esc(money(y2026?.adoptedCents || 0))}.</p>
+<h2>Adopted budget next to the audit${infoTip("budgets", "FY2025 is audited actual.")}</h2>
+<p class="cap">FY2025 is audited actual. FY2027 is the adopted budget. The adopted FY2027 total is ${esc(money(y2027?.adoptedCents || 0))}.</p>
 ${rows
   .map(([label, needle]) => {
     const a = actual(needle);
-    const b = budgetItem(y2026, needle);
-    const c = budgetItem(y2027, needle);
+    const c = budgetItem(needle);
     const permitNote = label === "Permits"
-      ? `<p>FY2025 $7.41M includes $4.16M of Building Department permits. The FY2026 and FY2027 budgets show no building permit revenue, so these rows are not comparable.</p>`
+      ? `<p>FY2025 $7.41M includes $4.16M of Building Department permits. The FY2027 budget shows no building permit revenue, so these rows are not comparable.</p>`
       : "";
-    return `<article class="cmp"><h3>${esc(label)}</h3>${line(a?.cents, "Audited actual, FY2025")}${line(b?.cents, "Tentative budget, FY2026")}${line(c?.cents, "Budget, FY2027")}${permitNote}</article>`;
+    return `<article class="cmp"><h3>${esc(label)}</h3>${line(a?.cents, "Audited actual, FY2025")}${line(c?.cents, "Budget, FY2027")}${permitNote}</article>`;
   })
   .join("")}
 ${ledger.budgets
+  .filter((pack) => pack.fiscalYear !== 2026)
   .map((pack) => {
     const items = withPercents(pack.items);
     return `<div class="budget-year" id="budget-${pack.fiscalYear}">
@@ -340,7 +338,7 @@ ${pack.aside
     (item) => `<article class="cmp"><h3>${esc(item.label)}</h3><p class="figure-n">${esc(moneyCompact(item.cents))}</p><p class="cap">Not income. ${esc(item.detail)}</p></article>`,
   )
   .join("")}
-${sourceLine(pack.fiscalYear === 2026 ? "FY2026 tentative budget in brief" : "Agenda packet, 9/28/2026", pack.sourceUrl, pack.sourcePages)}
+${sourceLine("Agenda packet, 9/28/2026", pack.sourceUrl, pack.sourcePages)}
 </div>`;
   })
   .join("")}
@@ -355,7 +353,7 @@ function bedBlock(ledger: PublishedLedger): string {
 <p class="figure-n">${esc(moneyCompact(bed.ytdCents))}</p>
 <p class="cap">Collected from October 2025 through August 2026. That is <span class="${bed.changePct < 0 ? "chg-down" : "chg-up"}">${bed.changePct.toFixed(1)}%</span> more than the same months a year earlier.</p>
 <p>${esc(bed.detail)}</p>
-<p>The FY2025 audited bed tax was ${esc(money(bed.actualCents))}. The FY2026 tentative budget for bed tax was ${esc(money(bed.budgetCents))}.</p>
+<p>The FY2025 audited bed tax was ${esc(money(bed.actualCents))}. The FY2027 adopted budget for bed tax is ${esc(money(ledger.budgets.find((year) => year.fiscalYear === 2027)?.items.find((item) => /bed/i.test(item.label))?.cents || 0))}.</p>
 ${sourceLine("Clerk tourist development tax collections report", bed.sourceUrl, "")}
 </section>`;
 }

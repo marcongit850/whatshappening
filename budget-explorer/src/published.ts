@@ -1186,7 +1186,7 @@ function buildIncome(revenue: unknown): { totalCents: number; income: AmountItem
       label: "Permits and licenses",
       dollars: permits,
       status: "Audited actual",
-      detail: `Permits and licenses total ${dollars(permits)}. FY2025 $7.41M includes $4.16M of Building Department permits (${dollars(buildingPermits)}). The FY2026 and FY2027 budgets show no building permit revenue, so these rows are not comparable. Beach vending is not its own line in the audit. The FY2027 budget lists it separately below.`,
+      detail: `Permits and licenses total ${dollars(permits)}. FY2025 $7.41M includes $4.16M of Building Department permits (${dollars(buildingPermits)}). The FY2027 budget shows no building permit revenue, so that row is not comparable. Beach vending is not its own line in the audit. The FY2027 budget lists it separately below.`,
     },
     {
       key: "other-taxes",
@@ -1390,12 +1390,11 @@ function buildBudgets(revenue: unknown): BudgetYear[] {
       throw new ReconciliationError(`FY2027 category ${label} does not match the account-code grouping.`);
     }
   }
-  const year2026 = budgetYear(2026, "Budget", tentative * 100, finalTotal * 100, str(fy2026.source, "FY2026 source"), str(fy2026.pages, "FY2026 pages"), grouped, "The by-source lines are the tentative budget from the September 8, 2025 hearing. The adopted total is lower. At the final hearing the property tax rate was cut and the gap was filled with savings and other revenue, so the property tax line in this table is higher than the final mix. These figures are a budget, not money already collected.");
   const grouped2027 = new Map<string, { cents: number; income: boolean }>();
   for (const item of rollup.income) grouped2027.set(item.label, { cents: item.cents, income: true });
   for (const item of rollup.notIncome) grouped2027.set(item.label, { cents: item.cents, income: false });
-  const year2027 = budgetYear(2027, "Budget", adopted2027.amount * 100, adopted2027.amount * 100, str(fy2027.source, "FY2027 source"), "", grouped2027, "Adopted at the September 28, 2026 hearing. The figure is from the county's agenda packet. The signed resolution is not posted yet.");
-  return [year2026, year2027];
+  const year2027 = budgetYear(2027, "Budget", adopted2027.amount * 100, adopted2027.amount * 100, str(fy2027.source, "FY2027 source"), "", grouped2027, "Adopted at the September 28, 2026 hearing. The posted final budget resolution sets the total at $345,223,508, of which $1,429,937 is for the North Walton Mosquito Control District. The posted copy leaves the resolution number blank.");
+  return [year2027];
 }
 
 function budgetYear(
@@ -1788,7 +1787,7 @@ function buildReserves(reserves: unknown, revenue: unknown): PublishedLedger["re
     changeCents: delta * 100,
     sourceUrl: total.source,
     sourcePages: total.pages,
-    detail: "Audited year-end balance, not a live balance. The FY2026 year-end balance will exist after the spring 2027 audit.",
+    detail: "Audited year-end balance, not a live balance. The next audited year-end balance will exist after the spring 2027 audit.",
     classes: CLASS_ORDER.map((cls, index) => ({
       key: cls.key,
       label: cls.label,

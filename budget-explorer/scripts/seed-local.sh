@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Load a local year to date report into the local D1 database.
-# The report stays outside git. Example:
-#   ./scripts/seed-local.sh /path/to/report.txt
+# Load a local account detail workbook into the local D1 database.
+# The workbook stays outside git. Example:
+#   ./scripts/seed-local.sh /path/to/FY2027-account-detail.xlsx /path/to/chart-of-accounts.pdf
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ $# -lt 1 ]]; then
-  echo "Usage: scripts/seed-local.sh /path/to/report.txt" >&2
+  echo "Usage: scripts/seed-local.sh /path/to/account-detail.xlsx [/path/to/chart.pdf]" >&2
   exit 1
 fi
 if [[ ! -f "$1" ]]; then
@@ -13,4 +13,4 @@ if [[ ! -f "$1" ]]; then
   exit 1
 fi
 npx wrangler d1 migrations apply budget-explorer --local
-npx tsx scripts/seed-local.ts "$1"
+npx tsx scripts/seed-local.ts "$@"

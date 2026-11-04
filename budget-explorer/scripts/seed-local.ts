@@ -1,19 +1,20 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chartFromCsv } from "../src/csv.ts";
-import { parseReport } from "../src/parser.ts";
+import { chartFromCsv, chartFromGlText, type ChartNames } from "../src/csv.ts";
+import { parseAccountDetail, parseReport } from "../src/parser.ts";
+import { xlsxToRows } from "../src/xlsx.ts";
 
 const reportPath = process.argv[2];
+const chartPath = process.argv[3];
 if (!reportPath) {
-  console.error("Usage: tsx scripts/seed-local.ts /path/to/report.txt");
+  console.error("Usage: tsx scripts/seed-local.ts /path/to/account-detail.xlsx [/path/to/chart.pdf]");
   process.exit(1);
 }
 
-const text = await BunOrNodeText(reportPath);
-const parsed = parseReport(text);
+const parsed = await loadReport(reportPath);
 const orig = sum(parsed.accounts.map((row) => row.origCents));
 const rev = sum(parsed.accounts.map((row) => row.revCents));
 const ytd = sum(parsed.accounts.map((row) => row.ytdCents));
@@ -28,21 +29,13 @@ console.log(`original ${(orig / 100).toFixed(2)}`);
 console.log(`revised ${(rev / 100).toFixed(2)}`);
 console.log(`spent ${(ytd / 100).toFixed(2)}`);
 if (parsed.printed) {
-  if (parsed.printed.origCents !== orig || parsed.printed.revCents !== rev || parsed.printed.ytdCents !== ytd) {
-    console.error("Parsed totals do not match the printed grand total.");
+  const enc = sum(parsed.accounts.map((row) => row.encCents));
+  if (parsed.printed.origCents !== orig || parsed.printed.revCents !== rev || parsed.printed.ytdCents !== ytd || parsed.printed.encCents !== enc) {
+    console.error("Parsed totals do not match the printed expense total.");
     process.exit(1);
   }
 }
-if (parsed.printed?.ytdCents === 49472701353) {
-  if (parsed.funds.length !== 19 || parsed.accounts.length !== 1418 || parsed.payments.length + parsed.payrollBatches.reduce((n, row) => n + row.lineCount, 0) < 40000) {
-    console.error("This looks like the FY2026 report, but the counts are not the expected ones.");
-    process.exit(1);
-  }
-  if (parsed.afterCutoffCount !== 354) {
-    console.error(`Expected 354 lines after 9/15/2026, found ${parsed.afterCutoffCount}.`);
-    process.exit(1);
-  }
-}
+console.log(`data as of ${parsed.dataAsOf}`);
 
 const root = dirname(fileURLToPath(import.meta.url));
 const outDir = join(tmpdir(), "budget-explorer-seed");
@@ -109,7 +102,7 @@ for (const line of parsed.payrollLines) {
   );`);
 }
 
-const chart = await loadChart();
+const chart = mergeCharts(chartFromParsed(parsed), await loadChart(chartPath));
 if (chart) {
   for (const row of chart.funds) statements.push(`INSERT INTO chart_names (kind, code, name) VALUES ('fund', ${q(row.code)}, ${q(row.name)}) ON CONFLICT(kind, code) DO UPDATE SET name = excluded.name;`);
   for (const row of chart.departments) statements.push(`INSERT INTO chart_names (kind, code, name) VALUES ('department', ${q(row.code)}, ${q(row.name)}) ON CONFLICT(kind, code) DO UPDATE SET name = excluded.name;`);
@@ -158,25 +151,94 @@ function q(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-async function BunOrNodeText(path: string): Promise<string> {
+async function loadReport(path: string) {
+  if (path.toLowerCase().endsWith(".xlsx")) {
+    const bytes = new Uint8Array(readFileSync(path));
+    return parseAccountDetail(xlsxToRows(bytes));
+  }
   const { readFile } = await import("node:fs/promises");
-  return readFile(path, "utf8");
+  return parseReport(await readFile(path, "utf8"));
 }
 
-async function loadChart() {
+function chartFromParsed(result: ReturnType<typeof parseReport>): ChartNames {
+  const objects = new Map<string, Map<string, number>>();
+  for (const account of result.accounts) {
+    const name = account.title.trim();
+    if (!name) continue;
+    if (!objects.has(account.objectCode)) objects.set(account.objectCode, new Map());
+    const names = objects.get(account.objectCode)!;
+    names.set(name, (names.get(name) || 0) + 1);
+  }
+  const objectRows: { code: string; name: string }[] = [];
+  for (const [code, names] of objects) {
+    let best = "";
+    let bestCount = -1;
+    for (const [name, count] of names) {
+      if (count > bestCount) {
+        best = name;
+        bestCount = count;
+      }
+    }
+    if (best) objectRows.push({ code, name: best });
+  }
+  return {
+    funds: result.funds.filter((row) => row.reportName).map((row) => ({ code: row.code, name: row.reportName })),
+    departments: result.departments.filter((row) => row.reportName).map((row) => ({ code: row.code, name: row.reportName })),
+    objects: objectRows,
+  };
+}
+
+function mergeCharts(base: ChartNames, extra: ChartNames | null): ChartNames {
+  if (!extra) return base;
+  const pick = (kind: "funds" | "departments" | "objects") => {
+    const map = new Map<string, string>();
+    for (const row of base[kind]) if (row.name) map.set(row.code, row.name);
+    for (const row of extra[kind]) if (row.name) map.set(row.code, row.name);
+    return [...map.entries()].map(([code, name]) => ({ code, name }));
+  };
+  return { funds: pick("funds"), departments: pick("departments"), objects: pick("objects") };
+}
+
+function pdfText(path: string): string {
+  const script = `
+import sys
+from pypdf import PdfReader
+reader = PdfReader(sys.argv[1])
+print("\\n".join((page.extract_text() or "") for page in reader.pages))
+`;
+  return execFileSync("python3", ["-c", script, path], { encoding: "utf8", maxBuffer: 20_000_000 });
+}
+
+async function loadChart(path?: string): Promise<ChartNames | null> {
+  const collected: ChartNames = { funds: [], departments: [], objects: [] };
+  if (path) {
+    if (path.toLowerCase().endsWith(".pdf")) {
+      try {
+        const chart = chartFromGlText(pdfText(path));
+        collected.departments.push(...chart.departments);
+        console.log(`chart pdf departments ${chart.departments.length}`);
+      } catch (error) {
+        console.error(`Chart PDF was not read (${error instanceof Error ? error.message : "unknown"}). Names from the workbook are still used. Install pypdf if you want the PDF: python3 -m pip install pypdf`);
+      }
+    } else {
+      const { readFile } = await import("node:fs/promises");
+      const chart = chartFromGlText(await readFile(path, "utf8"));
+      collected.departments.push(...chart.departments);
+    }
+  }
   try {
     const funds = await fetchText("https://budget-waltoncountyfl.com/assets/data/funds.csv");
     const expenses = await fetchText("https://budget-waltoncountyfl.com/assets/data/expenditures.csv");
     const fundChart = chartFromCsv(funds);
     const expenseChart = chartFromCsv(expenses);
-    return {
-      funds: fundChart?.funds || [],
-      departments: expenseChart?.departments || [],
-      objects: expenseChart?.objects || [],
-    };
+    collected.funds.push(...(fundChart?.funds || []));
+    collected.departments.push(...(expenseChart?.departments || []));
+    collected.objects.push(...(expenseChart?.objects || []));
   } catch {
-    return null;
+    console.log("online chart was not reachable");
   }
+  if (!collected.funds.length && !collected.departments.length && !collected.objects.length) return null;
+  return collected;
 }
 
 async function fetchText(url: string): Promise<string> {

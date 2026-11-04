@@ -53,7 +53,19 @@ The password-protected dashboard leads with vendors and payments. The chart page
 - `GET /vendors` lists those vendors. The heading count is the number of vendors in the list. A caption says county offices, transfers between county funds, and credit-card catch-alls are not listed, and that credit-card and travel payments are listed under Payments, not as one vendor. The list can be searched and sorted by total paid or by the number of payment lines.
 - `GET /vendors/{number}` shows total paid, the number of payment lines, the first and last payment date, and "What the county paid this vendor for": totals by department, fund, and expense account, the most common payment descriptions with amounts and counts, and one sentence built from those records. The payment lines (date, amount, fund, department, account, and the county's own description) follow, with pages. When the vendor has negative lines, the page says the total is a net of payments minus reversals and credits. Reversals and re-posts stay separate lines. Hidden mode leaves out Last, First vendor names and scrubs Last, First text in descriptions.
 - `GET /search` is the payments page. Filters are vendor, department, fund, date range, and amount range. `GET /search.csv` downloads the filtered rows, at most 2,000 lines. These routes are the same login gate as the other dashboard pages, including under `/walton` on the taxes host.
-- The footer, About the data, and the overview budget headline link to https://budget-waltoncountyfl.com as the county's own FY2027 tentative budget book. This site does not load FY2027 amounts.
+- The footer, About the data, and the overview budget headline link to https://budget-waltoncountyfl.com as the county's own FY2027 budget book. The spending pages load the Clerk's FY2027 account detail. The countywide headline uses the September 28, 2026 adopted total, not the expense original appropriation.
+
+## Refresh the FY2027 account detail
+
+The monthly workbook stays outside git. From `budget-explorer/`:
+
+1. `npm run seed -- /path/to/account-detail.xlsx /path/to/chart-of-accounts.pdf`
+2. The script applies local migrations, parses the first worksheet, and skips Total rows. Revenue accounts (object codes starting with 3) are not loaded into the spending tables, because the county stores them as negative amounts.
+3. It checks the parsed expense original, revised, and year to date totals against the Expense Total row. If those differ, the script stops.
+4. Data as of is the latest transaction date on or before the day the importer runs. A later date stays in the county's year to date and encumbrance columns and does not set the as of date.
+5. Stored payments are API, APM, and GRV lines, plus payroll batches from PRJ lines. Purchase orders and journal lines stay in the year to date and encumbrance columns.
+6. A chart PDF needs `python3 -m pip install pypdf`. If that read fails, department names still come from the Total rows in the workbook.
+7. This writes the local D1 file only. Do not run `wrangler d1 migrations apply --remote` from here. An administrator can also upload the same .xlsx on Admin Import, then publish after the preview matches the Expense Total.
 
 ## Search
 

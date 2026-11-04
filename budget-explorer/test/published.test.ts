@@ -277,6 +277,11 @@ describe("revenue and reserves pages", () => {
     const budgetSlice = budgetsAt >= 0 ? revenue.slice(budgetsAt, revenue.indexOf('id="bed-collections"')) : "";
     expect(budgetSlice).not.toContain("Interest and investment earnings");
     expect(budgetSlice).not.toContain("bundled with miscellaneous");
+    expect(budgetSlice).toContain("Audited actual, FY2025");
+    expect(budgetSlice).toContain("Budget, FY2027");
+    expect(budgetSlice).not.toContain("Tentative budget, FY2026");
+    expect(budgetSlice).not.toContain("FY2026");
+    expect(revenue).not.toContain("FY2026 tentative budget for bed tax");
     expect(reserves).toContain('id="cash"');
     expect(reserves).toContain('href="/revenue#interest"');
     expect(revenue).toContain("<svg");

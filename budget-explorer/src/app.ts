@@ -39,6 +39,7 @@ import {
   throttleDecision,
 } from "./auth";
 import { chartFromCsv, chartFromRows } from "./csv";
+import { isAccountDetail, parseAccountDetail, parseReport, type ParseResult } from "./parser";
 import {
   accountsForDept,
   bumpQa,
@@ -77,7 +78,6 @@ import {
 import { adminPasswordSet, publicBase, type AppEnv } from "./env";
 import { csvAmount, csvCell, displayDate, isoDate } from "./format";
 import { uploadAllowed } from "./limits";
-import { parseReport } from "./parser";
 import { safeNext } from "./safe-next";
 import { loadPublishedLedger } from "./published-db";
 import { AI_MODEL, alignAnswer, modelText } from "./qa";
@@ -747,14 +747,15 @@ app.post("/admin/import", async (c) => {
       const count = await saveChart(c.env.DB, loaded.chart);
       return c.html(renderMessage("Chart updated", `Saved ${count} chart names. Department and object labels will use them on the next page view.`, session.csrf, undefined, c.get("showNames")));
     }
-    if (loaded.kind === "report" && loaded.text) {
-      const parsed = parseReport(loaded.text);
+    if (loaded.kind === "report" && (loaded.parsed || loaded.text)) {
+      const parsed = loaded.parsed || parseReport(loaded.text || "");
       const id = await saveImport(c.env.DB, parsed, file.name || "upload.txt");
       return c.redirect(`/admin/import/${id}`, 303);
     }
-    return c.html(renderMessage("Unrecognized file", "Upload the year to date budget report as text, or a chart CSV with fund, department, or object columns.", session.csrf, undefined, c.get("showNames")), 400);
-  } catch {
-    return c.html(renderMessage("Import failed", "The file could not be saved. If this is the full year report, use scripts/seed-local.sh, which loads it in smaller database batches.", session.csrf, undefined, c.get("showNames")), 500);
+    return c.html(renderMessage("Unrecognized file", "Upload the account detail workbook, the year to date budget report as text, or a chart CSV with fund, department, or object columns.", session.csrf, undefined, c.get("showNames")), 400);
+  } catch (error) {
+    const detail = error instanceof Error && /spreadsheet|account detail|too large/i.test(error.message) ? ` ${error.message}` : "";
+    return c.html(renderMessage("Import failed", `The file could not be saved.${detail} If this is the full year report, use scripts/seed-local.sh, which loads it in smaller database batches.`, session.csrf, undefined, c.get("showNames")), 500);
   }
 });
 
@@ -877,12 +878,13 @@ function readFilters(c: { req: { query: (name: string) => string | undefined } }
   };
 }
 
-async function interpretFile(file: File): Promise<{ kind: "pdf" | "chart" | "report" | "reject"; text?: string; chart?: ReturnType<typeof chartFromRows> }> {
+async function interpretFile(file: File): Promise<{ kind: "pdf" | "chart" | "report" | "reject"; text?: string; parsed?: ParseResult; chart?: ReturnType<typeof chartFromRows> }> {
   const name = file.name.toLowerCase();
   if (name.endsWith(".pdf") || file.type === "application/pdf") return { kind: "pdf" };
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (name.endsWith(".xlsx") || (bytes[0] === 0x50 && bytes[1] === 0x4b)) {
     const rows = xlsxToRows(bytes);
+    if (isAccountDetail(rows)) return { kind: "report", parsed: parseAccountDetail(rows) };
     const chart = chartFromRows(rows);
     if (chart && (chart.funds.length || chart.departments.length || chart.objects.length)) return { kind: "chart", chart };
     const text = rows.map((row) => row.join("  ")).join("\n");
