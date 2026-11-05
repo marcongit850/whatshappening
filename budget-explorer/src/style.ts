@@ -433,6 +433,10 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
 .pie-card .donut-label { font-size: 13px; overflow-wrap: anywhere; }
 .pie-card .donut-amt { display: none; }
 .donut-amt { display: block; font-weight: 500; color: var(--muted); font-size: 13px; }
+.donut a.slice:focus { outline: none; }
+.donut a.slice:focus-visible { outline: 2px solid #c9a24b; outline-offset: 3px; }
+.slice-pop { display: flex; flex-direction: column; gap: 2px; pointer-events: none; }
+.slice-pop span { font-weight: 500; }
 .figure-n { font-family: var(--serif); font-size: clamp(32px, 4vw, 52px); font-weight: 500; line-height: 1.1; margin: 0 0 8px; overflow-wrap: anywhere; max-width: 100%; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(168px, 100%), 1fr)); gap: 14px; margin-top: 18px; min-width: 0; }
 .stat-grid .kpi { padding: 18px 12px; }
@@ -1233,6 +1237,73 @@ export const CLIENT_JS = `
   }
   let touchAt = 0;
   let pinned = null;
+  let slicePinned = null;
+  const sliceFrom = (node) => {
+    if (!(node instanceof Element)) return null;
+    const link = node.closest(".slice");
+    return link instanceof Element ? link : null;
+  };
+  const slicePop = (slice) => {
+    const id = slice.getAttribute("aria-describedby") || "";
+    const pop = id ? document.getElementById(id) : null;
+    return pop instanceof HTMLElement ? pop : null;
+  };
+  const pointerPoint = (slice, event) => {
+    if (event && typeof event.clientX === "number" && typeof event.clientY === "number") {
+      return { x: event.clientX, y: event.clientY };
+    }
+    const box = slice.getBoundingClientRect();
+    return { x: box.left + box.width / 2, y: box.bottom };
+  };
+  const placeSlice = (pop, x, y) => {
+    if (pop.parentNode !== document.body) document.body.appendChild(pop);
+    pop.hidden = false;
+    pop.style.position = "fixed";
+    pop.style.zIndex = "80";
+    pop.style.right = "auto";
+    pop.style.bottom = "auto";
+    pop.style.transform = "none";
+    pop.style.margin = "0";
+    pop.style.maxWidth = Math.min(280, Math.max(0, window.innerWidth - 16)) + "px";
+    const pad = 8;
+    pop.style.left = x + "px";
+    pop.style.top = (y + 16) + "px";
+    const box = pop.getBoundingClientRect();
+    let left = x;
+    let top = y + 16;
+    if (left + box.width > window.innerWidth - pad) left = window.innerWidth - pad - box.width;
+    if (left < pad) left = pad;
+    if (top + box.height > window.innerHeight - pad) top = y - box.height - 12;
+    if (top < pad) top = pad;
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
+  };
+  const closeOneSlice = (slice) => {
+    if (slicePinned === slice) slicePinned = null;
+    slice.setAttribute("aria-expanded", "false");
+    const pop = slicePop(slice);
+    if (pop) pop.hidden = true;
+  };
+  const closeSlice = () => {
+    document.querySelectorAll(".slice[aria-expanded='true']").forEach((slice) => {
+      if (slice instanceof Element) closeOneSlice(slice);
+    });
+    slicePinned = null;
+  };
+  const openSlice = (slice, x, y, pin) => {
+    document.querySelectorAll(".slice[aria-expanded='true']").forEach((other) => {
+      if (other !== slice && other instanceof Element) closeOneSlice(other);
+    });
+    document.querySelectorAll(".tip-btn[aria-expanded='true']").forEach((other) => {
+      if (other instanceof HTMLButtonElement) closeTip(other);
+    });
+    if (pinned) pinned = null;
+    const pop = slicePop(slice);
+    if (!pop) return;
+    slicePinned = pin ? slice : null;
+    slice.setAttribute("aria-expanded", "true");
+    placeSlice(pop, x, y);
+  };
   const tipPop = (button) => {
     const id = button.getAttribute("aria-describedby") || button.getAttribute("aria-controls") || "";
     const pop = id ? document.getElementById(id) : null;
@@ -1273,6 +1344,7 @@ export const CLIENT_JS = `
       if (button instanceof HTMLButtonElement) closeTip(button);
     });
     pinned = null;
+    closeSlice();
   };
   const placeTip = (anchorEl, pop) => {
     if (pop.parentNode !== document.body) document.body.appendChild(pop);
@@ -1310,6 +1382,7 @@ export const CLIENT_JS = `
     if (placed.right > window.innerWidth - pad) pop.style.left = Math.max(pad, window.innerWidth - pad - placed.width) + "px";
   };
   const openTip = (button, pin, anchorEl) => {
+    closeSlice();
     document.querySelectorAll(".tip-btn[aria-expanded='true']").forEach((other) => {
       if (other !== button && other instanceof HTMLButtonElement) closeTip(other);
     });
@@ -1340,7 +1413,7 @@ export const CLIENT_JS = `
     return host instanceof HTMLElement ? host : null;
   };
   const onScroll = () => {
-    if (document.querySelector(".tip-btn[aria-expanded='true']")) closeTips();
+    if (document.querySelector(".tip-btn[aria-expanded='true']") || document.querySelector(".slice[aria-expanded='true']")) closeTips();
   };
   document.addEventListener("pointerdown", (event) => {
     if (event.pointerType === "touch") touchAt = Date.now();
@@ -1354,7 +1427,23 @@ export const CLIENT_JS = `
       return;
     }
     const button = buttonFrom(event.target);
-    if (button) openTip(button, false);
+    if (button) {
+      openTip(button, false);
+      return;
+    }
+    const slice = sliceFrom(event.target);
+    if (!slice) return;
+    const point = pointerPoint(slice, event);
+    openSlice(slice, point.x, point.y, false);
+  });
+  document.addEventListener("pointermove", (event) => {
+    if (event.pointerType !== "mouse" || Date.now() - touchAt < 700) return;
+    const slice = sliceFrom(event.target);
+    if (!slice || slice === slicePinned || slice.getAttribute("aria-expanded") !== "true") return;
+    const pop = slicePop(slice);
+    if (!pop) return;
+    const point = pointerPoint(slice, event);
+    placeSlice(pop, point.x, point.y);
   });
   document.addEventListener("pointerout", (event) => {
     if (event.pointerType !== "mouse" || Date.now() - touchAt < 700) return;
@@ -1367,9 +1456,29 @@ export const CLIENT_JS = `
       return;
     }
     const button = buttonFrom(event.target);
-    if (!button || button === pinned) return;
-    if (ownsTip(button, event.relatedTarget)) return;
-    closeTip(button);
+    if (button) {
+      if (button === pinned) return;
+      if (ownsTip(button, event.relatedTarget)) return;
+      closeTip(button);
+      return;
+    }
+    const slice = sliceFrom(event.target);
+    if (!slice || slice === slicePinned) return;
+    if (event.relatedTarget instanceof Node && slice.contains(event.relatedTarget)) return;
+    if (slice.getAttribute("aria-expanded") !== "true") return;
+    closeOneSlice(slice);
+  });
+  document.addEventListener("focusin", (event) => {
+    const slice = sliceFrom(event.target);
+    if (!slice) return;
+    const point = pointerPoint(slice, null);
+    openSlice(slice, point.x, point.y, false);
+  });
+  document.addEventListener("focusout", (event) => {
+    const slice = sliceFrom(event.target);
+    if (!slice || slice === slicePinned) return;
+    if (sliceFrom(event.relatedTarget)) return;
+    closeOneSlice(slice);
   });
   document.addEventListener("focusin", (event) => {
     const target = event.target instanceof Element ? event.target : null;
@@ -1413,15 +1522,28 @@ export const CLIENT_JS = `
       else openTip(button, true);
       return;
     }
-    if (target?.closest(".tip") || target?.closest(".tip-pop")) return;
+    const pop = target?.closest(".tip-pop");
+    const slicePopHit = pop instanceof Element && pop.className.split(/\s+/).includes("slice-pop");
+    if (target?.closest(".tip") || (pop && !slicePopHit)) return;
+    const slice = target ? sliceFrom(target) : null;
+    if (slice && Date.now() - touchAt < 700) {
+      if (slice !== slicePinned) {
+        event.preventDefault();
+        const point = pointerPoint(slice, event);
+        openSlice(slice, point.x, point.y, true);
+        return;
+      }
+    }
     closeTips();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     const open = document.querySelector(".tip-btn[aria-expanded='true']");
-    if (!(open instanceof HTMLButtonElement)) return;
+    const slice = document.querySelector(".slice[aria-expanded='true']");
+    if (!(open instanceof HTMLButtonElement) && !(slice instanceof Element)) return;
     closeTips();
-    open.focus();
+    if (open instanceof HTMLButtonElement) open.focus();
+    else if (slice instanceof Element) slice.focus();
   });
   window.addEventListener("scroll", onScroll, true);
   document.addEventListener("scroll", onScroll, true);

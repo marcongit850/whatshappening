@@ -185,6 +185,20 @@ paceRow.appendChild(pacePill);
 body.appendChild(paceBtn);
 body.appendChild(pacePop);
 body.appendChild(paceRow);
+const sliceLink = new HTMLAnchorElement("a");
+sliceLink.className = "slice";
+sliceLink.setAttribute("href", "#fund");
+sliceLink.setAttribute("aria-describedby", "slice-fund-0");
+sliceLink.setAttribute("aria-expanded", "false");
+sliceLink.rect = { left: 100, top: 80, width: 48, height: 48, right: 148, bottom: 128 };
+const slicePop = new HTMLElement("div");
+slicePop.className = "slice-pop tip-pop";
+slicePop.id = "slice-fund-0";
+slicePop.hidden = true;
+slicePop.naturalHeight = 72;
+slicePop.rect = { left: 0, top: 0, width: 160, height: 72, right: 160, bottom: 72 };
+body.appendChild(sliceLink);
+body.appendChild(slicePop);
 ${CLIENT_JS}
 function fire(type, init) {
   const event = {
@@ -193,7 +207,10 @@ function fire(type, init) {
     relatedTarget: init && init.relatedTarget !== undefined ? init.relatedTarget : null,
     pointerType: init && init.pointerType ? init.pointerType : "mouse",
     key: init && init.key ? init.key : "",
-    preventDefault() {},
+    clientX: init && typeof init.clientX === "number" ? init.clientX : undefined,
+    clientY: init && typeof init.clientY === "number" ? init.clientY : undefined,
+    defaultPrevented: false,
+    preventDefault() { event.defaultPrevented = true; },
     stopPropagation() {},
   };
   for (const fn of listeners.document[type] || []) fn(event);
@@ -204,7 +221,7 @@ function scroll() {
   for (const fn of listeners.window.scroll || []) fn(event);
   for (const fn of listeners.document.scroll || []) fn(event);
 }
-globalThis.__tips = { tips, outside, document, window, fire, scroll, paceBtn, pacePop, pacePill, paceRow };
+globalThis.__tips = { tips, outside, document, window, fire, scroll, paceBtn, pacePop, pacePill, paceRow, slice: { link: sliceLink, pop: slicePop } };
 `;
 
 type TipBox = {
@@ -237,9 +254,10 @@ type TipWorld = {
   pacePop: TipNode & { style: Record<string, string>; hidden: boolean };
   pacePill: TipNode;
   paceRow: TipNode;
+  slice: { link: TipNode; pop: TipNode };
   document: { activeElement: TipNode | null; body: TipNode };
   window: { innerWidth: number; innerHeight: number };
-  fire(type: string, init?: { target?: TipNode | null; relatedTarget?: TipNode | null; pointerType?: string; key?: string }): void;
+  fire(type: string, init?: { target?: TipNode | null; relatedTarget?: TipNode | null; pointerType?: string; key?: string; clientX?: number; clientY?: number }): { defaultPrevented: boolean };
   scroll(): void;
 };
 
@@ -430,5 +448,74 @@ describe("info tip behavior", () => {
     expect(pacePop.hidden).toBe(false);
     world.fire("click", { target: pacePill });
     expect(pacePop.hidden).toBe(true);
+  });
+
+  it("closes a slice detail when Ahead of pace opens, and the reverse", () => {
+    const world = boot();
+    const { link, pop } = world.slice;
+    world.fire("pointerover", { target: link, pointerType: "mouse", clientX: 40, clientY: 50 });
+    expect(pop.hidden).toBe(false);
+    world.fire("pointerover", { target: world.pacePill, pointerType: "mouse" });
+    expect(pop.hidden).toBe(true);
+    expect(world.pacePop.hidden).toBe(false);
+    world.fire("pointerover", { target: link, pointerType: "mouse", clientX: 40, clientY: 50 });
+    expect(world.pacePop.hidden).toBe(true);
+    expect(world.paceBtn.getAttribute("aria-expanded")).toBe("false");
+    expect(pop.hidden).toBe(false);
+  });
+});
+
+describe("donut slice detail", () => {
+  it("shows the slice under the pointer and follows it", () => {
+    const world = boot();
+    const { link, pop } = world.slice;
+    world.fire("pointerover", { target: link, pointerType: "mouse", clientX: 40, clientY: 50 });
+    expect(link.getAttribute("aria-expanded")).toBe("true");
+    expect(pop.hidden).toBe(false);
+    expect(pop.parentNode).toBe(world.document.body);
+    expect(pop.style.position).toBe("fixed");
+    expect(pop.style.zIndex).toBe("80");
+    expect(parseFloat(pop.style.top)).toBeGreaterThan(50);
+    world.fire("pointermove", { target: link, pointerType: "mouse", clientX: 70, clientY: 90 });
+    expect(parseFloat(pop.style.left)).toBe(70);
+    expect(parseFloat(pop.style.top)).toBe(106);
+    world.fire("pointerout", { target: link, relatedTarget: null, pointerType: "mouse" });
+    expect(pop.hidden).toBe(true);
+    expect(link.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("shows the same detail on keyboard focus and hides it when focus leaves", () => {
+    const world = boot();
+    const { link, pop } = world.slice;
+    link.focus();
+    world.fire("focusin", { target: link });
+    expect(pop.hidden).toBe(false);
+    expect(link.getAttribute("aria-expanded")).toBe("true");
+    world.fire("focusout", { target: link, relatedTarget: null });
+    expect(pop.hidden).toBe(true);
+  });
+
+  it("pins on the first tap and follows the link on the second tap", () => {
+    const world = boot();
+    const { link, pop } = world.slice;
+    world.fire("pointerdown", { target: link, pointerType: "touch" });
+    const first = world.fire("click", { target: link, clientX: 30, clientY: 40 });
+    expect(first.defaultPrevented).toBe(true);
+    expect(pop.hidden).toBe(false);
+    world.fire("pointerout", { target: link, relatedTarget: null, pointerType: "mouse" });
+    expect(pop.hidden).toBe(false);
+    world.fire("pointerdown", { target: link, pointerType: "touch" });
+    const second = world.fire("click", { target: link, clientX: 30, clientY: 40 });
+    expect(second.defaultPrevented).toBe(false);
+  });
+
+  it("closes the slice detail on Escape", () => {
+    const world = boot();
+    const { link, pop } = world.slice;
+    link.focus();
+    world.fire("focusin", { target: link });
+    world.fire("keydown", { key: "Escape", target: world.document.body });
+    expect(pop.hidden).toBe(true);
+    expect(world.document.activeElement).toBe(link);
   });
 });

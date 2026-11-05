@@ -285,6 +285,17 @@ describe("revenue and reserves pages", () => {
     expect(reserves).toContain('id="cash"');
     expect(reserves).toContain('href="/revenue#interest"');
     expect(revenue).toContain("<svg");
+    const slicePops = (html: string) =>
+      [...html.matchAll(/<div class="slice-pop tip-pop" id="(slice-[^"]+)" role="tooltip" hidden><b>([^<]*)<\/b><span>(\$[^<]*)<\/span><span>(\d+\.\d% of this chart)<\/span><\/div>/g)];
+    const revenuePops = slicePops(revenue);
+    expect(revenuePops.length).toBeGreaterThan(1);
+    for (const pop of revenuePops) {
+      expect(revenue).toContain(`aria-describedby="${pop[1]}"`);
+      expect(pop[2].length).toBeGreaterThan(0);
+    }
+    expect(revenue.match(/class="slice(?: |")/g)?.length).toBe(revenuePops.length);
+    const overviewPops = slicePops(overview);
+    expect(overviewPops.length).toBeGreaterThan(1);
     expect(reserves).toContain("Year-end balance as of September 30, 2025, from the county's annual comprehensive financial report");
     expect(reserves).toContain("independent auditor's report");
     expect(reserves).toContain("spring 2027 audit");
