@@ -312,8 +312,15 @@ export function renderOverview(opts: {
   const spentLabel = spentTerm(opts.row.data_as_of);
   const paceSentence =
     facts.current > 0
-      ? `${spentLabel} is ${limitShare.toFixed(1)}% of the mid-year limit, and ${yearShown}% of the year is gone.`
+      ? `Spent so far is ${limitShare.toFixed(1)}% of that hard cap, and ${yearShown}% of the year is gone.`
       : "No mid-year limit is set in the county report.";
+  const capSentence =
+    facts.current > 0
+      ? `Spent so far is ${limitShare.toFixed(1)}% of the biggest number the county can spend this year. That bigger number is a hard cap, not the everyday plan.`
+      : "No mid-year limit is set in the county report.";
+  const left = leftLabel(facts.current, facts.spent, facts.encumbered);
+  const leftTitle = left.title === "Not yet spent or promised" ? "Still left under the hard cap" : left.title;
+  const leftHelp = "Mid-year limit minus spent minus open orders, net of transfers. This matches the county's own Available Budget.";
   const fundRows = opts.funds.map((fund) => netSpendRow(fund.code, fund.code, fund.report_name, fund));
   const deptRows: SpendRow[] = opts.departments.map((dept) => netSpendRow(dept.code, dept.fund_code, dept.report_name, dept));
   const deptLabels = disambiguatedDepartmentNames(opts.departments, opts.names, opts.fundReports);
@@ -341,23 +348,23 @@ export function renderOverview(opts: {
 ${raised ? `<p class="limit-note">${esc(raised)}</p>` : ""}
 </div>
 <div class="card pace">
-<div class="eyebrow">Adopted budget and mid-year limit</div>
-<div class="stackbar" role="img" aria-label="Adopted budget and the amount added to the budget limit">
+<h2>How big is the budget, and how much is spent?</h2>
+<div class="stackbar" role="img" aria-label="County's plan, extra room added later, and spent so far">
 <div class="adopted" style="width:${adoptedWidth.toFixed(2)}%"></div>
 <div class="added" style="width:${addedWidth.toFixed(2)}%"></div>
 <i class="paid" style="left:${paidMark.toFixed(2)}%"></i>
 </div>
-<div class="legend"><span><i style="background:var(--teal)"></i>Adopted budget</span><span><i style="background:#d5e4e8"></i>Added to the limit</span><span><i style="background:var(--ink)"></i>${esc(spentLabel)}</span></div>
-<p class="cap">Share of the mid-year limit: ${limitShare.toFixed(1)}%. The limit is a ceiling, not a spending plan.</p>
+<div class="legend"><span><i style="background:var(--teal)"></i>County's plan</span><span><i style="background:#d5e4e8"></i>Extra room added later</span><span><i style="background:var(--ink)"></i>Spent so far</span></div>
+<p class="cap">${capSentence}</p>
 <div class="row"><div class="t"><span>Year gone (day ${fiscal.elapsedDays} of ${fiscal.totalDays})</span><b>${fiscal.elapsedPct.toFixed(1)}%</b></div><div class="meter"><div style="width:${Math.min(fiscal.elapsedPct, 100).toFixed(2)}%;background:var(--gold)"></div></div></div>
-<p class="note">${esc(paceSentence)} Another ${esc(moneyCompact(facts.encumbered))} is promised but not paid yet.</p>
+<p class="note">${esc(paceSentence)} Another ${esc(moneyCompact(facts.encumbered))} is already promised but not paid yet.</p>
 </div>
 </section>
 <section class="kpis">
 <div class="card kpi k1"><div class="l"><span>Budget passed by commissioners</span>${infoTip("kpi-adopted", "The budget the commissioners voted on.")}</div><a class="n" href="/departments">${esc(moneyCompact(adoptedShown))}</a><div class="s">The budget the commissioners voted on</div></div>
 <div class="card kpi k2"><div class="l"><span>${esc(spentLabel)}</span>${infoTip("kpi-spent", `Share of the mid-year limit: ${limitShare.toFixed(1)}%.`)}</div><a class="n" href="/search">${esc(moneyCompact(facts.spent))}</a><div class="s">Share of the mid-year limit: ${limitShare.toFixed(1)}%</div></div>
 <div class="card kpi k3"><div class="l"><span>Promised, not paid</span>${infoTip("kpi-enc", "Committed to open orders and contracts.")}</div><a class="n" href="/departments?sort=enc">${esc(moneyCompact(facts.encumbered))}</a><div class="s">Committed to open orders and contracts</div></div>
-<div class="card kpi k4"><div class="l"><span>${esc(leftLabel(facts.current, facts.spent, facts.encumbered).title)}</span>${infoTip("kpi-left", "Mid-year limit minus paid out minus open orders.")}</div><a class="n" href="/departments?sort=avail">${esc(kpiLeftValue(facts.current, facts.spent, facts.encumbered))}</a><div class="s">Mid-year limit minus paid out minus open orders. This matches the county's own Available Budget.</div></div>
+<div class="card kpi k4"><div class="l"><span>${esc(leftTitle)}</span>${infoTip("kpi-left", leftHelp)}</div><a class="n" href="/departments?sort=avail">${esc(kpiLeftValue(facts.current, facts.spent, facts.encumbered))}</a><div class="s">${leftHelp}</div></div>
 </section>
 ${countCard(facts, opts.row.data_as_of)}
 <section class="grid2 spend-row">

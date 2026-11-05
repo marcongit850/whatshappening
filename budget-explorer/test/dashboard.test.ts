@@ -276,7 +276,11 @@ describe("overview dashboard", () => {
     expect(spendCard).toMatch(/\d+\.\d%/);
     expect(spendCard).not.toContain("spent in total");
     expect(spendCard).not.toContain("donut-labels");
-    expect(html).toContain('class="card income-card pie-card"');
+    expect(spendCard).toContain('class="slice"');
+    expect(spendCard).toContain('class="slice-pop tip-pop"');
+    expect(spendCard).toContain('role="tooltip"');
+    expect(spendCard).toContain("<b>Recreation Plat Fee</b><span>$3,500</span><span>58.3% of this chart</span>");
+    expect(spendCard).toContain("<b>General Fund</b><span>$2,499</span><span>41.7% of this chart</span>");
     expect(html).toContain(">Over budget<");
     expect(html).not.toContain("may reflect an amendment");
     expect(html).toContain("Recreation Plat Fee");

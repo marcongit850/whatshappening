@@ -476,7 +476,9 @@ export function donutChart<T extends { label: string; cents: number; pct: number
 ): string {
   const r = 72;
   const circumference = 2 * Math.PI * r;
+  const chartSlug = ariaLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "chart";
   let offset = 0;
+  const pops: string[] = [];
   const arcs = items
     .map((item, index) => {
       const length = total > 0 ? (item.cents / total) * circumference : 0;
@@ -485,9 +487,18 @@ export function donutChart<T extends { label: string; cents: number; pct: number
       const marked = emphasize?.(item) === true;
       const color = marked ? "#8a5b12" : SLICE_COLORS[index % SLICE_COLORS.length];
       const href = hrefFor(item);
-      const arc = `<a${marked ? ` class="arc-mark"` : ""} href="${esc(href)}"><circle r="${r}" cx="100" cy="100" fill="none" stroke="${color}" stroke-width="26" stroke-dasharray="${drawn.toFixed(2)} ${(circumference - drawn).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 100 100)"><title>${esc(item.label)} ${esc(moneyCompact(item.cents))}</title></circle></a>`;
+      const amount = moneyCompact(item.cents);
+      const share = `${item.pct.toFixed(1)}%`;
+      const id = `slice-${chartSlug}-${index}`;
+      const detail = `${item.label}. ${amount}. ${share} of this chart.`;
+      const arc = item.cents > 0
+        ? `<a class="slice${marked ? " arc-mark" : ""}" href="${esc(href)}" aria-label="${esc(detail)}" aria-describedby="${esc(id)}" aria-expanded="false"><circle r="${r}" cx="100" cy="100" fill="none" stroke="${color}" stroke-width="26" pointer-events="stroke" stroke-dasharray="${drawn.toFixed(2)} ${(circumference - drawn).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 100 100)"></circle></a>`
+        : "";
+      if (item.cents > 0) {
+        pops.push(`<div class="slice-pop tip-pop" id="${esc(id)}" role="tooltip" hidden><b>${esc(item.label)}</b><span>${esc(amount)}</span><span>${esc(share)} of this chart</span></div>`);
+      }
       offset += length;
-      return item.cents > 0 ? arc : "";
+      return arc;
     })
     .join("");
   const legend = items
@@ -497,7 +508,7 @@ export function donutChart<T extends { label: string; cents: number; pct: number
       return `<a class="lg${marked ? " lg-mark" : ""}" href="${esc(hrefFor(item))}"><i style="background:${color}"></i><span class="donut-label">${esc(item.label)}</span><b>${item.pct.toFixed(1)}%<span class="donut-amt">${esc(moneyCompact(item.cents))}</span></b></a>`;
     })
     .join("");
-  return `<div class="donutwrap"><svg viewBox="0 0 200 200" class="donut" role="img" aria-label="${esc(ariaLabel)}">${arcs}<text x="100" y="96" text-anchor="middle" class="dn1">${esc(center)}</text><text x="100" y="116" text-anchor="middle" class="dn2">${esc(centerNote)}</text></svg><div class="lgs">${legend}</div></div>`;
+  return `<div class="donutwrap"><svg viewBox="0 0 200 200" class="donut" role="group" aria-label="${esc(ariaLabel)}">${arcs}<text x="100" y="96" text-anchor="middle" class="dn1">${esc(center)}</text><text x="100" y="116" text-anchor="middle" class="dn2">${esc(centerNote)}</text></svg><div class="lgs">${legend}</div>${pops.join("")}</div>`;
 }
 
 function withPercents(items: AmountItem[]): AmountItem[] {
