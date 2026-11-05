@@ -164,17 +164,23 @@ export function pace(revCents: number, ytdCents: number, _encCents: number, elap
 
 export const PACE_LABEL: Record<Pace, string> = {
   green: "In line",
-  yellow: "Spending more than the year's progress",
+  yellow: "Ahead of pace",
   red: "Over budget",
   gray: "No budget set in the county report",
   none: "No spending yet",
   under: "Under",
 };
 
-/** Short pill text. The long wording stays in the chart legend. */
+/** Same whole-number year percent the pace chart prints on its marker. */
+export function aheadPaceNote(elapsedPct: number): string {
+  const yearShown = Math.round(elapsedPct);
+  return `Has used more of its yearly budget than the share of the year that has passed (${yearShown}%). Often normal for bills paid up front.`;
+}
+
+/** Short pill text. Ahead of pace uses the same words as the chart legend. */
 export const PACE_PILL: Record<Pace, string> = {
   green: "In line",
-  yellow: "Ahead",
+  yellow: "Ahead of pace",
   red: "Over budget",
   gray: "No budget set",
   none: "No spending yet",

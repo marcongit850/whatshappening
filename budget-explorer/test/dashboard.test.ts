@@ -180,6 +180,17 @@ describe("overview dashboard", () => {
     expect(html).toContain(`${((netYtd / netRev) * 100).toFixed(1)}%`);
     expect(html).toContain("How we count the budget");
     expect(html).toContain("Money moved between county funds");
+    const yearShown = Math.round(fiscal.elapsedPct);
+    const paceCard = html.slice(html.indexOf('class="card pace-card"'), html.indexOf("Spending by month"));
+    expect(paceCard).toContain("Ahead of pace");
+    expect(paceCard).not.toContain("Spending more than the year's progress");
+    expect(paceCard).toContain(`Has used more of its yearly budget than the share of the year that has passed (${yearShown}%). Often normal for bills paid up front.`);
+    expect(paceCard).toContain('id="pace-ahead-btn"');
+    expect(paceCard).toContain('aria-describedby="tip-pace-ahead"');
+    expect(paceCard).toContain('role="tooltip"');
+    expect(paceCard).toContain("Transfers between county funds are left out of this chart.");
+    expect(paceCard).not.toContain("Money moved between county funds");
+    expect(paceCard).not.toContain("is left out of this chart");
     expect(html).toContain("Payments to other county offices");
     expect(html).not.toContain("funds$");
     expect(html).toContain(`${fiscal.elapsedPct.toFixed(1)}%`);
@@ -344,6 +355,14 @@ describe("overview dashboard", () => {
     const bars = [...html.matchAll(/class="dbar [^"]*" style="([^"]+)"/g)].map((match) => match[1]);
     expect(bars.length).toBe(ticks.length);
     for (const style of bars) expect(style.startsWith("width:")).toBe(true);
+    const paceCard = html.slice(html.indexOf('class="card pace-card"'), html.indexOf("Spending by month"));
+    expect(paceCard).toContain('data-pace-tip="pace-ahead-btn"');
+    expect(paceCard).toContain(">Ahead of pace</span>");
+    expect(paceCard).toContain("Has used more of its yearly budget than the share of the year that has passed (9%). Often normal for bills paid up front.");
+    expect(paceCard).not.toContain("Spending more than the year's progress");
+    const footnote = paceCard.slice(paceCard.indexOf('class="mnote"'));
+    expect(footnote).toContain("Transfers between county funds are left out of this chart.");
+    expect(footnote).not.toContain("$");
   });
 
   it("drops the prototype sentence from about the data", async () => {

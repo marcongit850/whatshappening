@@ -7,6 +7,7 @@ import type { QaRecord } from "./qa";
 import {
   PACE_LABEL,
   Pace,
+  aheadPaceNote,
   accountKey,
   displayDate,
   esc,
@@ -121,8 +122,9 @@ function badge(unmatched: boolean): string {
   return unmatched ? `<span class="tag">name from county report</span>` : "";
 }
 
-function pill(status: Pace, text = PACE_LABEL[status], klass: Pace = status): string {
-  return `<span class="pill ${klass}" title="${esc(text)}">${esc(text)}</span>`;
+function pill(status: Pace, text = PACE_LABEL[status], klass: Pace = status, note = ""): string {
+  if (!note) return `<span class="pill ${klass}" title="${esc(text)}">${esc(text)}</span>`;
+  return `<span class="pill ${klass}" data-pace-tip="pace-ahead-btn" title="${esc(note)}" aria-describedby="tip-pace-ahead">${esc(text)}</span>`;
 }
 
 function statusView(name: string, fundCode: string, status: Pace, chartName = ""): { text: string; klass: Pace } {
@@ -510,10 +512,12 @@ function paceSection(
   rows: SpendRow[],
   opts: { names: NameMaps; fundReports: Map<string, string> },
   elapsedPct: number,
-  transferCents: number,
+  _transferCents: number,
   labels: Map<string, string>,
 ): string {
   const yearShown = Math.round(elapsedPct);
+  const aheadNote = aheadPaceNote(elapsedPct);
+  const aheadLabel = PACE_LABEL.yellow;
   const marker = axisPercent(yearShown);
   const guides = [25, 50, 75, 100, 125].map((mark) => `<div class="gl" style="left:${axisPercent(mark).toFixed(2)}%"></div>`).join("");
   const axis = [0, 25, 50, 75, 100, 125]
@@ -529,20 +533,22 @@ function paceSection(
       const encPos = Math.max(axisPercent(spent + enc) - spentPos, 0);
       const named = labels.get(row.code) || deptName({ code: row.code, report_name: row.report_name }, opts.names).primary;
       const fund = fundLabel(row.fund_code, opts.fundReports.get(row.fund_code) || "", opts.names);
-      return `<a class="drow" href="/departments/${esc(row.code)}"><div class="dname"><b>${esc(named)}</b><span>${esc(fund.primary)}</span></div>
+      const ahead = shown.text === aheadLabel;
+      const described = ahead ? ` aria-describedby="tip-pace-ahead"` : "";
+      return `<a class="drow" href="/departments/${esc(row.code)}"${described}><div class="dname"><b>${esc(named)}</b><span>${esc(fund.primary)}</span></div>
 <div class="dplot"><div class="pm" style="left:${marker.toFixed(2)}%"></div><div class="dbar ${shown.klass}" style="width:${spentPos.toFixed(2)}%"></div><div class="denc ${shown.klass}" style="left:${spentPos.toFixed(2)}%;width:${encPos.toFixed(2)}%"></div></div>
 <div class="dnum"><b>${Math.round(spent)}%</b><span>${row.ytd_cents > row.rev_cents ? `Over budget by ${esc(moneyCompact(row.ytd_cents - row.rev_cents))}` : `${esc(moneyCompact(row.ytd_cents))} of ${esc(moneyCompact(row.rev_cents))}`}</span></div>
-<div class="dstat">${pill(shown.klass, shown.text)}</div></a>`;
+<div class="dstat">${pill(shown.klass, shown.text, shown.klass, ahead ? aheadNote : "")}</div></a>`;
     })
     .join("");
   return `<section class="card pace-card"><div class="eyebrow">By department</div><h2>Are departments spending on pace?${infoTip("pace", `The ${rows.length} departments with the largest budgets.`)}</h2>
-<p class="cap">The ${rows.length} departments with the largest budgets. The dark line is ${yearShown}% of the year. In line means within 1 percentage point of that. Spending more than the year's progress is higher than that. Under is lower.</p>
-<div class="legend"><span><i style="background:var(--g)"></i>In line</span><span><i style="background:var(--teal2)"></i>Under</span><span><i style="background:var(--y)"></i>Spending more than the year's progress</span><span><i style="background:var(--r)"></i>Over budget</span><span><i class="swatch-hatch"></i>Promised, not paid</span><span>Releases to the Sheriff</span><span>Paid on schedule</span></div>
+<p class="cap">The ${rows.length} departments with the largest budgets. The dark line is ${yearShown}% of the year. In line means within 1 percentage point of that. ${esc(aheadLabel)} is higher than that. Under is lower.</p>
+<div class="legend"><span><i style="background:var(--g)"></i>In line</span><span><i style="background:var(--teal2)"></i>Under</span><span><i style="background:var(--y)"></i><button type="button" class="tip-btn pace-label" id="pace-ahead-btn" aria-expanded="false" aria-controls="tip-pace-ahead" aria-describedby="tip-pace-ahead" title="${esc(aheadNote)}">${esc(aheadLabel)}</button><span class="tip-pop" id="tip-pace-ahead" role="tooltip" hidden>${esc(aheadNote)}</span></span><span><i style="background:var(--r)"></i>Over budget</span><span><i class="swatch-hatch"></i>Promised, not paid</span><span>Releases to the Sheriff</span><span>Paid on schedule</span></div>
 <div class="plotarea pace-chart"><div class="axis top"></div><div class="pacew"><div class="tag" style="left:${marker.toFixed(2)}%">Year ${yearShown}%</div>${guides}</div>
 ${list}
 <div class="axis">${axis}</div></div>
-<div class="mobpace">In line means within 1 percentage point of ${yearShown}% of the year. Higher than that is spending more than the year's progress.</div>
-<p class="mnote">The percent is money spent so far divided by that department's budget. <span class="transfer-row"><span>Money moved between county funds</span> <b>${esc(moneyCompact(transferCents))}</b></span> is left out of this chart.</p></section>`;
+<div class="mobpace">In line means within 1 percentage point of ${yearShown}% of the year. Higher than that is ahead of pace.</div>
+<p class="mnote">The percent is money spent so far divided by that department's budget. Transfers between county funds are left out of this chart.</p></section>`;
 }
 
 function monthBits(items: { ym: string; cents: number }[], months: { ym: string; label: string }[]): string[] {

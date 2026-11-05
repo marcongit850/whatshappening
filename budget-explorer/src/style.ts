@@ -516,6 +516,37 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
   white-space: normal;
 }
 .tip-pop[hidden] { display: none !important; }
+.tip-btn.pace-label {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
+  padding: 2px 4px;
+  margin: 0;
+  cursor: help;
+  box-shadow: none;
+  white-space: nowrap;
+}
+.tip-btn.pace-label::after { width: 100%; height: 100%; }
+.tip-btn.pace-label:hover,
+.tip-btn.pace-label:focus-visible,
+.tip-btn.pace-label[aria-expanded="true"] {
+  background: #fbefd0;
+  color: #6e4b00;
+  box-shadow: none;
+}
+.pace-card [data-pace-tip] { cursor: help; }
+.pace-card [data-pace-tip]:hover,
+.pace-card a.drow:focus-visible [data-pace-tip] {
+  box-shadow: 0 0 0 3px rgba(201, 162, 75, 0.45);
+}
 .kpi .l, .metric-label { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; }
 .kpi a.n { color: inherit; text-decoration: none; display: block; }
 .reserve-name a, a.reserve-amt { color: inherit; text-decoration: none; }
@@ -596,6 +627,8 @@ a.plat-btn { display: inline-block; margin-top: 22px; background: #fff; color: #
   .look { grid-template-columns: 1fr; gap: 26px; }
   .plat .n, .plat .n a { font-size: 42px; }
   .mobpace { display: block; }
+  .tip-btn.pace-label,
+  .pace-card [data-pace-tip] { min-height: 44px; }
 }
 @media (max-width: 400px) {
   main, .banner-inner, .footer-inner { padding-left: 12px; padding-right: 12px; }
@@ -1241,7 +1274,7 @@ export const CLIENT_JS = `
     });
     pinned = null;
   };
-  const placeTip = (button, pop) => {
+  const placeTip = (anchorEl, pop) => {
     if (pop.parentNode !== document.body) document.body.appendChild(pop);
     pop.hidden = false;
     pop.style.position = "fixed";
@@ -1256,7 +1289,7 @@ export const CLIENT_JS = `
     pop.style.width = maxWidth + "px";
     pop.style.maxHeight = "";
     pop.style.overflow = "visible";
-    const anchor = button.getBoundingClientRect();
+    const anchor = anchorEl.getBoundingClientRect();
     let left = anchor.left;
     if (left + maxWidth > window.innerWidth - pad) left = window.innerWidth - pad - maxWidth;
     if (left < pad) left = pad;
@@ -1276,7 +1309,7 @@ export const CLIENT_JS = `
     if (placed.left < pad) pop.style.left = pad + "px";
     if (placed.right > window.innerWidth - pad) pop.style.left = Math.max(pad, window.innerWidth - pad - placed.width) + "px";
   };
-  const openTip = (button, pin) => {
+  const openTip = (button, pin, anchorEl) => {
     document.querySelectorAll(".tip-btn[aria-expanded='true']").forEach((other) => {
       if (other !== button && other instanceof HTMLButtonElement) closeTip(other);
     });
@@ -1285,7 +1318,26 @@ export const CLIENT_JS = `
     if (pin) pinned = button;
     else if (pinned !== button) pinned = null;
     button.setAttribute("aria-expanded", "true");
-    placeTip(button, pop);
+    placeTip(anchorEl || button, pop);
+  };
+  const paceButton = (host) => {
+    const id = host.getAttribute("data-pace-tip") || "";
+    const button = id ? document.getElementById(id) : null;
+    return button instanceof HTMLButtonElement ? button : null;
+  };
+  const paceHostFrom = (node) => {
+    if (!(node instanceof Element)) return null;
+    const host = node.closest("[data-pace-tip]");
+    return host instanceof HTMLElement ? host : null;
+  };
+  const paceHostInRow = (node) => {
+    const direct = paceHostFrom(node);
+    if (direct) return direct;
+    if (!(node instanceof Element)) return null;
+    const row = node.closest(".drow");
+    if (!row || typeof row.querySelector !== "function") return null;
+    const host = row.querySelector("[data-pace-tip]");
+    return host instanceof HTMLElement ? host : null;
   };
   const onScroll = () => {
     if (document.querySelector(".tip-btn[aria-expanded='true']")) closeTips();
@@ -1295,18 +1347,65 @@ export const CLIENT_JS = `
   });
   document.addEventListener("pointerover", (event) => {
     if (event.pointerType !== "mouse" || Date.now() - touchAt < 700) return;
+    const host = paceHostFrom(event.target);
+    if (host) {
+      const button = paceButton(host);
+      if (button) openTip(button, false, host);
+      return;
+    }
     const button = buttonFrom(event.target);
     if (button) openTip(button, false);
   });
   document.addEventListener("pointerout", (event) => {
     if (event.pointerType !== "mouse" || Date.now() - touchAt < 700) return;
+    const host = paceHostFrom(event.target);
+    if (host) {
+      const button = paceButton(host);
+      if (!button || button === pinned) return;
+      if (ownsTip(button, event.relatedTarget) || host.contains(event.relatedTarget)) return;
+      closeTip(button);
+      return;
+    }
     const button = buttonFrom(event.target);
     if (!button || button === pinned) return;
     if (ownsTip(button, event.relatedTarget)) return;
     closeTip(button);
   });
+  document.addEventListener("focusin", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const label = target.closest(".pace-label");
+    if (label instanceof HTMLButtonElement) {
+      openTip(label, false);
+      return;
+    }
+    const host = paceHostInRow(target);
+    if (!host) return;
+    const button = paceButton(host);
+    if (button) openTip(button, false, host);
+  });
+  document.addEventListener("focusout", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const label = target.closest(".pace-label");
+    const host = paceHostInRow(target);
+    const button = label instanceof HTMLButtonElement ? label : host ? paceButton(host) : null;
+    if (!button || button === pinned) return;
+    const next = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+    if (next && (ownsTip(button, next) || (host && host.contains(next)) || (label && label.contains(next)))) return;
+    closeTip(button);
+  });
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
+    const host = target ? paceHostFrom(target) : null;
+    if (host) {
+      event.preventDefault();
+      const button = paceButton(host);
+      if (!(button instanceof HTMLButtonElement)) return;
+      if (button === pinned) closeTip(button);
+      else openTip(button, true, host);
+      return;
+    }
     const button = target?.closest(".tip-btn");
     if (button instanceof HTMLButtonElement) {
       event.preventDefault();
