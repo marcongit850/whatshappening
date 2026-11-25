@@ -89,9 +89,9 @@ export function prefixLocation(location: string, base = WALTON_PREFIX): string {
   return safeRedirectLocation(`${url.pathname}${url.search}`);
 }
 
-/** Home, the Florida page, and the Walton landing. Other state pages stay out. */
+/** Home and the Walton dashboard door. Former state pages redirect home. */
 export function sitemapPaths(): string[] {
-  return ["/", "/florida", "/walton"];
+  return ["/", "/walton"];
 }
 
 export function robotsTxt(): string {
