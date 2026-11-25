@@ -68,6 +68,7 @@ const NAV = [
   ["ask", "/ask", "Ask a question"],
   ["plat", "/plat", "Plat fee"],
   ["sheriff", "/sheriff", "Sheriff"],
+  ["staff", "/staff", "Staff"],
   ["about", "/about", "About the data"],
 ];
 

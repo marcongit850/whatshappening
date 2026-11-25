@@ -77,6 +77,16 @@ export function renderPublicHome(highlights: HomeHighlights): string {
 ${adopted || spent ? `<section class="door-section" id="figures"><h2>At a glance</h2><div class="see-grid">${adopted}${spent}</div></section>` : ""}
 ${funds}
 ${vendors}
+<section class="door-section" id="staff">
+<h2>Staff and payroll</h2>
+<p class="caption">Budgeted positions and personal services from FY2020 to FY2027. This page is open to everyone. No site password.</p>
+<a class="info-card staff-entry" href="/walton/staff">
+<p class="eyebrow">No password</p>
+<p class="staff-entry-title">County staffing and payroll</p>
+<p>See budgeted FTE and personal services for the whole county, the Sheriff, and each department.</p>
+</a>
+<p class="door-actions"><a class="btn gold" href="/walton/staff">View staff and payroll</a></p>
+</section>
 <section class="door-section" id="explore">
 <h2>Explore the records</h2>
 <p class="caption">The dashboard is built from the same public records. A site password is required.</p>

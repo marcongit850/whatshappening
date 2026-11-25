@@ -40,6 +40,8 @@ Nav targets come from `PUBLIC_PATHS` in `src/view.ts`. `DASHBOARD_PREFIXES` in `
 
 A request path that starts with two slashes, or with a slash and a backslash, is the public 404. The same is true when the path decodes to one of those, including `%2f%2f` and `%5C`. A trailing slash on a former state path such as `/florida/` redirects to `/`. Any `Location` built from a request path or a `next` value collapses leading slashes and backslashes first, including inside `taxesTarget` and when a dashboard `Location` is rewritten. The header is a single-slash path on this host. It cannot be scheme-relative or protocol-relative.
 
+`GET /staff` on a dashboard host, and `GET /walton/staff` on a taxes host, are public. They do not ask for the site password. Anonymous visitors get the public header, with links to `/` and `/walton`, not the signed-in navigation. A signed-in visitor still sees the dashboard navigation. Every other `/walton` page still requires the password. The intro page links to the public staff page. The staff page stays `noindex`.
+
 ## Who was paid
 
 The password-protected dashboard opens with the budget headline. Vendor search sits with "Top vendors by amount paid", after department pace. The chart pages stay.

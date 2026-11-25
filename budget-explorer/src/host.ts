@@ -12,7 +12,9 @@ export const WALTON_PREFIX = "/walton";
 const SHARED_FILES = [/^\/assets\//, /^\/favicon\.svg$/];
 
 /**
- * Password-protected routes. `/` is not included: on the taxes host `/` is the public homepage.
+ * Routes mounted under `/walton` on a taxes host.
+ * `/` is not included: on the taxes host `/` is the public homepage.
+ * `/staff` is public. The other prefixes still require the site password.
  * `PUBLIC_PATHS` is checked in tests so a new nav item is not left off this list.
  */
 export const DASHBOARD_PREFIXES = [
@@ -26,6 +28,7 @@ export const DASHBOARD_PREFIXES = [
   "/plat",
   "/sheriff",
   "/about",
+  "/staff",
   "/login",
   "/logout",
   "/admin",
