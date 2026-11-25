@@ -703,8 +703,9 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .door-hero .door-actions { margin: 20px 0 0; }
 .door-hero .door-actions .btn { display: inline-block; }
 .home-list { list-style: decimal; margin: 16px 0 0; padding: 0 0 0 1.4em; }
-.home-list li { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid #e4e0d6; font-size: 18px; }
-.home-list li span { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+.home-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e4e0d6; font-size: 18px; }
+.home-list a { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.home-list li span { flex: 0 0 auto; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
 .home-links { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 16px 0 0; padding: 0; list-style: none; }
 .home-links a { font-weight: 650; }
 
