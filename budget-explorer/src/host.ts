@@ -26,6 +26,7 @@ export const DASHBOARD_PREFIXES = [
   "/plat",
   "/sheriff",
   "/about",
+  "/staff",
   "/login",
   "/logout",
   "/admin",

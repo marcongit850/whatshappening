@@ -60,6 +60,7 @@ const DASH_NAV = [
   ["search", "/search", "Payments"],
   ["revenue", "/revenue", "Revenue"],
   ["reserves", "/reserves", "Savings"],
+  ["staff", "/staff", "Staff"],
   ["about", "/about", "About"],
   ["ask", "/ask", "Ask AI"],
 ] as const;

@@ -114,6 +114,7 @@ import {
   renderVendors,
   PAYMENT_CSV_LIMIT,
 } from "./view";
+import { renderStaff } from "./staff-page";
 
 const app = new Hono<{ Bindings: AppEnv; Variables: { session: SessionPayload; showNames: boolean } }>();
 
@@ -651,6 +652,18 @@ app.post("/ask", async (c) => {
 app.get("/about", async (c) => {
   const current = await latestPublished(c.env.DB);
   return c.html(renderAbout(current, c.get("session").csrf, isAdmin(c), publicBase(c.env), c.get("showNames")));
+});
+
+app.get("/staff", async (c) => {
+  return c.html(
+    renderStaff({
+      csrf: c.get("session").csrf,
+      isAdmin: isAdmin(c),
+      showNames: c.get("showNames"),
+      sort: c.req.query("sort") || "",
+      dir: c.req.query("dir") || "",
+    }),
+  );
 });
 
 app.get("/sheriff", async (c) => {
