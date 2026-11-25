@@ -696,6 +696,19 @@ body.door .btn.line:hover { background: #f6f4ee; color: #14232f; }
 .picker .caption { color: var(--muted); }
 .state-picker { margin-top: 18px; }
 .see-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.stat-card .stat-label { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
+.stat-card .stat-value { margin: 6px 0 0; font-size: clamp(32px, 6vw, 44px); line-height: 1.1; font-weight: 700; color: var(--ink); }
+.stat-card .stat-date { font-size: clamp(24px, 5vw, 36px); }
+.stat-card .stat-exact { margin: 4px 0 8px; font-size: 16px; color: var(--muted); }
+.door-hero .door-actions { margin: 20px 0 0; }
+.door-hero .door-actions .btn { display: inline-block; }
+.home-list { list-style: decimal; margin: 16px 0 0; padding: 0 0 0 1.4em; }
+.home-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e4e0d6; font-size: 18px; }
+.home-list a { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.home-list li span { flex: 0 0 auto; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+.home-links { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 16px 0 0; padding: 0; list-style: none; }
+.home-links a { font-weight: 650; }
+
 .door-nav { display: flex; flex-wrap: wrap; gap: 4px 18px; min-width: 0; }
 .map-card { position: relative; background: #e7eef2; border: 1px solid var(--line); border-radius: 18px; padding: 12px 12px 14px; margin-top: 0; box-shadow: var(--shadow); overflow: hidden; max-width: 100%; }
 .us-map, .county-map { width: 100%; max-width: 100%; height: auto; display: block; overflow: hidden; }

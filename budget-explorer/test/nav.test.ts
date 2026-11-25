@@ -28,7 +28,8 @@ describe("dashboard Ask AI nav", () => {
   it("leaves Ask AI off the public header", () => {
     const pub = siteHeader({ mode: "public", active: "home", reportHref: "/report" });
     expect(pub).toContain(">Home<");
-    expect(pub).toContain(">Request your county<");
+    expect(pub).not.toContain("Request your county");
+    expect(pub).not.toContain(">Florida<");
     expect(pub).not.toContain("Ask AI");
     expect(pub).not.toContain('href="/ask"');
     expect(pub).not.toContain(">Log out<");

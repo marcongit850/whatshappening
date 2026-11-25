@@ -1,5 +1,4 @@
 import { esc } from "./format";
-import { CANONICAL_ORIGIN } from "./host";
 
 /** Bump the version segment when a brand file changes. The cache is a year. */
 const V = "v1";
@@ -69,19 +68,11 @@ function navLink(on: boolean, href: string, label: string): string {
   return `<a class="${on ? "on" : ""}" href="${href}">${label}</a>`;
 }
 
-/** Public pages stay on this host. Dashboard HTML uses the canonical site so prefixing does not rewrite them. */
-function publicHref(mode: ChromeMode, path: string): string {
-  if (mode === "public") return path;
-  return `${CANONICAL_ORIGIN}${path === "/" ? "/" : path}`;
-}
-
 function primaryNav(opts: ChromeOpts): string {
   if (opts.mode === "public") {
     return [
       navLink(opts.active === "home", "/", "Home"),
-      navLink(opts.active === "florida", "/florida", "Florida"),
       navLink(opts.active === "walton", "/walton", "Walton County"),
-      navLink(opts.active === "request", "/request", "Request your county"),
     ].join("");
   }
   const items = DASH_NAV.map(([key, href, label]) => navLink(opts.active === key, href, label)).join("");
@@ -104,10 +95,6 @@ export function siteHeader(opts: ChromeOpts): string {
 
 export function siteFooter(opts: ChromeOpts): string {
   const home = "/";
-  const request =
-    opts.showRequest === false
-      ? ""
-      : `<nav class="footer-col" aria-label="Request your county"><p class="footer-label">Request</p><a href="${publicHref(opts.mode, "/request")}">Request your county</a></nav>`;
   const asOf = opts.dataAsOf ? `<p class="footer-asof">Data as of ${esc(opts.dataAsOf)}.</p>` : "";
   return `<footer class="site-footer"><div class="footer-inner">
 <div class="footer-grid">
@@ -121,7 +108,6 @@ export function siteFooter(opts: ChromeOpts): string {
 <a href="${BUDGET_BOOK_URL}">County budget book</a>
 <a href="${AUDIT_REPORT_URL}">FY2025 annual comprehensive financial report</a>
 </nav>
-${request}
 </div>
 <p class="footer-built">Built from public records.</p>
 ${asOf}
