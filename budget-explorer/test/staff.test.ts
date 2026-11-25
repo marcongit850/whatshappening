@@ -147,6 +147,59 @@ describe("staff page", () => {
     expect(pub).not.toContain('href="/staff"');
   });
 
+  it("serves staff without a password and keeps other dashboard routes behind login", async () => {
+    const env = envFor(openDb());
+    const local = await app.request("http://localhost/staff", {}, env);
+    expect(local.status).toBe(200);
+    const localHtml = await local.text();
+    expect(localHtml).toContain("Staff and payroll");
+    expect(localHtml).toContain('href="/"');
+    expect(localHtml).toContain('href="/walton"');
+    expect(localHtml).toContain(">Home<");
+    expect(localHtml).toContain(">Walton County<");
+    expect(localHtml).not.toContain("Log out");
+    expect(localHtml).not.toContain("Ask AI");
+    expect(localHtml).not.toMatch(/\u2014|\u2013/);
+
+    const taxes = await app.request("https://howtheyspendmytaxes.com/walton/staff", {}, env);
+    expect(taxes.status).toBe(200);
+    const taxesHtml = await taxes.text();
+    expect(taxesHtml).toContain("Staff and payroll");
+    expect(taxesHtml).toContain('href="/"');
+    expect(taxesHtml).toContain('href="/walton">Walton County</a>');
+    expect(taxesHtml).not.toContain('href="/walton/staff">Home</a>');
+    expect(taxesHtml).not.toContain("Log out");
+    expect(taxesHtml).not.toContain("Ask AI");
+    expect(taxesHtml).toContain('href="/walton/staff?sort=');
+
+    const sorted = await app.request("https://howtheyspendmytaxes.com/walton/staff?sort=name&dir=asc", {}, env);
+    expect(sorted.status).toBe(200);
+    expect(await sorted.text()).toContain("Sorted by department name, lowest to highest");
+
+    const overview = await app.request("http://localhost/", {}, env);
+    expect(overview.status).toBe(303);
+    expect(overview.headers.get("Location")).toContain("/login");
+    const about = await app.request("http://localhost/about", {}, env);
+    expect(about.status).toBe(303);
+    expect(about.headers.get("Location")).toContain("/login");
+    const ask = await app.request("http://localhost/ask", {}, env);
+    expect(ask.status).toBe(303);
+    expect(ask.headers.get("Location")).toContain("/login");
+    const funds = await app.request("https://howtheyspendmytaxes.com/walton/funds", {}, env);
+    expect(funds.status).toBe(303);
+    expect(funds.headers.get("Location")).toContain("/walton/login");
+    const vendors = await app.request("https://howtheyspendmytaxes.com/walton/vendors", {}, env);
+    expect(vendors.status).toBe(303);
+    expect(vendors.headers.get("Location")).toContain("/walton/login");
+
+    const home = await app.request("https://howtheyspendmytaxes.com/", {}, env);
+    expect(home.status).toBe(200);
+    const homeHtml = await home.text();
+    expect(homeHtml).toContain('href="/walton/staff"');
+    expect(homeHtml).toContain("View staff and payroll");
+    expect(homeHtml).toContain("No site password");
+  });
+
   it("serves the page to a signed-in visitor and prefixes it under /walton", async () => {
     const env = envFor(openDb());
     const headers = { cookie: await cookie() };

@@ -17,6 +17,7 @@ import { stateBySlug } from "./places";
 import { applyPublicHeaders, publicHtml, publicRedirect } from "./public-http";
 import { safeRedirectLocation, unsafeRequestPath } from "./redirect-path";
 import { renderAboutSite, renderPublicHome, renderPublicMissing, renderWaltonLanding } from "./public-page";
+import { renderStaff } from "./staff-page";
 
 type DashboardApp = {
   fetch: (request: Request, env: AppEnv) => Response | Promise<Response>;
@@ -62,6 +63,22 @@ async function taxesRequest(c: Context<{ Bindings: AppEnv }>, dashboard: Dashboa
     if (pathname === WALTON_PREFIX) {
       const session = await readSession(c.env.SESSION_SECRET || "", readCookie(c.req.header("cookie"), SESSION_COOKIE));
       if (!session) return waltonLanding();
+    }
+  }
+
+  if (pathname === `${WALTON_PREFIX}/staff` && (c.req.method === "GET" || c.req.method === "HEAD")) {
+    const session = await readSession(c.env.SESSION_SECRET || "", readCookie(c.req.header("cookie"), SESSION_COOKIE));
+    if (!session) {
+      return html(
+        renderStaff({
+          access: "public",
+          sort: url.searchParams.get("sort") || "",
+          dir: url.searchParams.get("dir") || "",
+          staffPath: `${WALTON_PREFIX}/staff`,
+        }),
+        200,
+        false,
+      );
     }
   }
 

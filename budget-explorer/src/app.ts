@@ -207,11 +207,24 @@ app.post("/login", async (c) => {
 
 app.on(["GET", "HEAD", "POST"], "/report", (c) => handleReport(c.req.raw, c.env, "/report"));
 
+app.get("/walton", (c) => c.redirect("/", 302));
+
 app.use("*", async (c, next) => {
-  if (!c.env.SESSION_SECRET) return c.html(renderLogin("The site password is not configured.", "/", "", await showPersonNames(c.env.DB), onTaxesHost(c)), 500);
+  const publicStaff = c.req.path === "/staff" && (c.req.method === "GET" || c.req.method === "HEAD");
+  if (!c.env.SESSION_SECRET) {
+    if (publicStaff) {
+      await next();
+      return;
+    }
+    return c.html(renderLogin("The site password is not configured.", "/", "", await showPersonNames(c.env.DB), onTaxesHost(c)), 500);
+  }
   const token = readCookie(c.req.header("cookie"), "be_session");
   const session = await readSession(c.env.SESSION_SECRET, token);
   if (!session) {
+    if (publicStaff) {
+      await next();
+      return;
+    }
     const nextUrl = safeNext(c.req.path || "/", new URL(c.req.url).origin);
     return c.redirect(`/login?next=${encodeURIComponent(nextUrl)}`, 303);
   }
@@ -655,13 +668,19 @@ app.get("/about", async (c) => {
 });
 
 app.get("/staff", async (c) => {
+  const sort = c.req.query("sort") || "";
+  const dir = c.req.query("dir") || "";
+  const session = c.get("session");
+  if (!session) {
+    return c.html(renderStaff({ access: "public", sort, dir, staffPath: "/staff" }));
+  }
   return c.html(
     renderStaff({
-      csrf: c.get("session").csrf,
+      csrf: session.csrf,
       isAdmin: isAdmin(c),
       showNames: c.get("showNames"),
-      sort: c.req.query("sort") || "",
-      dir: c.req.query("dir") || "",
+      sort,
+      dir,
     }),
   );
 });
